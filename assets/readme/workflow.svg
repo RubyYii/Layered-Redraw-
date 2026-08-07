@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="470" viewBox="0 0 1440 470" role="img" aria-labelledby="title desc">
+  <title id="title">Layered Redraw four-step workflow</title>
+  <desc id="desc">Upload a photo, discuss art direction, draw semantic SVG layers, then make localized edits.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8f5ef"/>
+      <stop offset="1" stop-color="#eee8de"/>
+    </linearGradient>
+    <filter id="s" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#403a32" flood-opacity=".09"/>
+    </filter>
+  </defs>
+  <rect width="1440" height="470" rx="28" fill="url(#bg)"/>
+  <text x="62" y="62" fill="#252422" font-family="Georgia, 'Noto Serif SC', serif" font-size="34">从照片到可持续修改的 SVG</text>
+  <text x="62" y="92" fill="#716b63" font-family="Inter, 'Noto Sans SC', sans-serif" font-size="15">A four-step workflow · 四步完成一次分层重绘</text>
+
+  <g font-family="Inter, 'Noto Sans SC', sans-serif">
+    <g transform="translate(62 132)" filter="url(#s)">
+      <rect width="286" height="244" rx="18" fill="#fffdf8" stroke="#ddd7cd"/>
+      <rect x="22" y="20" width="48" height="28" rx="14" fill="#252422"/>
+      <text x="46" y="39" text-anchor="middle" fill="#fff" font-size="12" font-weight="800">01</text>
+      <rect x="60" y="76" width="166" height="96" rx="8" fill="#e0e7e4" stroke="#718578" stroke-width="2"/>
+      <circle cx="98" cy="112" r="15" fill="#f2c37b"/>
+      <path d="M72 155L122 120L151 145L179 111L215 155Z" fill="#718578"/>
+      <text x="24" y="204" fill="#252422" font-size="18" font-weight="750">上传参考照片</text>
+      <text x="24" y="226" fill="#777168" font-size="12">Upload a reference photo</text>
+    </g>
+
+    <path d="M362 254H388" stroke="#a9a197" stroke-width="2"/>
+    <path d="M382 247L390 254L382 261" fill="none" stroke="#a9a197" stroke-width="2"/>
+
+    <g transform="translate(396 132)" filter="url(#s)">
+      <rect width="286" height="244" rx="18" fill="#fffdf8" stroke="#ddd7cd"/>
+      <rect x="22" y="20" width="48" height="28" rx="14" fill="#a95649"/>
+      <text x="46" y="39" text-anchor="middle" fill="#fff" font-size="12" font-weight="800">02</text>
+      <rect x="54" y="76" width="128" height="58" rx="17" fill="#f0ddd7"/>
+      <path d="M74 134L62 151L93 135" fill="#f0ddd7"/>
+      <circle cx="83" cy="105" r="6" fill="#a95649"/>
+      <circle cx="111" cy="105" r="6" fill="#a95649"/>
+      <circle cx="139" cy="105" r="6" fill="#a95649"/>
+      <rect x="120" y="133" width="112" height="45" rx="16" fill="#dce4dd"/>
+      <path d="M208 176L222 190L195 176" fill="#dce4dd"/>
+      <text x="24" y="204" fill="#252422" font-size="18" font-weight="750">确认风格与感觉</text>
+      <text x="24" y="226" fill="#777168" font-size="12">Interview the art direction</text>
+    </g>
+
+    <path d="M696 254H722" stroke="#a9a197" stroke-width="2"/>
+    <path d="M716 247L724 254L716 261" fill="none" stroke="#a9a197" stroke-width="2"/>
+
+    <g transform="translate(730 132)" filter="url(#s)">
+      <rect width="286" height="244" rx="18" fill="#fffdf8" stroke="#ddd7cd"/>
+      <rect x="22" y="20" width="48" height="28" rx="14" fill="#718578"/>
+      <text x="46" y="39" text-anchor="middle" fill="#fff" font-size="12" font-weight="800">03</text>
+      <g transform="translate(62 72)">
+        <path d="M0 70L80 28L160 70L80 112Z" fill="#f0ddd7" stroke="#a95649"/>
+        <path d="M0 51L80 9L160 51L80 93Z" fill="#f8eedf" stroke="#bd8b4c"/>
+        <path d="M0 32L80 -10L160 32L80 74Z" fill="#dce4dd" stroke="#718578"/>
+      </g>
+      <text x="24" y="204" fill="#252422" font-size="18" font-weight="750">绘制语义图层</text>
+      <text x="24" y="226" fill="#777168" font-size="12">Draw 8–12 semantic layers</text>
+    </g>
+
+    <path d="M1030 254H1056" stroke="#a9a197" stroke-width="2"/>
+    <path d="M1050 247L1058 254L1050 261" fill="none" stroke="#a9a197" stroke-width="2"/>
+
+    <g transform="translate(1064 132)" filter="url(#s)">
+      <rect width="314" height="244" rx="18" fill="#fffdf8" stroke="#ddd7cd"/>
+      <rect x="22" y="20" width="48" height="28" rx="14" fill="#bd8b4c"/>
+      <text x="46" y="39" text-anchor="middle" fill="#fff" font-size="12" font-weight="800">04</text>
+      <rect x="65" y="77" width="184" height="96" rx="8" fill="#edf0ec" stroke="#718578"/>
+      <rect x="102" y="101" width="104" height="49" rx="4" fill="#8da39a"/>
+      <path d="M91 90H112M91 90V111M217 90H196M217 90V111M91 160H112M91 160V139M217 160H196M217 160V139" stroke="#a95649" stroke-width="3"/>
+      <text x="24" y="204" fill="#252422" font-size="18" font-weight="750">只修改目标图层</text>
+      <text x="24" y="226" fill="#777168" font-size="12">Patch locally, preserve the rest</text>
+    </g>
+  </g>
+
+  <g transform="translate(62 407)" font-family="Inter, 'Noto Sans SC', sans-serif">
+    <rect width="1316" height="38" rx="19" fill="#252422"/>
+    <circle cx="22" cy="19" r="5" fill="#9bb1a4"/>
+    <text x="40" y="24" fill="#fffdf8" font-size="13" font-weight="650">描述“让水面更安静” → 只改变水面层 → 建筑、天空与灯光保持原样</text>
+    <text x="1286" y="24" text-anchor="end" fill="#cfc8be" font-size="12">EDIT ONE LAYER · PRESERVE THE REST</text>
+  </g>
+</svg>

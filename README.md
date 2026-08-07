@@ -6,13 +6,65 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
+![Layered Redraw：从照片到可编辑多图层 SVG](assets/readme/hero.svg)
+
 Layered Redraw 是一个本地优先的 Codex 插件与 SVG 工程格式。它以参考照片为视觉依据，通过简短的创作访谈，将照片重新绘制为可编辑、可持续修改的多图层矢量作品。
 
 项目默认使用 8–12 个稳定的语义图层，支持简笔画、海报、素描、水彩、油画、篆刻等不同绘制方向，并把局部修改视为受约束的图层补丁，而不是重新生成整张作品。
 
 本项目刻意**不调用图像生成模型**。Codex 会分析参考照片、确认创作意图，然后直接编写 SVG 几何、渐变、纹理、滤镜和图层结构。
 
-![Layered Redraw 编辑器](assets/editor-preview.jpg)
+## 30 秒理解工作方式
+
+![从参考照片到局部可修改 SVG 的四步工作流](assets/readme/workflow.svg)
+
+## 你得到的不只是一个使用界面
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <strong>可编辑的矢量作品</strong><br>
+      <sub>输出本身就是可以继续修改的 artwork.svg</sub><br><br>
+      <img src="examples/canal-evening/artwork.svg" alt="10 图层运河矢量示例" width="100%">
+    </td>
+    <td width="50%" align="center">
+      <strong>语义图层编辑器</strong><br>
+      <sub>选图层、框选区域或用纯文本描述修改范围</sub><br><br>
+      <img src="assets/editor-preview.jpg" alt="Layered Redraw 图层编辑器" width="100%">
+    </td>
+  </tr>
+</table>
+
+![Layered Redraw 语义图层结构](assets/readme/layer-stack.svg)
+
+## 最短使用方法
+
+### 1. 安装 Skill
+
+```powershell
+git clone https://github.com/RubyYii/Layered-Redraw-.git
+cd Layered-Redraw-
+$skillTarget = Join-Path $env:USERPROFILE ".codex\skills\redraw-in-layers"
+New-Item -ItemType Junction -Path $skillTarget -Target (Resolve-Path ".\skills\redraw-in-layers")
+```
+
+重启 Codex。
+
+### 2. 上传照片并调用
+
+```text
+使用 $redraw-in-layers 处理本条上传的照片。
+先询问我希望的感觉、风格、配色和细节程度。
+确认后，生成 8–12 个语义图层的 vector-strict SVG 工程。
+```
+
+### 3. 回答创作访谈
+
+Codex 会先确认画面情绪、构图取舍、风格、颜色、主体和细节程度，再开始绘制。默认输出 `artwork.svg`、创作简报、逐图层 Manifest 和分层导出。
+
+### 4. 修改某个区域
+
+启动本地编辑器，选中图层或框选区域，导出 `edit-request.json`，然后再次交给 `$redraw-in-layers`。补丁只允许修改命中的图层。
 
 ## v0.1 已包含
 

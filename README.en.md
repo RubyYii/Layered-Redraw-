@@ -4,11 +4,63 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
+![Layered Redraw — from photographs to editable layered SVG](assets/readme/hero.svg)
+
 Layered Redraw is a local-first Codex plugin and SVG project format for turning reference photographs into intentionally redrawn, editable vector artwork. It favors 8–12 stable semantic layers, supports multiple drawing styles, and treats localized revision as a patch rather than a full regeneration.
 
 The project deliberately does **not** call an image-generation model. Codex analyzes the reference, conducts a short art-direction interview when needed, and writes SVG geometry directly.
 
-![Layered Redraw editor](assets/editor-preview.jpg)
+## Understand the workflow in 30 seconds
+
+![Four steps from a reference photo to locally editable SVG art](assets/readme/workflow.svg)
+
+## The output is more than an interface
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <strong>An editable vector artwork</strong><br>
+      <sub>The output itself is a hand-editable artwork.svg</sub><br><br>
+      <img src="examples/canal-evening/artwork.svg" alt="Ten-layer canal vector example" width="100%">
+    </td>
+    <td width="50%" align="center">
+      <strong>A semantic-layer editor</strong><br>
+      <sub>Select layers, frame a region, or describe the scope in text</sub><br><br>
+      <img src="assets/editor-preview.jpg" alt="Layered Redraw semantic-layer editor" width="100%">
+    </td>
+  </tr>
+</table>
+
+![Layered Redraw semantic layer architecture](assets/readme/layer-stack.svg)
+
+## Fastest way to use it
+
+### 1. Install the skill
+
+```powershell
+git clone https://github.com/RubyYii/Layered-Redraw-.git
+cd Layered-Redraw-
+$skillTarget = Join-Path $env:USERPROFILE ".codex\skills\redraw-in-layers"
+New-Item -ItemType Junction -Path $skillTarget -Target (Resolve-Path ".\skills\redraw-in-layers")
+```
+
+Restart Codex.
+
+### 2. Upload a photo and invoke it
+
+```text
+Use $redraw-in-layers to process the photo attached to this message.
+Ask about the feeling, style, palette, and detail level first.
+After approval, create a vector-strict SVG project with 8–12 semantic layers.
+```
+
+### 3. Answer the art-direction interview
+
+Codex confirms mood, composition, style, palette, subject priority, and detail level before drawing. The default project includes `artwork.svg`, an approved brief, a per-layer manifest, and individual layer exports.
+
+### 4. Revise a local area
+
+Open the local editor, select layers or frame a region, export `edit-request.json`, and give it back to `$redraw-in-layers`. The patch is allowed to touch only the selected layers.
 
 ## What v0.1 includes
 
