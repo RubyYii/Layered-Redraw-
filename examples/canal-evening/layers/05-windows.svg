@@ -1,0 +1,57 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" viewBox="0 0 1200 780" width="1200" height="780" role="img" aria-labelledby="art-title art-desc">
+  <title>暖色窗户 — Layered Redraw layer</title>
+  <defs>
+    <linearGradient id="sky-gradient" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#dce3e3" />
+      <stop offset="0.55" stop-color="#eee8dc" />
+      <stop offset="1" stop-color="#d7c8b3" />
+    </linearGradient>
+    <linearGradient id="water-gradient" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#86958a" />
+      <stop offset="0.56" stop-color="#60786f" />
+      <stop offset="1" stop-color="#283e3d" />
+    </linearGradient>
+    <linearGradient id="brick-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6f463d" />
+      <stop offset="0.65" stop-color="#4e302d" />
+      <stop offset="1" stop-color="#342626" />
+    </linearGradient>
+    <linearGradient id="walk-gradient" x1="0" y1="0" x2="1" y2="0.4">
+      <stop offset="0" stop-color="#b9b0a3" />
+      <stop offset="1" stop-color="#706d67" />
+    </linearGradient>
+    <radialGradient id="window-glow">
+      <stop offset="0" stop-color="#ffe1a0" stop-opacity="0.95" />
+      <stop offset="1" stop-color="#d59452" stop-opacity="0.12" />
+    </radialGradient>
+    <filter id="soft-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="8" />
+    </filter>
+    <pattern id="water-hatch" width="36" height="20" patternUnits="userSpaceOnUse">
+      <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2" />
+    </pattern>
+  </defs>
+  <g id="layer-windows" data-layer="true" data-bbox="646 128 516 298" inkscape:groupmode="layer" inkscape:label="暖色窗户">
+    <g id="upper-window-row" fill="#d8d8d1" stroke="#221f20" stroke-width="7">
+      <path id="window-u1" d="M1030 139 l55 -15 v48 l-55 13z" />
+      <path id="window-u2" d="M1108 119 l52 -14 v47 l-52 13z" />
+      <path id="window-u3" d="M910 172 l50 -14 v47 l-50 12z" />
+      <path id="window-u4" d="M806 204 l45 -13 v44 l-45 11z" />
+      <path id="window-u5" d="M716 230 l40 -12 v43 l-40 10z" />
+    </g>
+    <g id="middle-window-row" fill="#f0bd6a" stroke="#2a2322" stroke-width="7">
+      <path id="window-m1" d="M1040 246 l54 -12 v51 l-54 10z" />
+      <path id="window-m2" d="M1121 228 l51 -12 v49 l-51 10z" fill="#d8d8d1" />
+      <path id="window-m3" d="M925 272 l49 -11 v48 l-49 9z" fill="#d8d8d1" />
+      <path id="window-m4" d="M820 298 l46 -10 v46 l-46 8z" />
+      <path id="window-m5" d="M730 320 l40 -9 v44 l-40 7z" fill="#d8d8d1" />
+      <path id="window-m6" d="M653 340 l36 -9 v42 l-36 7z" />
+    </g>
+    <g id="window-glows" fill="url(#window-glow)" filter="url(#soft-glow)" opacity="0.64">
+      <ellipse id="glow-one" cx="1068" cy="263" rx="42" ry="34" />
+      <ellipse id="glow-two" cx="843" cy="315" rx="36" ry="28" />
+      <ellipse id="glow-three" cx="673" cy="352" rx="28" ry="23" />
+    </g>
+  </g>
+</svg>

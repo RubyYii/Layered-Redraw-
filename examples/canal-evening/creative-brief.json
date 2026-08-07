@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "status": "approved-demo",
+  "mood": ["quiet", "rain-washed", "gently nostalgic"],
+  "primary_subjects": ["narrow canal", "brick warehouse", "moored boat"],
+  "recognition_priority": ["long canal perspective", "repeating warm windows", "green-grey water"],
+  "style": "restrained editorial watercolor-vector",
+  "abstraction": 0.38,
+  "palette": ["paper cream", "mist blue", "brick brown", "sage water", "amber light"],
+  "light": "soft evening light after rain",
+  "mark_quality": "broad shapes with sparse dry linear accents",
+  "simplify": ["signage", "distant pedestrians", "small masonry detail"],
+  "avoid": ["photorealism", "high saturation", "dense auto-traced edges"],
+  "usage": "editor demonstration",
+  "aspect_ratio": "20:13",
+  "output_mode": "vector-strict",
+  "target_layers": 10
+}

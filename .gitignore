@@ -1,0 +1,7 @@
+.gemini-agent/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+captures/
+*.tmp

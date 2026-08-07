@@ -1,0 +1,28 @@
+{
+  "name": "layered-redraw",
+  "version": "0.1.0",
+  "description": "Interview users about visual intent, then redraw reference photos as editable semantic-layer SVG projects.",
+  "author": {
+    "name": "RubyYii",
+    "url": "https://github.com/RubyYii"
+  },
+  "homepage": "https://github.com/RubyYii/Layered-Redraw-",
+  "repository": "https://github.com/RubyYii/Layered-Redraw-",
+  "keywords": ["svg", "vector-art", "layered-illustration", "photo-redraw", "codex-skill"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Layered Redraw",
+    "shortDescription": "Redraw photos as editable layered SVG artwork.",
+    "longDescription": "Turn a reference photo and a short art-direction conversation into a portable SVG project with 5–20 stable semantic layers, deterministic validation, and localized edits.",
+    "developerName": "RubyYii",
+    "category": "Design",
+    "capabilities": ["Interactive", "Write", "Local-first"],
+    "brandColor": "#7A8D80",
+    "screenshots": ["./assets/editor-preview.jpg"],
+    "defaultPrompt": [
+      "Interview me, then redraw this photo in editable SVG layers.",
+      "Open my layered SVG and change only the selected objects.",
+      "Validate this SVG project without altering the artwork."
+    ]
+  }
+}

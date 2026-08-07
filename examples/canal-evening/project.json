@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "title": "Canal After Rain",
+  "canonical_svg": "artwork.svg",
+  "output_mode": "vector-strict",
+  "target_layers": 10,
+  "style": "restrained editorial watercolor-vector",
+  "procedural_seed": 240817,
+  "reference_provenance": "Demonstration artwork drawn from geometric scene relationships; no source photo is distributed."
+}

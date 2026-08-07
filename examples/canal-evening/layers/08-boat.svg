@@ -1,0 +1,44 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" viewBox="0 0 1200 780" width="1200" height="780" role="img" aria-labelledby="art-title art-desc">
+  <title>停泊船只 — Layered Redraw layer</title>
+  <defs>
+    <linearGradient id="sky-gradient" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#dce3e3" />
+      <stop offset="0.55" stop-color="#eee8dc" />
+      <stop offset="1" stop-color="#d7c8b3" />
+    </linearGradient>
+    <linearGradient id="water-gradient" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#86958a" />
+      <stop offset="0.56" stop-color="#60786f" />
+      <stop offset="1" stop-color="#283e3d" />
+    </linearGradient>
+    <linearGradient id="brick-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6f463d" />
+      <stop offset="0.65" stop-color="#4e302d" />
+      <stop offset="1" stop-color="#342626" />
+    </linearGradient>
+    <linearGradient id="walk-gradient" x1="0" y1="0" x2="1" y2="0.4">
+      <stop offset="0" stop-color="#b9b0a3" />
+      <stop offset="1" stop-color="#706d67" />
+    </linearGradient>
+    <radialGradient id="window-glow">
+      <stop offset="0" stop-color="#ffe1a0" stop-opacity="0.95" />
+      <stop offset="1" stop-color="#d59452" stop-opacity="0.12" />
+    </radialGradient>
+    <filter id="soft-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="8" />
+    </filter>
+    <pattern id="water-hatch" width="36" height="20" patternUnits="userSpaceOnUse">
+      <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2" />
+    </pattern>
+  </defs>
+  <g id="layer-boat" data-layer="true" data-bbox="205 493 340 178" inkscape:groupmode="layer" inkscape:label="停泊船只">
+    <path id="boat-hull" d="M218 567 L505 542 L545 603 L494 652 L260 663 L209 620 Z" fill="#252c2d" />
+    <path id="boat-side" d="M228 580 L505 557 L520 604 L480 628 L251 638 Z" fill="#6e312d" />
+    <path id="boat-roof" d="M268 520 L474 503 L508 553 L239 574 Z" fill="#2f3837" />
+    <path id="boat-cabin" d="M302 501 L432 490 L467 545 L270 560 Z" fill="#8c3f34" />
+    <path id="boat-window-band" d="M317 508 L419 499 L442 532 L294 544 Z" fill="#b6c5bb" opacity="0.78" />
+    <path id="boat-trim" d="M232 588 L506 564" fill="none" stroke="#d6b46f" stroke-width="8" />
+    <line id="boat-mooring" x1="510" y1="560" x2="610" y2="486" stroke="#252829" stroke-width="4" />
+  </g>
+</svg>

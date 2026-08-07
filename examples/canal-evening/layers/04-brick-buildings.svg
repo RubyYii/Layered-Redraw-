@@ -1,0 +1,46 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" viewBox="0 0 1200 780" width="1200" height="780" role="img" aria-labelledby="art-title art-desc">
+  <title>砖楼主体 — Layered Redraw layer</title>
+  <defs>
+    <linearGradient id="sky-gradient" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#dce3e3" />
+      <stop offset="0.55" stop-color="#eee8dc" />
+      <stop offset="1" stop-color="#d7c8b3" />
+    </linearGradient>
+    <linearGradient id="water-gradient" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#86958a" />
+      <stop offset="0.56" stop-color="#60786f" />
+      <stop offset="1" stop-color="#283e3d" />
+    </linearGradient>
+    <linearGradient id="brick-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6f463d" />
+      <stop offset="0.65" stop-color="#4e302d" />
+      <stop offset="1" stop-color="#342626" />
+    </linearGradient>
+    <linearGradient id="walk-gradient" x1="0" y1="0" x2="1" y2="0.4">
+      <stop offset="0" stop-color="#b9b0a3" />
+      <stop offset="1" stop-color="#706d67" />
+    </linearGradient>
+    <radialGradient id="window-glow">
+      <stop offset="0" stop-color="#ffe1a0" stop-opacity="0.95" />
+      <stop offset="1" stop-color="#d59452" stop-opacity="0.12" />
+    </radialGradient>
+    <filter id="soft-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="8" />
+    </filter>
+    <pattern id="water-hatch" width="36" height="20" patternUnits="userSpaceOnUse">
+      <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2" />
+    </pattern>
+  </defs>
+  <g id="layer-brick-buildings" data-layer="true" data-bbox="520 70 680 522" inkscape:groupmode="layer" inkscape:label="砖楼主体">
+    <path id="warehouse-main" d="M620 246 L1200 62 L1200 566 L600 520 Z" fill="url(#brick-gradient)" />
+    <path id="warehouse-side" d="M520 325 L620 246 L600 520 L505 540 Z" fill="#50342f" />
+    <path id="warehouse-roof" d="M608 231 L1190 47 L1200 62 L620 260 Z" fill="#28292a" />
+    <path id="warehouse-course-one" d="M614 332 L1200 204" fill="none" stroke="#a16a54" stroke-width="8" opacity="0.45" />
+    <path id="warehouse-course-two" d="M607 422 L1200 345" fill="none" stroke="#a16a54" stroke-width="7" opacity="0.35" />
+    <path id="entrance-shadow" d="M902 382 L1112 340 L1112 563 L878 548 Z" fill="#1f2525" opacity="0.78" />
+    <path id="entrance-arch" d="M958 438 Q1008 362 1059 419 L1059 549 L952 543 Z" fill="#c5c1b6" opacity="0.72" />
+    <path id="entrance-glass" d="M973 440 Q1008 389 1043 428 L1043 540 L972 537 Z" fill="#263c40" />
+    <path id="fire-stair" d="M1110 395 L1195 360 M1108 430 L1192 397 M1110 466 L1193 435 M1122 390 V530 M1165 374 V544" fill="none" stroke="#171c1d" stroke-width="8" stroke-linecap="square" />
+  </g>
+</svg>

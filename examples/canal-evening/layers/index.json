@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "source": "F:\\drawforfun\\layered-redraw\\examples\\canal-evening\\artwork.svg",
+  "revision": "666d591077ce",
+  "layers": [
+    {
+      "id": "layer-background",
+      "label": "背景纸色",
+      "file": "01-background.svg",
+      "sha256": "37ed83758deebde7f937679abbc9216e5d3e019b771fcb64bfa60af6ff19538d"
+    },
+    {
+      "id": "layer-sky",
+      "label": "暮色天空",
+      "file": "02-sky.svg",
+      "sha256": "4736c881d676ec71d49080acb3ccb8354ab69d58919c5b093a51dd437ae279a5"
+    },
+    {
+      "id": "layer-distant-city",
+      "label": "远处城市",
+      "file": "03-distant-city.svg",
+      "sha256": "a25b96d2eb4d641321d5a6b6c957872fa3bce77837ef522595ea8428ec3ab9b3"
+    },
+    {
+      "id": "layer-brick-buildings",
+      "label": "砖楼主体",
+      "file": "04-brick-buildings.svg",
+      "sha256": "8246ec2cb8ade81dd510f70fd257021695cff42d8dcbef896ab785ac65a683ed"
+    },
+    {
+      "id": "layer-windows",
+      "label": "暖色窗户",
+      "file": "05-windows.svg",
+      "sha256": "5899ba55ce9fd61f88c72e379044b789fd34f8a0569c633b79eff3d3702f1722"
+    },
+    {
+      "id": "layer-canal",
+      "label": "运河水面",
+      "file": "06-canal.svg",
+      "sha256": "4277bf5396db2a9823793ef30b581cd1e1d6eeb7b9a5ce3640908159562812cb"
+    },
+    {
+      "id": "layer-reflections",
+      "label": "灯光倒影",
+      "file": "07-reflections.svg",
+      "sha256": "a0e12c0df7767fe03cb8c0a9731b624f8477bb752f9a7d15a44d4798e2e37eeb"
+    },
+    {
+      "id": "layer-boat",
+      "label": "停泊船只",
+      "file": "08-boat.svg",
+      "sha256": "f44a0960086559ece344c5e17e801955e58c83a692b83c0d3af04032474aab1b"
+    },
+    {
+      "id": "layer-walkway",
+      "label": "前景步道",
+      "file": "09-walkway.svg",
+      "sha256": "6ebd3d5b94695f9562381061ad93b3ff17173b80c16629778ab7f6a091060938"
+    },
+    {
+      "id": "layer-atmosphere",
+      "label": "空气与收笔",
+      "file": "10-atmosphere.svg",
+      "sha256": "d74821c666a23039a9c78a309455b0034ed9d411b391a490ceb71cc93333b2f2"
+    }
+  ]
+}

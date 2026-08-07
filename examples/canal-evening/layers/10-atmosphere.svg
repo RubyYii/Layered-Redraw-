@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" viewBox="0 0 1200 780" width="1200" height="780" role="img" aria-labelledby="art-title art-desc">
+  <title>空气与收笔 — Layered Redraw layer</title>
+  <defs>
+    <linearGradient id="sky-gradient" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#dce3e3" />
+      <stop offset="0.55" stop-color="#eee8dc" />
+      <stop offset="1" stop-color="#d7c8b3" />
+    </linearGradient>
+    <linearGradient id="water-gradient" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#86958a" />
+      <stop offset="0.56" stop-color="#60786f" />
+      <stop offset="1" stop-color="#283e3d" />
+    </linearGradient>
+    <linearGradient id="brick-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6f463d" />
+      <stop offset="0.65" stop-color="#4e302d" />
+      <stop offset="1" stop-color="#342626" />
+    </linearGradient>
+    <linearGradient id="walk-gradient" x1="0" y1="0" x2="1" y2="0.4">
+      <stop offset="0" stop-color="#b9b0a3" />
+      <stop offset="1" stop-color="#706d67" />
+    </linearGradient>
+    <radialGradient id="window-glow">
+      <stop offset="0" stop-color="#ffe1a0" stop-opacity="0.95" />
+      <stop offset="1" stop-color="#d59452" stop-opacity="0.12" />
+    </radialGradient>
+    <filter id="soft-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="8" />
+    </filter>
+    <pattern id="water-hatch" width="36" height="20" patternUnits="userSpaceOnUse">
+      <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2" />
+    </pattern>
+  </defs>
+  <g id="layer-atmosphere" data-layer="true" data-bbox="0 0 1200 780" inkscape:groupmode="layer" inkscape:label="空气与收笔" style="pointer-events:none">
+    <path id="mist-line" d="M70 430 C340 390 580 432 810 395 C974 369 1090 382 1180 350" fill="none" stroke="#f6f0e6" stroke-width="34" stroke-linecap="round" opacity="0.12" />
+    <path id="rain-memory" d="M102 110 l-28 70 M176 86 l-32 86 M474 112 l-34 90 M752 66 l-36 98 M1002 92 l-32 86" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" opacity="0.18" />
+    <text id="editorial-caption" x="1045" y="744" fill="#eee7db" font-family="Georgia, serif" font-size="18" letter-spacing="4" text-anchor="end" opacity="0.62">AFTER RAIN · 01</text>
+  </g>
+</svg>

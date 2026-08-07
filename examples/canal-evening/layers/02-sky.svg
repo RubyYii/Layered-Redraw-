@@ -1,0 +1,41 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" viewBox="0 0 1200 780" width="1200" height="780" role="img" aria-labelledby="art-title art-desc">
+  <title>暮色天空 — Layered Redraw layer</title>
+  <defs>
+    <linearGradient id="sky-gradient" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#dce3e3" />
+      <stop offset="0.55" stop-color="#eee8dc" />
+      <stop offset="1" stop-color="#d7c8b3" />
+    </linearGradient>
+    <linearGradient id="water-gradient" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#86958a" />
+      <stop offset="0.56" stop-color="#60786f" />
+      <stop offset="1" stop-color="#283e3d" />
+    </linearGradient>
+    <linearGradient id="brick-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6f463d" />
+      <stop offset="0.65" stop-color="#4e302d" />
+      <stop offset="1" stop-color="#342626" />
+    </linearGradient>
+    <linearGradient id="walk-gradient" x1="0" y1="0" x2="1" y2="0.4">
+      <stop offset="0" stop-color="#b9b0a3" />
+      <stop offset="1" stop-color="#706d67" />
+    </linearGradient>
+    <radialGradient id="window-glow">
+      <stop offset="0" stop-color="#ffe1a0" stop-opacity="0.95" />
+      <stop offset="1" stop-color="#d59452" stop-opacity="0.12" />
+    </radialGradient>
+    <filter id="soft-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="8" />
+    </filter>
+    <pattern id="water-hatch" width="36" height="20" patternUnits="userSpaceOnUse">
+      <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2" />
+    </pattern>
+  </defs>
+  <g id="layer-sky" data-layer="true" data-bbox="0 0 1200 410" inkscape:groupmode="layer" inkscape:label="暮色天空">
+    <rect id="sky-field" x="0" y="0" width="1200" height="430" fill="url(#sky-gradient)" />
+    <path id="cloud-bank-one" d="M0 180 C180 140 330 210 500 170 C650 135 810 182 970 136 C1070 108 1140 122 1200 105 L1200 250 L0 250 Z" fill="#f7f4ec" opacity="0.28" />
+    <path id="cloud-bank-two" d="M80 275 C250 238 365 284 535 254 C675 228 805 264 935 235" fill="none" stroke="#9ba9a6" stroke-width="18" stroke-linecap="round" opacity="0.17" />
+    <circle id="evening-sun" cx="250" cy="300" r="58" fill="#d6a875" opacity="0.14" />
+  </g>
+</svg>

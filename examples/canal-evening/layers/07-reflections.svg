@@ -1,0 +1,41 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" viewBox="0 0 1200 780" width="1200" height="780" role="img" aria-labelledby="art-title art-desc">
+  <title>灯光倒影 — Layered Redraw layer</title>
+  <defs>
+    <linearGradient id="sky-gradient" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#dce3e3" />
+      <stop offset="0.55" stop-color="#eee8dc" />
+      <stop offset="1" stop-color="#d7c8b3" />
+    </linearGradient>
+    <linearGradient id="water-gradient" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#86958a" />
+      <stop offset="0.56" stop-color="#60786f" />
+      <stop offset="1" stop-color="#283e3d" />
+    </linearGradient>
+    <linearGradient id="brick-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6f463d" />
+      <stop offset="0.65" stop-color="#4e302d" />
+      <stop offset="1" stop-color="#342626" />
+    </linearGradient>
+    <linearGradient id="walk-gradient" x1="0" y1="0" x2="1" y2="0.4">
+      <stop offset="0" stop-color="#b9b0a3" />
+      <stop offset="1" stop-color="#706d67" />
+    </linearGradient>
+    <radialGradient id="window-glow">
+      <stop offset="0" stop-color="#ffe1a0" stop-opacity="0.95" />
+      <stop offset="1" stop-color="#d59452" stop-opacity="0.12" />
+    </radialGradient>
+    <filter id="soft-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="8" />
+    </filter>
+    <pattern id="water-hatch" width="36" height="20" patternUnits="userSpaceOnUse">
+      <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2" />
+    </pattern>
+  </defs>
+  <g id="layer-reflections" data-layer="true" data-bbox="510 510 650 270" inkscape:groupmode="layer" inkscape:label="灯光倒影">
+    <path id="reflection-amber-one" d="M865 530 C845 590 886 628 850 700 C838 730 853 757 847 780" fill="none" stroke="#e0a75d" stroke-width="20" stroke-linecap="round" opacity="0.45" />
+    <path id="reflection-amber-two" d="M962 528 C944 575 980 615 956 665 C939 705 960 741 950 780" fill="none" stroke="#ffd68a" stroke-width="11" stroke-linecap="round" opacity="0.55" />
+    <path id="reflection-brick" d="M1080 546 C1034 610 1102 658 1048 735 C1034 754 1042 767 1037 780" fill="none" stroke="#9f6151" stroke-width="46" stroke-linecap="round" opacity="0.28" />
+    <path id="reflection-ripples" d="M520 614 C640 592 730 630 840 606 M550 675 C700 650 814 695 935 662 M650 737 C790 718 910 755 1075 728" fill="none" stroke="#d7d9c8" stroke-width="8" stroke-linecap="round" opacity="0.36" />
+  </g>
+</svg>

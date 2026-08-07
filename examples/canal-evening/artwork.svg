@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 1200 780"
+     width="1200"
+     height="780"
+     role="img"
+     aria-labelledby="art-title art-desc">
+  <title id="art-title">Canal After Rain</title>
+  <desc id="art-desc">A quiet vector editorial scene of a canal, brick warehouses, a moored boat, and warm reflected windows.</desc>
+  <defs>
+    <linearGradient id="sky-gradient" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#dce3e3"/>
+      <stop offset="0.55" stop-color="#eee8dc"/>
+      <stop offset="1" stop-color="#d7c8b3"/>
+    </linearGradient>
+    <linearGradient id="water-gradient" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#86958a"/>
+      <stop offset="0.56" stop-color="#60786f"/>
+      <stop offset="1" stop-color="#283e3d"/>
+    </linearGradient>
+    <linearGradient id="brick-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6f463d"/>
+      <stop offset="0.65" stop-color="#4e302d"/>
+      <stop offset="1" stop-color="#342626"/>
+    </linearGradient>
+    <linearGradient id="walk-gradient" x1="0" y1="0" x2="1" y2="0.4">
+      <stop offset="0" stop-color="#b9b0a3"/>
+      <stop offset="1" stop-color="#706d67"/>
+    </linearGradient>
+    <radialGradient id="window-glow">
+      <stop offset="0" stop-color="#ffe1a0" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#d59452" stop-opacity="0.12"/>
+    </radialGradient>
+    <filter id="soft-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <pattern id="water-hatch" width="36" height="20" patternUnits="userSpaceOnUse">
+      <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2"/>
+    </pattern>
+  </defs>
+
+  <g id="layer-background" data-layer="true" data-bbox="0 0 1200 780"
+     inkscape:groupmode="layer" inkscape:label="背景纸色">
+    <rect id="background-paper" x="0" y="0" width="1200" height="780" fill="#f5f0e7"/>
+  </g>
+
+  <g id="layer-sky" data-layer="true" data-bbox="0 0 1200 410"
+     inkscape:groupmode="layer" inkscape:label="暮色天空">
+    <rect id="sky-field" x="0" y="0" width="1200" height="430" fill="url(#sky-gradient)"/>
+    <path id="cloud-bank-one" d="M0 180 C180 140 330 210 500 170 C650 135 810 182 970 136 C1070 108 1140 122 1200 105 L1200 250 L0 250 Z"
+          fill="#f7f4ec" opacity="0.28"/>
+    <path id="cloud-bank-two" d="M80 275 C250 238 365 284 535 254 C675 228 805 264 935 235"
+          fill="none" stroke="#9ba9a6" stroke-width="18" stroke-linecap="round" opacity="0.17"/>
+    <circle id="evening-sun" cx="250" cy="300" r="58" fill="#d6a875" opacity="0.14"/>
+  </g>
+
+  <g id="layer-distant-city" data-layer="true" data-bbox="0 282 650 242"
+     inkscape:groupmode="layer" inkscape:label="远处城市">
+    <path id="distant-roofs" d="M0 425 L0 365 L70 365 L70 334 L142 334 L142 382 L220 382 L220 318 L302 318 L302 355 L385 355 L385 302 L448 302 L448 346 L525 346 L525 283 L600 283 L600 430 Z"
+          fill="#6d6863" opacity="0.66"/>
+    <path id="distant-facades" d="M0 425 H610 V500 H0 Z" fill="#514e4a"/>
+    <path id="bridge-arch" d="M26 480 Q118 398 210 480 L210 500 L184 500 Q118 438 52 500 L26 500 Z"
+          fill="#302e2e"/>
+    <path id="distant-window-rhythm" d="M250 402 h22 v28 h-22z M286 402h22v28h-22z M322 402h22v28h-22z M358 402h22v28h-22z M430 390h22v30h-22z M468 390h22v30h-22z"
+          fill="#c59a61" opacity="0.55"/>
+  </g>
+
+  <g id="layer-brick-buildings" data-layer="true" data-bbox="520 70 680 522"
+     inkscape:groupmode="layer" inkscape:label="砖楼主体">
+    <path id="warehouse-main" d="M620 246 L1200 62 L1200 566 L600 520 Z" fill="url(#brick-gradient)"/>
+    <path id="warehouse-side" d="M520 325 L620 246 L600 520 L505 540 Z" fill="#50342f"/>
+    <path id="warehouse-roof" d="M608 231 L1190 47 L1200 62 L620 260 Z" fill="#28292a"/>
+    <path id="warehouse-course-one" d="M614 332 L1200 204" fill="none" stroke="#a16a54" stroke-width="8" opacity="0.45"/>
+    <path id="warehouse-course-two" d="M607 422 L1200 345" fill="none" stroke="#a16a54" stroke-width="7" opacity="0.35"/>
+    <path id="entrance-shadow" d="M902 382 L1112 340 L1112 563 L878 548 Z" fill="#1f2525" opacity="0.78"/>
+    <path id="entrance-arch" d="M958 438 Q1008 362 1059 419 L1059 549 L952 543 Z" fill="#c5c1b6" opacity="0.72"/>
+    <path id="entrance-glass" d="M973 440 Q1008 389 1043 428 L1043 540 L972 537 Z" fill="#263c40"/>
+    <path id="fire-stair" d="M1110 395 L1195 360 M1108 430 L1192 397 M1110 466 L1193 435 M1122 390 V530 M1165 374 V544"
+          fill="none" stroke="#171c1d" stroke-width="8" stroke-linecap="square"/>
+  </g>
+
+  <g id="layer-windows" data-layer="true" data-bbox="646 128 516 298"
+     inkscape:groupmode="layer" inkscape:label="暖色窗户">
+    <g id="upper-window-row" fill="#d8d8d1" stroke="#221f20" stroke-width="7">
+      <path id="window-u1" d="M1030 139 l55 -15 v48 l-55 13z"/>
+      <path id="window-u2" d="M1108 119 l52 -14 v47 l-52 13z"/>
+      <path id="window-u3" d="M910 172 l50 -14 v47 l-50 12z"/>
+      <path id="window-u4" d="M806 204 l45 -13 v44 l-45 11z"/>
+      <path id="window-u5" d="M716 230 l40 -12 v43 l-40 10z"/>
+    </g>
+    <g id="middle-window-row" fill="#f0bd6a" stroke="#2a2322" stroke-width="7">
+      <path id="window-m1" d="M1040 246 l54 -12 v51 l-54 10z"/>
+      <path id="window-m2" d="M1121 228 l51 -12 v49 l-51 10z" fill="#d8d8d1"/>
+      <path id="window-m3" d="M925 272 l49 -11 v48 l-49 9z" fill="#d8d8d1"/>
+      <path id="window-m4" d="M820 298 l46 -10 v46 l-46 8z"/>
+      <path id="window-m5" d="M730 320 l40 -9 v44 l-40 7z" fill="#d8d8d1"/>
+      <path id="window-m6" d="M653 340 l36 -9 v42 l-36 7z"/>
+    </g>
+    <g id="window-glows" fill="url(#window-glow)" filter="url(#soft-glow)" opacity="0.64">
+      <ellipse id="glow-one" cx="1068" cy="263" rx="42" ry="34"/>
+      <ellipse id="glow-two" cx="843" cy="315" rx="36" ry="28"/>
+      <ellipse id="glow-three" cx="673" cy="352" rx="28" ry="23"/>
+    </g>
+  </g>
+
+  <g id="layer-canal" data-layer="true" data-bbox="190 468 1010 312"
+     inkscape:groupmode="layer" inkscape:label="运河水面">
+    <path id="water-surface" d="M205 480 L600 448 L1200 508 L1200 780 L320 780 Z" fill="url(#water-gradient)"/>
+    <path id="water-soft-bank" d="M215 488 C500 505 740 475 1200 536" fill="none" stroke="#a5b49d" stroke-width="18" opacity="0.2"/>
+    <path id="water-hatch-field" d="M235 502 L598 470 L1200 527 L1200 780 L332 780 Z" fill="url(#water-hatch)" opacity="0.75"/>
+  </g>
+
+  <g id="layer-reflections" data-layer="true" data-bbox="510 510 650 270"
+     inkscape:groupmode="layer" inkscape:label="灯光倒影">
+    <path id="reflection-amber-one" d="M865 530 C845 590 886 628 850 700 C838 730 853 757 847 780"
+          fill="none" stroke="#e0a75d" stroke-width="20" stroke-linecap="round" opacity="0.45"/>
+    <path id="reflection-amber-two" d="M962 528 C944 575 980 615 956 665 C939 705 960 741 950 780"
+          fill="none" stroke="#ffd68a" stroke-width="11" stroke-linecap="round" opacity="0.55"/>
+    <path id="reflection-brick" d="M1080 546 C1034 610 1102 658 1048 735 C1034 754 1042 767 1037 780"
+          fill="none" stroke="#9f6151" stroke-width="46" stroke-linecap="round" opacity="0.28"/>
+    <path id="reflection-ripples" d="M520 614 C640 592 730 630 840 606 M550 675 C700 650 814 695 935 662 M650 737 C790 718 910 755 1075 728"
+          fill="none" stroke="#d7d9c8" stroke-width="8" stroke-linecap="round" opacity="0.36"/>
+  </g>
+
+  <g id="layer-boat" data-layer="true" data-bbox="205 493 340 178"
+     inkscape:groupmode="layer" inkscape:label="停泊船只">
+    <path id="boat-hull" d="M218 567 L505 542 L545 603 L494 652 L260 663 L209 620 Z" fill="#252c2d"/>
+    <path id="boat-side" d="M228 580 L505 557 L520 604 L480 628 L251 638 Z" fill="#6e312d"/>
+    <path id="boat-roof" d="M268 520 L474 503 L508 553 L239 574 Z" fill="#2f3837"/>
+    <path id="boat-cabin" d="M302 501 L432 490 L467 545 L270 560 Z" fill="#8c3f34"/>
+    <path id="boat-window-band" d="M317 508 L419 499 L442 532 L294 544 Z" fill="#b6c5bb" opacity="0.78"/>
+    <path id="boat-trim" d="M232 588 L506 564" fill="none" stroke="#d6b46f" stroke-width="8"/>
+    <line id="boat-mooring" x1="510" y1="560" x2="610" y2="486" stroke="#252829" stroke-width="4"/>
+  </g>
+
+  <g id="layer-walkway" data-layer="true" data-bbox="0 432 354 348"
+     inkscape:groupmode="layer" inkscape:label="前景步道">
+    <path id="walkway-field" d="M0 424 L215 480 L338 780 L0 780 Z" fill="url(#walk-gradient)"/>
+    <path id="walkway-edge" d="M205 475 C238 560 280 670 330 780" fill="none" stroke="#272c2d" stroke-width="18"/>
+    <g id="bollards" fill="#343838">
+      <path id="bollard-one" d="M112 580 h20 l7 46 h-34z"/>
+      <ellipse id="bollard-one-cap" cx="122" cy="579" rx="15" ry="7"/>
+      <path id="bollard-two" d="M200 684 h25 l8 58 h-42z"/>
+      <ellipse id="bollard-two-cap" cx="212" cy="683" rx="18" ry="8"/>
+    </g>
+    <g id="walkway-figures" fill="#202627">
+      <path id="figure-near" d="M18 515 Q48 480 76 518 L86 780 H0 L0 552 Z"/>
+      <circle id="figure-near-head" cx="46" cy="474" r="32"/>
+      <path id="figure-far" d="M118 492 Q134 475 150 494 L158 594 H111 Z" opacity="0.82"/>
+      <circle id="figure-far-head" cx="135" cy="466" r="15" opacity="0.82"/>
+    </g>
+    <path id="paving-marks" d="M20 528 L190 563 M8 607 L231 650 M0 700 L274 747 M75 445 L44 780 M136 458 L122 780"
+          fill="none" stroke="#d1c9bc" stroke-width="3" opacity="0.36"/>
+  </g>
+
+  <g id="layer-atmosphere" data-layer="true" data-bbox="0 0 1200 780"
+     inkscape:groupmode="layer" inkscape:label="空气与收笔" style="pointer-events:none">
+    <path id="mist-line" d="M70 430 C340 390 580 432 810 395 C974 369 1090 382 1180 350"
+          fill="none" stroke="#f6f0e6" stroke-width="34" stroke-linecap="round" opacity="0.12"/>
+    <path id="rain-memory" d="M102 110 l-28 70 M176 86 l-32 86 M474 112 l-34 90 M752 66 l-36 98 M1002 92 l-32 86"
+          fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" opacity="0.18"/>
+    <text id="editorial-caption" x="1045" y="744" fill="#eee7db" font-family="Georgia, serif" font-size="18" letter-spacing="4" text-anchor="end" opacity="0.62">AFTER RAIN · 01</text>
+  </g>
+</svg>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Layered Redraw"
+  short_description: "Turn photos into editable layered SVG art"
+  default_prompt: "Use $redraw-in-layers to interview me about the desired feeling, then redraw my photo as editable layered SVG art."

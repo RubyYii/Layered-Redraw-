@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "kind": "layered-redraw-edit-request",
+  "source": {
+    "file": "artwork.svg",
+    "base_revision": "666d591077ce",
+    "view_box": [0, 0, 1200, 780]
+  },
+  "selection": {
+    "mode": "bbox",
+    "layer_ids": ["layer-canal", "layer-reflections"],
+    "object_ids": ["water-surface", "reflection-ripples"],
+    "bbox": [420, 520, 650, 220],
+    "bbox_normalized": [0.35, 0.666667, 0.541667, 0.282051]
+  },
+  "instruction": "让水面更安静，减少波纹并稍微降低暖色倒影的强度。",
+  "expected_changed_layers": ["layer-canal", "layer-reflections"],
+  "preserve_layers": [
+    "layer-background",
+    "layer-sky",
+    "layer-distant-city",
+    "layer-brick-buildings",
+    "layer-windows",
+    "layer-boat",
+    "layer-walkway",
+    "layer-atmosphere"
+  ],
+  "constraints": {
+    "preserve_unselected": true,
+    "preserve_stable_layer_ids": true,
+    "require_patch_plan": true
+  },
+  "status": "requires-planning"
+}

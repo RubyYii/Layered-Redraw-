@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' data: blob:; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'"
+    />
+    <meta name="theme-color" content="#f4f0e8" />
+    <title>Layered Redraw Studio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand" aria-label="Layered Redraw Studio">
+          <span class="brand-mark" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
+          <span class="brand-copy">
+            <strong>叠绘</strong>
+            <small>Layered Redraw Studio</small>
+          </span>
+        </div>
+
+        <div class="document-identity" aria-live="polite">
+          <span class="document-kicker">当前工程</span>
+          <strong id="documentName">尚未打开 SVG</strong>
+          <span class="revision-badge" id="revisionBadge">—</span>
+        </div>
+
+        <nav class="top-actions" aria-label="文件与工程操作">
+          <label class="button button-quiet" for="svgFileInput">
+            <span aria-hidden="true">↗</span> 打开 SVG
+          </label>
+          <input id="svgFileInput" type="file" accept="image/svg+xml,.svg" hidden />
+          <button class="button button-quiet" id="loadDemoButton" type="button">
+            <span aria-hidden="true">◎</span> 载入示例
+          </button>
+          <button class="button button-quiet" id="validateButton" type="button">
+            <span aria-hidden="true">✓</span> 检查结构
+          </button>
+          <button class="button button-primary" id="topExportButton" type="button" disabled>
+            导出修改请求
+          </button>
+        </nav>
+      </header>
+
+      <main class="workspace">
+        <aside class="panel layer-panel" aria-labelledby="layersTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">SEMANTIC STRUCTURE</p>
+              <h1 id="layersTitle">语义图层</h1>
+            </div>
+            <span class="count-badge" id="layerCount">0</span>
+          </div>
+
+          <div class="layer-toolbar">
+            <button type="button" id="showAllButton" disabled>全部显示</button>
+            <button type="button" id="clearSelectionButton" disabled>清除选择</button>
+          </div>
+
+          <div class="layer-list" id="layerList" role="tree" aria-label="SVG 图层列表">
+            <div class="layer-empty">
+              <span aria-hidden="true">◇</span>
+              <p>打开一个分层 SVG 后，图层会出现在这里。</p>
+            </div>
+          </div>
+
+          <div class="layer-legend" aria-label="图层状态图例">
+            <span><i class="dot dot-sage"></i>已选择</span>
+            <span><i class="dot dot-brick"></i>已锁定</span>
+          </div>
+        </aside>
+
+        <section class="canvas-panel" aria-labelledby="canvasTitle">
+          <div class="canvas-toolbar">
+            <div>
+              <p class="eyebrow">VECTOR CANVAS</p>
+              <h2 id="canvasTitle">画布</h2>
+            </div>
+            <div class="mode-switch" role="group" aria-label="选择方式">
+              <button class="mode-button is-active" type="button" data-mode="layer">
+                <span aria-hidden="true">◫</span> 图层点击
+              </button>
+              <button class="mode-button" type="button" data-mode="bbox">
+                <span aria-hidden="true">⌗</span> 框选
+              </button>
+              <button class="mode-button" type="button" data-mode="semantic-text">
+                <span aria-hidden="true">Aa</span> 纯文本
+              </button>
+            </div>
+            <div class="canvas-meta">
+              <span id="canvasSize">—</span>
+              <span class="separator" aria-hidden="true"></span>
+              <span id="selectionSummary">未选择</span>
+            </div>
+          </div>
+
+          <div class="canvas-stage" id="canvasStage" tabindex="0" aria-label="可交互 SVG 画布">
+            <div class="paper-grain" aria-hidden="true"></div>
+            <div class="canvas-empty" id="canvasEmpty">
+              <span class="empty-glyph" aria-hidden="true">◌</span>
+              <h3>从一张可编辑的 SVG 开始</h3>
+              <p>打开本地文件，或载入仓库中的运河示例。</p>
+              <label class="button button-primary" for="svgFileInput">选择 SVG 文件</label>
+            </div>
+            <div class="artboard" id="artboard" hidden>
+              <div class="svg-mount" id="svgMount"></div>
+            </div>
+            <div class="selection-overlay" id="selectionOverlay" aria-hidden="true"></div>
+            <div class="drag-box" id="dragBox" hidden aria-hidden="true"></div>
+          </div>
+
+          <div class="canvas-footer">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="canvasHint">等待载入工程</span>
+            <span class="footer-shortcut">Esc 清除 · Ctrl/⌘ + Enter 生成请求</span>
+          </div>
+        </section>
+
+        <aside class="panel instruction-panel" aria-labelledby="instructionTitle">
+          <div class="panel-heading instruction-heading">
+            <div>
+              <p class="eyebrow">ART DIRECTION</p>
+              <h2 id="instructionTitle">修改意图</h2>
+            </div>
+            <span class="step-label">PATCH 01</span>
+          </div>
+
+          <section class="context-card" aria-labelledby="contextTitle">
+            <div class="section-label-row">
+              <h3 id="contextTitle">作用范围</h3>
+              <span id="selectionModeLabel">图层点击</span>
+            </div>
+            <div class="selection-chips" id="selectionChips">
+              <span class="chip chip-muted">尚未选择图层</span>
+            </div>
+            <p class="context-note" id="contextNote">点击画布对象或左侧图层来限定修改范围。</p>
+          </section>
+
+          <section class="instruction-form">
+            <label for="instructionInput">描述你希望发生的变化</label>
+            <textarea
+              id="instructionInput"
+              rows="7"
+              placeholder="例如：让水面更偏灰绿色，减少波纹；保留建筑和暖色窗户不变。"
+            ></textarea>
+            <div class="prompt-examples" aria-label="修改指令示例">
+              <button type="button" data-example="降低水面波纹密度，改为安静的灰绿色。">安静水面</button>
+              <button type="button" data-example="把窗户光线调暖一些，但不要改变砖墙。">暖色窗光</button>
+              <button type="button" data-example="让整体更像克制的水彩海报，保持现有图层结构。">水彩海报</button>
+            </div>
+          </section>
+
+          <section class="constraints">
+            <label class="check-row">
+              <input id="preserveCheckbox" type="checkbox" checked />
+              <span class="check-control" aria-hidden="true"></span>
+              <span>
+                <strong>保护未选图层</strong>
+                <small>在补丁中把其余图层列为不可改动。</small>
+              </span>
+            </label>
+          </section>
+
+          <div class="request-actions">
+            <button class="button button-primary button-wide" id="buildRequestButton" type="button" disabled>
+              生成修改请求
+            </button>
+            <div class="secondary-actions">
+              <button class="button button-quiet" id="copyRequestButton" type="button" disabled>复制 JSON</button>
+              <button class="button button-quiet" id="downloadRequestButton" type="button" disabled>下载文件</button>
+            </div>
+          </div>
+
+          <details class="request-preview" id="requestPreview">
+            <summary>查看请求内容</summary>
+            <pre id="requestJson">等待生成…</pre>
+          </details>
+
+          <section class="validation-card" id="validationCard" hidden aria-live="polite">
+            <h3>结构检查</h3>
+            <ul id="validationResults"></ul>
+          </section>
+        </aside>
+      </main>
+
+      <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    </div>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
