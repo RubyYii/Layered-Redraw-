@@ -32,7 +32,7 @@
       <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2" />
     </pattern>
   </defs>
-  <g id="layer-windows" data-layer="true" data-bbox="646 128 516 298" inkscape:groupmode="layer" inkscape:label="暖色窗户">
+  <g id="layer-windows" data-layer="true" data-label-zh="暖色窗户" data-label-en="Warm windows" data-bbox="646 128 516 298" inkscape:groupmode="layer" inkscape:label="暖色窗户">
     <g id="upper-window-row" fill="#d8d8d1" stroke="#221f20" stroke-width="7">
       <path id="window-u1" d="M1030 139 l55 -15 v48 l-55 13z" />
       <path id="window-u2" d="M1108 119 l52 -14 v47 l-52 13z" />

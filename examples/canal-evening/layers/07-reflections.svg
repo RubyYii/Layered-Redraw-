@@ -32,7 +32,7 @@
       <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2" />
     </pattern>
   </defs>
-  <g id="layer-reflections" data-layer="true" data-bbox="510 510 650 270" inkscape:groupmode="layer" inkscape:label="灯光倒影">
+  <g id="layer-reflections" data-layer="true" data-label-zh="灯光倒影" data-label-en="Light reflections" data-bbox="510 510 650 270" inkscape:groupmode="layer" inkscape:label="灯光倒影">
     <path id="reflection-amber-one" d="M865 530 C845 590 886 628 850 700 C838 730 853 757 847 780" fill="none" stroke="#e0a75d" stroke-width="20" stroke-linecap="round" opacity="0.45" />
     <path id="reflection-amber-two" d="M962 528 C944 575 980 615 956 665 C939 705 960 741 950 780" fill="none" stroke="#ffd68a" stroke-width="11" stroke-linecap="round" opacity="0.55" />
     <path id="reflection-brick" d="M1080 546 C1034 610 1102 658 1048 735 C1034 754 1042 767 1037 780" fill="none" stroke="#9f6151" stroke-width="46" stroke-linecap="round" opacity="0.28" />

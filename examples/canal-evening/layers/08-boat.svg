@@ -32,7 +32,7 @@
       <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2" />
     </pattern>
   </defs>
-  <g id="layer-boat" data-layer="true" data-bbox="205 493 340 178" inkscape:groupmode="layer" inkscape:label="停泊船只">
+  <g id="layer-boat" data-layer="true" data-label-zh="停泊船只" data-label-en="Moored boat" data-bbox="205 493 340 178" inkscape:groupmode="layer" inkscape:label="停泊船只">
     <path id="boat-hull" d="M218 567 L505 542 L545 603 L494 652 L260 663 L209 620 Z" fill="#252c2d" />
     <path id="boat-side" d="M228 580 L505 557 L520 604 L480 628 L251 638 Z" fill="#6e312d" />
     <path id="boat-roof" d="M268 520 L474 503 L508 553 L239 574 Z" fill="#2f3837" />

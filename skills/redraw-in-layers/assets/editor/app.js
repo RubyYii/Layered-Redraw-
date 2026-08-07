@@ -3,6 +3,227 @@
 const INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape";
 const GRAPHIC_SELECTOR = "path,rect,circle,ellipse,line,polyline,polygon,text,use,image";
 const LAYER_ID_PATTERN = /^layer-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const LOCALE_STORAGE_KEY = "layered-redraw-locale";
+
+const TRANSLATIONS = {
+  zh: {
+    appTitle: "叠绘 · 语义图层编辑器",
+    brandName: "叠绘",
+    brandSubtitle: "Layered Redraw Studio",
+    currentProject: "当前工程",
+    noDocument: "尚未打开 SVG",
+    fileActionsLabel: "文件与工程操作",
+    languageLabel: "界面语言",
+    openSvg: "打开 SVG",
+    loadDemo: "载入示例",
+    validateStructure: "检查结构",
+    exportRequest: "导出修改请求",
+    layersTitle: "语义图层",
+    showAll: "全部显示",
+    clearSelection: "清除选择",
+    layerListLabel: "SVG 图层列表",
+    layerEmptyInitial: "打开一个分层 SVG 后，图层会出现在这里。",
+    layerEmptyDiscovered: "没有发现语义顶层图层。请检查 data-layer 或 Inkscape layer 标记。",
+    layerLegendLabel: "图层状态图例",
+    selectedLegend: "已选择",
+    lockedLegend: "已锁定",
+    canvasTitle: "画布",
+    selectionMethodLabel: "选择方式",
+    modeLayerShort: "图层点击",
+    modeBboxShort: "框选",
+    modeTextShort: "纯文本",
+    modeLayer: "图层点击",
+    modeBbox: "画面框选",
+    modeText: "纯文本解析",
+    selectionNone: "未选择",
+    canvasStageLabel: "可交互 SVG 画布",
+    canvasEmptyTitle: "从一张可编辑的 SVG 开始",
+    canvasEmptyBody: "打开本地文件，或载入仓库中的运河示例。",
+    chooseSvg: "选择 SVG 文件",
+    waitingForProject: "等待载入工程",
+    shortcuts: "Esc 清除 · Ctrl/⌘ + Enter 生成请求",
+    instructionTitle: "修改意图",
+    scopeTitle: "作用范围",
+    noLayerSelected: "尚未选择图层",
+    selectScopeHint: "点击画布对象或左侧图层来限定修改范围。",
+    instructionLabel: "描述你希望发生的变化",
+    instructionPlaceholder: "例如：让水面更偏灰绿色，减少波纹；保留建筑和暖色窗户不变。",
+    promptExamplesLabel: "修改指令示例",
+    exampleCalmWater: "安静水面",
+    exampleCalmWaterText: "降低水面波纹密度，改为安静的灰绿色。",
+    exampleWarmWindows: "暖色窗光",
+    exampleWarmWindowsText: "把窗户光线调暖一些，但不要改变砖墙。",
+    exampleWatercolour: "水彩海报",
+    exampleWatercolourText: "让整体更像克制的水彩海报，保持现有图层结构。",
+    protectUnselected: "保护未选图层",
+    protectUnselectedHint: "在补丁中把其余图层列为不可改动。",
+    buildRequest: "生成修改请求",
+    copyJson: "复制 JSON",
+    downloadFile: "下载文件",
+    viewRequest: "查看请求内容",
+    waitingToGenerate: "等待生成…",
+    validationTitle: "结构检查",
+    unnamedLayer: "未命名图层",
+    svgTooLarge: "SVG 超过 8 MB，首版编辑器暂不加载。请先简化路径。",
+    svgParseFailed: "SVG 解析失败：{detail}",
+    rootNotSvg: "文件根元素不是 SVG。",
+    loadedLayers: "已载入 {count} 个语义图层",
+    showLayer: "显示 {label}",
+    hideLayer: "隐藏 {label}",
+    unlockLayer: "解锁 {label}",
+    lockLayer: "锁定 {label}",
+    objectCount: "{count} 个对象",
+    lockedLayer: "“{label}”已锁定，先解锁才能选择。",
+    selectedCount: "已选 {count} 层",
+    semanticAuto: "由文本语义自动定位",
+    semanticNote: "请求不会预先绑定图层；Codex 将根据对象、位置和排除条件解析目标。",
+    bboxPrompt: "拖动鼠标框选画面",
+    bboxNote: "框选命中的图层与对象会成为修改边界。",
+    selectedScopeNote: "修改将限制在 {count} 个已选语义图层内。",
+    bboxSize: "框选 {width} × {height}",
+    bboxNoHit: "框选区域没有命中可编辑图层。",
+    svgNotLoaded: "尚未载入 SVG。",
+    invalidViewBox: "viewBox 尺寸无效。",
+    layerCountRequired: "顶层语义图层应为 5–20 个；当前为 {count} 个。",
+    layerCountRecommended: "图层数量有效，但推荐 8–12 个；当前为 {count} 个。",
+    duplicateIds: "存在重复 ID：{ids}",
+    invalidLayerId: "图层 ID 不符合规范：{id}",
+    emptyLayer: "图层为空：{id}",
+    dangerousElements: "SVG 包含不可执行的危险元素。",
+    strictImage: "vector-strict 工程不能包含 image 元素。",
+    structurePassed: "结构通过：{count} 个语义图层。",
+    structureStatusOk: "SVG 图层结构通过",
+    structureStatusBad: "SVG 图层结构存在问题",
+    structureToastOk: "结构检查通过。",
+    structureToastBad: "发现 {count} 个结构问题。",
+    selectFirst: "请先选择图层或框选画面。",
+    requestReadyStatus: "修改请求已生成，尚未改动画作",
+    requestReadyToast: "修改请求已生成；它不会直接改写 SVG。",
+    requestDownloaded: "edit-request.json 已下载。",
+    requestCopied: "修改请求 JSON 已复制。",
+    clipboardDenied: "浏览器未允许剪贴板访问，请使用下载。",
+    chooseSvgFile: "请选择 .svg 文件。",
+    svgLoadFailed: "SVG 载入失败",
+    serverNoProject: "本地服务没有提供示例工程。",
+    serveHint: "请通过 layered_redraw.py serve 启动编辑器，或手动打开 SVG。",
+  },
+  en: {
+    appTitle: "Layered Redraw · Semantic SVG Editor",
+    brandName: "Layered Redraw",
+    brandSubtitle: "Semantic SVG Studio",
+    currentProject: "Current project",
+    noDocument: "No SVG open",
+    fileActionsLabel: "File and project actions",
+    languageLabel: "Interface language",
+    openSvg: "Open SVG",
+    loadDemo: "Load demo",
+    validateStructure: "Validate",
+    exportRequest: "Export edit request",
+    layersTitle: "Semantic Layers",
+    showAll: "Show all",
+    clearSelection: "Clear selection",
+    layerListLabel: "SVG layer list",
+    layerEmptyInitial: "Open a layered SVG to inspect its semantic structure.",
+    layerEmptyDiscovered: "No semantic top-level layers found. Check data-layer or Inkscape layer metadata.",
+    layerLegendLabel: "Layer status legend",
+    selectedLegend: "Selected",
+    lockedLegend: "Locked",
+    canvasTitle: "Canvas",
+    selectionMethodLabel: "Selection method",
+    modeLayerShort: "Layer click",
+    modeBboxShort: "Frame",
+    modeTextShort: "Text",
+    modeLayer: "Layer click",
+    modeBbox: "Region frame",
+    modeText: "Text inference",
+    selectionNone: "Nothing selected",
+    canvasStageLabel: "Interactive SVG canvas",
+    canvasEmptyTitle: "Start with an editable SVG",
+    canvasEmptyBody: "Open a local file or load the canal demo from this repository.",
+    chooseSvg: "Choose SVG file",
+    waitingForProject: "Waiting for a project",
+    shortcuts: "Esc clear · Ctrl/⌘ + Enter build request",
+    instructionTitle: "Edit Intent",
+    scopeTitle: "Scope",
+    noLayerSelected: "No layer selected",
+    selectScopeHint: "Click an object on the canvas or choose a layer to constrain the edit.",
+    instructionLabel: "Describe the change you want",
+    instructionPlaceholder: "For example: make the water quieter and grey-green; keep the buildings and warm windows unchanged.",
+    promptExamplesLabel: "Edit instruction examples",
+    exampleCalmWater: "Quiet water",
+    exampleCalmWaterText: "Reduce the ripple density and shift the water to a quiet grey-green.",
+    exampleWarmWindows: "Warmer windows",
+    exampleWarmWindowsText: "Warm the window light without changing the brick walls.",
+    exampleWatercolour: "Watercolour poster",
+    exampleWatercolourText: "Make the artwork feel like a restrained watercolour poster while preserving the layer structure.",
+    protectUnselected: "Protect unselected layers",
+    protectUnselectedHint: "Mark every other layer as immutable in the patch.",
+    buildRequest: "Build edit request",
+    copyJson: "Copy JSON",
+    downloadFile: "Download file",
+    viewRequest: "View request payload",
+    waitingToGenerate: "Waiting to generate…",
+    validationTitle: "Structure validation",
+    unnamedLayer: "Unnamed layer",
+    svgTooLarge: "This SVG is larger than 8 MB. Simplify its paths before loading it in this editor.",
+    svgParseFailed: "SVG parsing failed: {detail}",
+    rootNotSvg: "The file root is not an SVG element.",
+    loadedLayers: "Loaded {count} semantic layers",
+    showLayer: "Show {label}",
+    hideLayer: "Hide {label}",
+    unlockLayer: "Unlock {label}",
+    lockLayer: "Lock {label}",
+    objectCountOne: "{count} object",
+    objectCount: "{count} objects",
+    lockedLayer: "“{label}” is locked. Unlock it before selecting.",
+    selectedCountOne: "{count} layer selected",
+    selectedCount: "{count} layers selected",
+    semanticAuto: "Target inferred from text",
+    semanticNote: "No layers are pre-bound; Codex resolves the target from objects, positions, and exclusions in the request.",
+    bboxPrompt: "Drag to frame a region",
+    bboxNote: "Layers and objects inside the frame become the edit boundary.",
+    selectedScopeNoteOne: "The edit is constrained to {count} selected semantic layer.",
+    selectedScopeNote: "The edit is constrained to {count} selected semantic layers.",
+    bboxSize: "Frame {width} × {height}",
+    bboxNoHit: "The framed region did not hit an editable layer.",
+    svgNotLoaded: "No SVG has been loaded.",
+    invalidViewBox: "The viewBox dimensions are invalid.",
+    layerCountRequired: "A project needs 5–20 top-level semantic layers; found {count}.",
+    layerCountRecommended: "The layer count is valid, but 8–12 is recommended; found {count}.",
+    duplicateIds: "Duplicate IDs: {ids}",
+    invalidLayerId: "Layer ID does not match the contract: {id}",
+    emptyLayer: "Layer is empty: {id}",
+    dangerousElements: "The SVG contains unsafe executable elements.",
+    strictImage: "A vector-strict project cannot contain image elements.",
+    structurePassed: "Structure passed: {count} semantic layers.",
+    structureStatusOk: "SVG layer structure passed",
+    structureStatusBad: "SVG layer structure has problems",
+    structureToastOk: "Structure validation passed.",
+    structureToastBad: "Found {count} structure problems.",
+    selectFirst: "Select a layer or frame a region first.",
+    requestReadyStatus: "Edit request built; artwork remains unchanged",
+    requestReadyToast: "The edit request is ready. It does not rewrite the SVG directly.",
+    requestDownloaded: "edit-request.json downloaded.",
+    requestCopied: "Edit request JSON copied.",
+    clipboardDenied: "Clipboard access was denied. Download the file instead.",
+    chooseSvgFile: "Choose an .svg file.",
+    svgLoadFailed: "SVG failed to load",
+    serverNoProject: "The local server did not provide a demo project.",
+    serveHint: "Start the editor with layered_redraw.py serve, or open an SVG manually.",
+  },
+};
+
+function initialLocale() {
+  const queryLocale = new URLSearchParams(window.location.search).get("lang");
+  if (queryLocale === "zh" || queryLocale === "en") return queryLocale;
+  try {
+    const savedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+    if (savedLocale === "zh" || savedLocale === "en") return savedLocale;
+  } catch {
+    // Storage can be unavailable in privacy-restricted browser contexts.
+  }
+  return navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
+}
 
 const elements = {
   artboard: document.querySelector("#artboard"),
@@ -21,6 +242,7 @@ const elements = {
   layerCount: document.querySelector("#layerCount"),
   layerList: document.querySelector("#layerList"),
   loadDemoButton: document.querySelector("#loadDemoButton"),
+  localeButtons: Array.from(document.querySelectorAll("[data-locale]")),
   preserveCheckbox: document.querySelector("#preserveCheckbox"),
   requestJson: document.querySelector("#requestJson"),
   requestPreview: document.querySelector("#requestPreview"),
@@ -42,9 +264,11 @@ const elements = {
 
 const state = {
   bbox: null,
+  canvasStatus: { key: "waitingForProject", vars: {}, kind: "idle" },
   drag: null,
   ignoreClick: false,
   layers: [],
+  locale: initialLocale(),
   mode: "layer",
   projectMeta: null,
   request: null,
@@ -56,6 +280,67 @@ const state = {
   toastTimer: null,
 };
 
+function t(key, variables = {}) {
+  const template = TRANSLATIONS[state.locale]?.[key] ?? TRANSLATIONS.zh[key] ?? key;
+  return String(template).replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => {
+    return Object.prototype.hasOwnProperty.call(variables, name) ? String(variables[name]) : match;
+  });
+}
+
+function refreshLayerLabels() {
+  state.layers.forEach((layer) => {
+    layer.label = layerLabel(layer.node);
+  });
+}
+
+function renderCanvasStatus() {
+  const { key, vars, kind } = state.canvasStatus;
+  elements.canvasHint.textContent = t(key, vars);
+  elements.statusDot.classList.toggle("is-ready", kind === "ready");
+  elements.statusDot.classList.toggle("is-warning", kind === "warning");
+}
+
+function applyLocale(locale) {
+  state.locale = locale === "en" ? "en" : "zh";
+  window.clearTimeout(state.toastTimer);
+  elements.toast.hidden = true;
+  document.documentElement.lang = state.locale === "zh" ? "zh-CN" : "en";
+  document.title = t("appTitle");
+  try {
+    window.localStorage.setItem(LOCALE_STORAGE_KEY, state.locale);
+  } catch {
+    // The interface still works when persistence is unavailable.
+  }
+
+  document.querySelectorAll("[data-i18n]").forEach((node) => {
+    node.textContent = t(node.dataset.i18n);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => {
+    node.setAttribute("placeholder", t(node.dataset.i18nPlaceholder));
+  });
+  document.querySelectorAll("[data-i18n-aria-label]").forEach((node) => {
+    node.setAttribute("aria-label", t(node.dataset.i18nAriaLabel));
+  });
+  document.querySelectorAll("[data-example-key]").forEach((button) => {
+    button.dataset.example = t(button.dataset.exampleKey);
+  });
+  elements.localeButtons.forEach((button) => {
+    const active = button.dataset.locale === state.locale;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  elements.documentName.textContent = state.sourceName || t("noDocument");
+  elements.requestJson.textContent = state.request ? JSON.stringify(state.request, null, 2) : t("waitingToGenerate");
+  const modeLabelKeys = { layer: "modeLayer", bbox: "modeBbox", "semantic-text": "modeText" };
+  elements.selectionModeLabel.textContent = t(modeLabelKeys[state.mode]);
+
+  refreshLayerLabels();
+  renderLayers();
+  renderSelection();
+  renderCanvasStatus();
+  if (!elements.validationCard.hidden && state.svg) renderValidation(validateClient(), false);
+}
+
 function showToast(message) {
   window.clearTimeout(state.toastTimer);
   elements.toast.textContent = message;
@@ -65,10 +350,9 @@ function showToast(message) {
   }, 3400);
 }
 
-function setCanvasStatus(message, kind = "idle") {
-  elements.canvasHint.textContent = message;
-  elements.statusDot.classList.toggle("is-ready", kind === "ready");
-  elements.statusDot.classList.toggle("is-warning", kind === "warning");
+function setCanvasStatus(key, variables = {}, kind = "idle") {
+  state.canvasStatus = { key, vars: variables, kind };
+  renderCanvasStatus();
 }
 
 function safeFilename(value) {
@@ -111,12 +395,14 @@ function sanitizeSvgDocument(documentNode) {
 }
 
 function layerLabel(node) {
+  const localizedLabel = node.getAttribute(state.locale === "en" ? "data-label-en" : "data-label-zh");
   return (
+    localizedLabel ||
     node.getAttributeNS(INKSCAPE_NS, "label") ||
     node.getAttribute("inkscape:label") ||
     node.dataset.label ||
     node.id ||
-    "未命名图层"
+    t("unnamedLayer")
   );
 }
 
@@ -165,13 +451,13 @@ function viewBoxValues(svg) {
 }
 
 async function loadSvgText(text, sourceName, projectMeta = null) {
-  if (text.length > 8_000_000) throw new Error("SVG 超过 8 MB，首版编辑器暂不加载。请先简化路径。 ");
+  if (text.length > 8_000_000) throw new Error(t("svgTooLarge"));
   const parser = new DOMParser();
   const documentNode = parser.parseFromString(text, "image/svg+xml");
   const parseError = documentNode.querySelector("parsererror");
-  if (parseError) throw new Error(`SVG 解析失败：${parseError.textContent.slice(0, 160)}`);
+  if (parseError) throw new Error(t("svgParseFailed", { detail: parseError.textContent.slice(0, 160) }));
   const sourceSvg = documentNode.documentElement;
-  if (sourceSvg.tagName.toLowerCase() !== "svg") throw new Error("文件根元素不是 SVG。");
+  if (sourceSvg.tagName.toLowerCase() !== "svg") throw new Error(t("rootNotSvg"));
   sanitizeSvgDocument(documentNode);
 
   const svg = document.importNode(sourceSvg, true);
@@ -206,13 +492,13 @@ async function loadSvgText(text, sourceName, projectMeta = null) {
   elements.topExportButton.disabled = true;
   elements.copyRequestButton.disabled = true;
   elements.downloadRequestButton.disabled = true;
-  elements.requestJson.textContent = "等待生成…";
+  elements.requestJson.textContent = t("waitingToGenerate");
   elements.validationCard.hidden = true;
 
   renderLayers();
   renderSelection();
   updateActionAvailability();
-  setCanvasStatus(`已载入 ${state.layers.length} 个语义图层`, "ready");
+  setCanvasStatus("loadedLayers", { count: state.layers.length }, "ready");
 }
 
 function layerById(id) {
@@ -222,7 +508,8 @@ function layerById(id) {
 function renderLayers() {
   if (!state.layers.length) {
     elements.layerList.innerHTML = `
-      <div class="layer-empty"><span aria-hidden="true">◇</span><p>没有发现语义顶层图层。请检查 data-layer 或 Inkscape layer 标记。</p></div>`;
+      <div class="layer-empty"><span aria-hidden="true">◇</span><p></p></div>`;
+    elements.layerList.querySelector("p").textContent = t(state.svg ? "layerEmptyDiscovered" : "layerEmptyInitial");
     return;
   }
 
@@ -241,14 +528,14 @@ function renderLayers() {
     visibilityButton.type = "button";
     visibilityButton.className = "layer-icon-button";
     visibilityButton.textContent = layer.hidden ? "○" : "●";
-    visibilityButton.setAttribute("aria-label", `${layer.hidden ? "显示" : "隐藏"} ${layer.label}`);
+    visibilityButton.setAttribute("aria-label", t(layer.hidden ? "showLayer" : "hideLayer", { label: layer.label }));
     visibilityButton.addEventListener("click", () => toggleVisibility(layer.id));
 
     const lockButton = document.createElement("button");
     lockButton.type = "button";
     lockButton.className = "layer-icon-button";
     lockButton.textContent = layer.locked ? "◆" : "◇";
-    lockButton.setAttribute("aria-label", `${layer.locked ? "解锁" : "锁定"} ${layer.label}`);
+    lockButton.setAttribute("aria-label", t(layer.locked ? "unlockLayer" : "lockLayer", { label: layer.label }));
     lockButton.addEventListener("click", () => toggleLock(layer.id));
 
     const selectButton = document.createElement("button");
@@ -256,7 +543,8 @@ function renderLayers() {
     selectButton.className = "layer-select-button";
     selectButton.innerHTML = `<strong></strong><small></small>`;
     selectButton.querySelector("strong").textContent = layer.label;
-    selectButton.querySelector("small").textContent = `${layer.id} · ${layer.objectCount} objects`;
+    const objectCountKey = state.locale === "en" && layer.objectCount === 1 ? "objectCountOne" : "objectCount";
+    selectButton.querySelector("small").textContent = `${layer.id} · ${t(objectCountKey, { count: layer.objectCount })}`;
     selectButton.addEventListener("click", (event) => {
       selectLayer(layer.id, event.ctrlKey || event.metaKey || event.shiftKey);
     });
@@ -292,7 +580,7 @@ function toggleLock(id) {
 function selectLayer(id, additive = false, objectId = null) {
   const layer = layerById(id);
   if (!layer || layer.locked || layer.hidden) {
-    if (layer?.locked) showToast(`“${layer.label}”已锁定，先解锁才能选择。`);
+    if (layer?.locked) showToast(t("lockedLayer", { label: layer.label }));
     return;
   }
   if (!additive) {
@@ -354,20 +642,21 @@ function renderSelection() {
   }
 
   const selectedLayers = [...state.selectedIds].map(layerById).filter(Boolean);
-  elements.selectionSummary.textContent = selectedLayers.length ? `已选 ${selectedLayers.length} 层` : "未选择";
+  const selectedCountKey = state.locale === "en" && selectedLayers.length === 1 ? "selectedCountOne" : "selectedCount";
+  elements.selectionSummary.textContent = selectedLayers.length ? t(selectedCountKey, { count: selectedLayers.length }) : t("selectionNone");
   elements.selectionChips.replaceChildren();
   if (state.mode === "semantic-text") {
     const chip = document.createElement("span");
     chip.className = "chip chip-muted";
-    chip.textContent = "由文本语义自动定位";
+    chip.textContent = t("semanticAuto");
     elements.selectionChips.append(chip);
-    elements.contextNote.textContent = "请求不会预先绑定图层；Codex 将根据对象、位置和排除条件解析目标。";
+    elements.contextNote.textContent = t("semanticNote");
   } else if (!selectedLayers.length) {
     const chip = document.createElement("span");
     chip.className = "chip chip-muted";
-    chip.textContent = state.mode === "bbox" ? "拖动鼠标框选画面" : "尚未选择图层";
+    chip.textContent = t(state.mode === "bbox" ? "bboxPrompt" : "noLayerSelected");
     elements.selectionChips.append(chip);
-    elements.contextNote.textContent = state.mode === "bbox" ? "框选命中的图层与对象会成为修改边界。" : "点击画布对象或左侧图层来限定修改范围。";
+    elements.contextNote.textContent = t(state.mode === "bbox" ? "bboxNote" : "selectScopeHint");
   } else {
     selectedLayers.forEach((layer) => {
       const chip = document.createElement("span");
@@ -379,10 +668,14 @@ function renderSelection() {
     if (state.bbox) {
       const chip = document.createElement("span");
       chip.className = "chip chip-muted";
-      chip.textContent = `框选 ${Math.round(state.bbox.svg[2])} × ${Math.round(state.bbox.svg[3])}`;
+      chip.textContent = t("bboxSize", {
+        width: Math.round(state.bbox.svg[2]),
+        height: Math.round(state.bbox.svg[3]),
+      });
       elements.selectionChips.append(chip);
     }
-    elements.contextNote.textContent = `修改将限制在 ${selectedLayers.length} 个已选语义图层内。`;
+    const selectedScopeKey = state.locale === "en" && selectedLayers.length === 1 ? "selectedScopeNoteOne" : "selectedScopeNote";
+    elements.contextNote.textContent = t(selectedScopeKey, { count: selectedLayers.length });
   }
   updateActionAvailability();
 }
@@ -395,8 +688,8 @@ function setMode(mode) {
   });
   elements.canvasStage.classList.toggle("is-box-mode", mode === "bbox");
   elements.canvasStage.classList.toggle("is-text-mode", mode === "semantic-text");
-  const labels = { layer: "图层点击", bbox: "画面框选", "semantic-text": "纯文本解析" };
-  elements.selectionModeLabel.textContent = labels[mode];
+  const labelKeys = { layer: "modeLayer", bbox: "modeBbox", "semantic-text": "modeText" };
+  elements.selectionModeLabel.textContent = t(labelKeys[mode]);
   if (mode === "semantic-text") {
     state.bbox = null;
     state.selectedObjectIds.clear();
@@ -416,7 +709,7 @@ function invalidateRequest() {
   elements.topExportButton.disabled = true;
   elements.copyRequestButton.disabled = true;
   elements.downloadRequestButton.disabled = true;
-  elements.requestJson.textContent = "等待生成…";
+  elements.requestJson.textContent = t("waitingToGenerate");
 }
 
 function relativePointer(event) {
@@ -514,40 +807,40 @@ function finishBoxSelection(event) {
   invalidateRequest();
   renderLayers();
   renderSelection();
-  if (!state.selectedIds.size) showToast("框选区域没有命中可编辑图层。");
+  if (!state.selectedIds.size) showToast(t("bboxNoHit"));
 }
 
 function validateClient() {
   const errors = [];
   const warnings = [];
-  if (!state.svg) return { ok: false, errors: ["尚未载入 SVG。"], warnings };
+  if (!state.svg) return { ok: false, errors: [t("svgNotLoaded")], warnings };
   const [, , width, height] = viewBoxValues(state.svg);
-  if (width <= 0 || height <= 0) errors.push("viewBox 尺寸无效。");
+  if (width <= 0 || height <= 0) errors.push(t("invalidViewBox"));
   if (state.layers.length < 5 || state.layers.length > 20) {
-    errors.push(`顶层语义图层应为 5–20 个；当前为 ${state.layers.length} 个。`);
+    errors.push(t("layerCountRequired", { count: state.layers.length }));
   } else if (state.layers.length < 8 || state.layers.length > 12) {
-    warnings.push(`图层数量有效，但推荐 8–12 个；当前为 ${state.layers.length} 个。`);
+    warnings.push(t("layerCountRecommended", { count: state.layers.length }));
   }
   const ids = new Map();
   state.svg.querySelectorAll("[id]").forEach((node) => ids.set(node.id, (ids.get(node.id) || 0) + 1));
   const duplicates = [...ids.entries()].filter(([, count]) => count > 1).map(([id]) => id);
-  if (duplicates.length) errors.push(`存在重复 ID：${duplicates.join(", ")}`);
+  if (duplicates.length) errors.push(t("duplicateIds", { ids: duplicates.join(", ") }));
   state.layers.forEach((layer) => {
-    if (!LAYER_ID_PATTERN.test(layer.id)) errors.push(`图层 ID 不符合规范：${layer.id}`);
-    if (!layer.objectCount) errors.push(`图层为空：${layer.id}`);
+    if (!LAYER_ID_PATTERN.test(layer.id)) errors.push(t("invalidLayerId", { id: layer.id }));
+    if (!layer.objectCount) errors.push(t("emptyLayer", { id: layer.id }));
   });
-  if (state.svg.querySelector("script,foreignObject,iframe,object,embed")) errors.push("SVG 包含不可执行的危险元素。");
+  if (state.svg.querySelector("script,foreignObject,iframe,object,embed")) errors.push(t("dangerousElements"));
   const outputMode = state.projectMeta?.config?.output_mode;
   if (outputMode === "vector-strict" && state.svg.querySelector("image")) {
-    errors.push("vector-strict 工程不能包含 image 元素。");
+    errors.push(t("strictImage"));
   }
   return { ok: errors.length === 0, errors, warnings };
 }
 
-function renderValidation(report) {
+function renderValidation(report, notify = true) {
   elements.validationResults.replaceChildren();
   const entries = [];
-  if (report.ok) entries.push({ text: `结构通过：${state.layers.length} 个语义图层。`, type: "ok" });
+  if (report.ok) entries.push({ text: t("structurePassed", { count: state.layers.length }), type: "ok" });
   report.errors.forEach((text) => entries.push({ text, type: "error" }));
   report.warnings.forEach((text) => entries.push({ text, type: "warning" }));
   entries.forEach((entry) => {
@@ -557,15 +850,15 @@ function renderValidation(report) {
     elements.validationResults.append(item);
   });
   elements.validationCard.hidden = false;
-  setCanvasStatus(report.ok ? "SVG 图层结构通过" : "SVG 图层结构存在问题", report.ok ? "ready" : "warning");
-  showToast(report.ok ? "结构检查通过。" : `发现 ${report.errors.length} 个结构问题。`);
+  setCanvasStatus(report.ok ? "structureStatusOk" : "structureStatusBad", {}, report.ok ? "ready" : "warning");
+  if (notify) showToast(report.ok ? t("structureToastOk") : t("structureToastBad", { count: report.errors.length }));
 }
 
 function buildEditRequest() {
   const instruction = elements.instructionInput.value.trim();
   if (!state.svg || !instruction) return null;
   if (state.mode !== "semantic-text" && !state.selectedIds.size) {
-    showToast("请先选择图层或框选画面。");
+    showToast(t("selectFirst"));
     return null;
   }
   const [x, y, width, height] = viewBoxValues(state.svg);
@@ -609,8 +902,8 @@ function buildEditRequest() {
   elements.copyRequestButton.disabled = false;
   elements.downloadRequestButton.disabled = false;
   elements.topExportButton.disabled = false;
-  setCanvasStatus("修改请求已生成，尚未改动画作", "ready");
-  showToast("修改请求已生成；它不会直接改写 SVG。 ");
+  setCanvasStatus("requestReadyStatus", {}, "ready");
+  showToast(t("requestReadyToast"));
   return request;
 }
 
@@ -626,7 +919,7 @@ function downloadRequest() {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
-  showToast("edit-request.json 已下载。 ");
+  showToast(t("requestDownloaded"));
 }
 
 async function copyRequest() {
@@ -634,15 +927,15 @@ async function copyRequest() {
   if (!request) return;
   try {
     await navigator.clipboard.writeText(JSON.stringify(request, null, 2));
-    showToast("修改请求 JSON 已复制。 ");
+    showToast(t("requestCopied"));
   } catch {
-    showToast("浏览器未允许剪贴板访问，请使用下载。 ");
+    showToast(t("clipboardDenied"));
   }
 }
 
 async function readSvgFile(file) {
   if (!file || !/\.svg$/i.test(file.name)) {
-    showToast("请选择 .svg 文件。 ");
+    showToast(t("chooseSvgFile"));
     return;
   }
   try {
@@ -650,7 +943,7 @@ async function readSvgFile(file) {
     renderValidation(validateClient());
   } catch (error) {
     showToast(error.message || String(error));
-    setCanvasStatus("SVG 载入失败", "warning");
+    setCanvasStatus("svgLoadFailed", {}, "warning");
   }
 }
 
@@ -660,7 +953,7 @@ async function loadServerProject(showFailure = true) {
       fetch("/api/project", { cache: "no-store" }),
       fetch("/api/artwork", { cache: "no-store" }),
     ]);
-    if (!projectResponse.ok || !artworkResponse.ok) throw new Error("本地服务没有提供示例工程。 ");
+    if (!projectResponse.ok || !artworkResponse.ok) throw new Error(t("serverNoProject"));
     const project = await projectResponse.json();
     const artwork = await artworkResponse.text();
     await loadSvgText(artwork, project.source_name || "artwork.svg", project);
@@ -669,7 +962,7 @@ async function loadServerProject(showFailure = true) {
     renderValidation(validateClient());
     return true;
   } catch (error) {
-    if (showFailure) showToast("请通过 layered_redraw.py serve 启动编辑器，或手动打开 SVG。 ");
+    if (showFailure) showToast(t("serveHint"));
     return false;
   }
 }
@@ -678,13 +971,17 @@ document.querySelectorAll(".mode-button").forEach((button) => {
   button.addEventListener("click", () => setMode(button.dataset.mode));
 });
 
-document.querySelectorAll("[data-example]").forEach((button) => {
+document.querySelectorAll("[data-example-key]").forEach((button) => {
   button.addEventListener("click", () => {
     elements.instructionInput.value = button.dataset.example;
     invalidateRequest();
     updateActionAvailability();
     elements.instructionInput.focus();
   });
+});
+
+elements.localeButtons.forEach((button) => {
+  button.addEventListener("click", () => applyLocale(button.dataset.locale));
 });
 
 elements.svgFileInput.addEventListener("change", () => readSvgFile(elements.svgFileInput.files[0]));
@@ -764,6 +1061,7 @@ const resizeObserver = new ResizeObserver(() => {
 });
 resizeObserver.observe(elements.canvasStage);
 
+applyLocale(state.locale);
 setMode("layer");
 if (location.protocol === "http:" || location.protocol === "https:") {
   loadServerProject(false);

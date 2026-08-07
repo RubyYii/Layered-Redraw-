@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="720" viewBox="0 0 1440 720" role="img" aria-labelledby="title desc">
+  <title id="title">Layered Redraw — from photographs to editable semantic-layer SVG art</title>
+  <desc id="desc">An English editorial hero with a layered canal illustration, workflow promises, and layer-count guidance.</desc>
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbf8f2"/>
+      <stop offset="1" stop-color="#eee8dd"/>
+    </linearGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#dce5e5"/>
+      <stop offset="1" stop-color="#f0d9c2"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7f9c91"/>
+      <stop offset="1" stop-color="#405d5a"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#342f29" flood-opacity=".16"/>
+    </filter>
+    <pattern id="grain" width="22" height="22" patternUnits="userSpaceOnUse">
+      <path d="M0 7H22M4 18H18" stroke="#554c42" stroke-opacity=".035" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1440" height="720" rx="32" fill="url(#paper)"/>
+  <rect width="1440" height="720" rx="32" fill="url(#grain)"/>
+  <path d="M0 574C225 514 409 618 635 575C848 535 1011 439 1440 502V720H0Z" fill="#dce4dd" opacity=".58"/>
+
+  <g transform="translate(74 68)">
+    <g aria-hidden="true">
+      <rect width="40" height="30" rx="4" fill="#fffdf8" stroke="#252422" stroke-width="2" transform="rotate(-6 20 15)" opacity=".42"/>
+      <rect x="8" y="8" width="40" height="30" rx="4" fill="#fffdf8" stroke="#53675c" stroke-width="2"/>
+      <rect x="16" y="17" width="40" height="30" rx="4" fill="#fffdf8" stroke="#a95649" stroke-width="2" transform="rotate(4 36 32)"/>
+    </g>
+    <text x="76" y="31" fill="#252422" font-family="Georgia, serif" font-size="29" font-weight="700">Layered Redraw</text>
+    <text x="76" y="53" fill="#716b63" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="2.5">SEMANTIC SVG STUDIO</text>
+  </g>
+
+  <g transform="translate(74 170)" font-family="Inter, Arial, sans-serif">
+    <rect width="184" height="32" rx="16" fill="#252422"/>
+    <text x="92" y="21" text-anchor="middle" fill="#fffdf8" font-size="12" font-weight="700" letter-spacing="1.5">LOCAL-FIRST · VECTOR</text>
+
+    <text x="0" y="100" fill="#252422" font-family="Georgia, serif" font-size="60" font-weight="500">From photographs</text>
+    <text x="0" y="170" fill="#252422" font-family="Georgia, serif" font-size="60" font-weight="500">to editable layers.</text>
+    <text x="2" y="218" fill="#615d56" font-size="21" font-weight="500">Redraw visual ideas as structured, hand-editable SVG artwork.</text>
+
+    <g transform="translate(0 266)">
+      <g>
+        <rect width="150" height="50" rx="25" fill="#dce4dd" stroke="#718578" stroke-opacity=".35"/>
+        <text x="75" y="21" text-anchor="middle" fill="#53675c" font-size="11" font-weight="700">REQUIRED</text>
+        <text x="75" y="38" text-anchor="middle" fill="#252422" font-size="13" font-weight="700">5–20 LAYERS</text>
+      </g>
+      <g transform="translate(164)">
+        <rect width="150" height="50" rx="25" fill="#f0ddd7" stroke="#a95649" stroke-opacity=".34"/>
+        <text x="75" y="21" text-anchor="middle" fill="#803f36" font-size="11" font-weight="700">IDEAL</text>
+        <text x="75" y="38" text-anchor="middle" fill="#252422" font-size="13" font-weight="700">8–12 LAYERS</text>
+      </g>
+      <g transform="translate(328)">
+        <rect width="150" height="50" rx="25" fill="#f8eedf" stroke="#bd8b4c" stroke-opacity=".42"/>
+        <text x="75" y="21" text-anchor="middle" fill="#8d6738" font-size="11" font-weight="700">OUTPUT</text>
+        <text x="75" y="38" text-anchor="middle" fill="#252422" font-size="13" font-weight="700">VECTOR SVG</text>
+      </g>
+    </g>
+
+    <g transform="translate(0 354)" fill="#625f59" font-size="14">
+      <circle cx="6" cy="-5" r="5" fill="#718578"/>
+      <text x="20">Discuss the feeling before drawing</text>
+      <circle cx="6" cy="31" r="5" fill="#a95649"/>
+      <text x="20" y="36">Edit locally without rebuilding the artwork</text>
+      <circle cx="6" cy="67" r="5" fill="#bd8b4c"/>
+      <text x="20" y="72">Continue by hand in Inkscape or Illustrator</text>
+    </g>
+  </g>
+
+  <g transform="translate(760 72)" filter="url(#shadow)" font-family="Inter, Arial, sans-serif">
+    <rect width="610" height="568" rx="24" fill="#fffdf8" stroke="#d7d0c5"/>
+    <g transform="translate(28 24)">
+      <circle cx="7" cy="7" r="6" fill="#a95649"/>
+      <circle cx="27" cy="7" r="6" fill="#bd8b4c"/>
+      <circle cx="47" cy="7" r="6" fill="#718578"/>
+      <text x="554" y="12" text-anchor="end" fill="#716b63" font-size="12" font-weight="700">10 SEMANTIC LAYERS</text>
+    </g>
+
+    <g transform="translate(28 62)">
+      <rect width="554" height="414" rx="12" fill="url(#sky)"/>
+      <path d="M0 180C92 153 174 172 252 149C351 119 450 113 554 139V224H0Z" fill="#e9dfcf" opacity=".82"/>
+      <path d="M0 221L155 206L208 238L554 178V414H0Z" fill="url(#water)"/>
+      <path d="M294 117L554 62V244L286 248Z" fill="#4b3030"/>
+      <path d="M214 164L329 124L334 251L205 262Z" fill="#68413d"/>
+      <path d="M294 117L554 62" stroke="#252422" stroke-width="16"/>
+      <path d="M214 164L329 124" stroke="#252422" stroke-width="12"/>
+      <g fill="#f5e9d6" stroke="#252422" stroke-width="5">
+        <rect x="344" y="115" width="30" height="33"/><rect x="401" y="102" width="30" height="33"/>
+        <rect x="458" y="89" width="30" height="33"/><rect x="511" y="78" width="27" height="31"/>
+        <rect x="330" y="174" width="29" height="33"/><rect x="385" y="161" width="29" height="33"/>
+        <rect x="440" y="148" width="29" height="33" fill="#f4bd68"/><rect x="496" y="136" width="29" height="33"/>
+      </g>
+      <path d="M0 242L112 259L180 414H0Z" fill="#8a8780"/>
+      <path d="M0 245L118 266L174 414" fill="none" stroke="#252422" stroke-width="10"/>
+      <path d="M93 305L206 294L253 338L223 371L121 365Z" fill="#2d3332" stroke="#252422" stroke-width="8"/>
+      <path d="M119 311L189 304L213 330L133 335Z" fill="#a95649"/>
+      <path d="M223 300L270 266" stroke="#252422" stroke-width="5"/>
+      <g stroke-linecap="round" fill="none">
+        <path d="M359 264C354 310 357 349 349 397" stroke="#e6b76f" stroke-width="12" opacity=".54"/>
+        <path d="M445 245C432 289 439 349 424 404" stroke="#e6b76f" stroke-width="10" opacity=".43"/>
+        <path d="M390 264C381 318 388 357 376 398" stroke="#f0d0a2" stroke-width="4" opacity=".78"/>
+        <path d="M163 284C271 304 347 286 514 289" stroke="#d7e2dd" stroke-width="4" opacity=".48"/>
+        <path d="M213 346C317 361 421 335 534 355" stroke="#d7e2dd" stroke-width="3" opacity=".34"/>
+      </g>
+      <g font-size="10" font-weight="700">
+        <g transform="translate(20 18)"><rect width="116" height="28" rx="14" fill="#fffdf8" fill-opacity=".9"/><circle cx="16" cy="14" r="5" fill="#718578"/><text x="29" y="18" fill="#252422">DUSK SKY</text></g>
+        <g transform="translate(396 211)"><rect width="136" height="28" rx="14" fill="#fffdf8" fill-opacity=".9"/><circle cx="16" cy="14" r="5" fill="#a95649"/><text x="29" y="18" fill="#252422">BRICK BUILDINGS</text></g>
+        <g transform="translate(326 374)"><rect width="136" height="28" rx="14" fill="#fffdf8" fill-opacity=".9"/><circle cx="16" cy="14" r="5" fill="#bd8b4c"/><text x="29" y="18" fill="#252422">REFLECTIONS</text></g>
+        <g transform="translate(26 365)"><rect width="126" height="28" rx="14" fill="#fffdf8" fill-opacity=".9"/><circle cx="16" cy="14" r="5" fill="#53675c"/><text x="29" y="18" fill="#252422">WALKWAY</text></g>
+      </g>
+    </g>
+
+    <g transform="translate(28 500)">
+      <rect width="172" height="40" rx="10" fill="#252422"/>
+      <text x="86" y="25" text-anchor="middle" fill="#fffdf8" font-size="12" font-weight="700">PHOTO → LAYERED SVG</text>
+      <text x="554" y="24" text-anchor="end" fill="#716b63" font-size="12">CLEAN · EDITABLE · LOCAL</text>
+    </g>
+  </g>
+
+  <text x="74" y="676" fill="#8d877e" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="2">OPEN SOURCE · CODEX SKILL · SVG-NATIVE</text>
+</svg>

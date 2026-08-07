@@ -32,7 +32,7 @@
       <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2" />
     </pattern>
   </defs>
-  <g id="layer-distant-city" data-layer="true" data-bbox="0 282 650 242" inkscape:groupmode="layer" inkscape:label="远处城市">
+  <g id="layer-distant-city" data-layer="true" data-label-zh="远处城市" data-label-en="Distant city" data-bbox="0 282 650 242" inkscape:groupmode="layer" inkscape:label="远处城市">
     <path id="distant-roofs" d="M0 425 L0 365 L70 365 L70 334 L142 334 L142 382 L220 382 L220 318 L302 318 L302 355 L385 355 L385 302 L448 302 L448 346 L525 346 L525 283 L600 283 L600 430 Z" fill="#6d6863" opacity="0.66" />
     <path id="distant-facades" d="M0 425 H610 V500 H0 Z" fill="#514e4a" />
     <path id="bridge-arch" d="M26 480 Q118 398 210 480 L210 500 L184 500 Q118 438 52 500 L26 500 Z" fill="#302e2e" />

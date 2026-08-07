@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="570" viewBox="0 0 1440 570" role="img" aria-labelledby="title desc">
+  <title id="title">Editable semantic layer architecture</title>
+  <desc id="desc">An exploded stack of SVG layers showing how meaningful objects remain independently editable.</desc>
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f9f6f0"/><stop offset="1" stop-color="#ece6db"/></linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="0" dy="9" stdDeviation="9" flood-color="#2c2925" flood-opacity=".14"/></filter>
+  </defs>
+  <rect width="1440" height="570" rx="28" fill="url(#paper)"/>
+
+  <g transform="translate(70 70)" font-family="Inter, Arial, sans-serif">
+    <text fill="#252422" font-family="Georgia, serif" font-size="39">Not fragmented artwork.</text>
+    <text y="52" fill="#252422" font-family="Georgia, serif" font-size="39">Editable meaning.</text>
+    <text y="94" fill="#716b63" font-size="15">Layers follow meaningful objects—not every tiny stroke.</text>
+    <g transform="translate(0 140)">
+      <g><circle cx="8" cy="3" r="7" fill="#718578"/><text x="28" y="9" fill="#252422" font-size="17" font-weight="750">Normally 8–12 top-level layers</text><text x="28" y="31" fill="#7a746c" font-size="12">Readable enough for both Codex and manual editing.</text></g>
+      <g transform="translate(0 74)"><circle cx="8" cy="3" r="7" fill="#a95649"/><text x="28" y="9" fill="#252422" font-size="17" font-weight="750">Objects and backgrounds stay separate</text><text x="28" y="31" fill="#7a746c" font-size="12">Sky, buildings, water, subject and accents remain independent.</text></g>
+      <g transform="translate(0 148)"><circle cx="8" cy="3" r="7" fill="#bd8b4c"/><text x="28" y="9" fill="#252422" font-size="17" font-weight="750">Brush marks and filters still belong to layers</text><text x="28" y="31" fill="#7a746c" font-size="12">Texture is expressive without losing semantic ownership.</text></g>
+      <g transform="translate(0 222)"><circle cx="8" cy="3" r="7" fill="#53675c"/><text x="28" y="9" fill="#252422" font-size="17" font-weight="750">Local edits have verifiable boundaries</text><text x="28" y="31" fill="#7a746c" font-size="12">Unselected hashes prove the rest of the artwork stayed intact.</text></g>
+    </g>
+  </g>
+
+  <g transform="translate(666 48)" filter="url(#shadow)" font-family="Inter, Arial, sans-serif">
+    <g transform="translate(0 336)"><path d="M0 68L296 0L620 70L319 142Z" fill="#f4efe6" stroke="#bdb5a9" stroke-width="2"/><path d="M22 69L296 8L596 70L318 134Z" fill="#eee7dc"/><text x="760" y="83" text-anchor="end" fill="#716b63" font-size="13" font-weight="700">BACKGROUND</text></g>
+    <g transform="translate(0 290)"><path d="M0 68L296 0L620 70L319 142Z" fill="#dce5e5" fill-opacity=".92" stroke="#718578" stroke-width="2"/><path d="M48 77C158 37 248 51 353 30C442 13 515 30 576 52" fill="none" stroke="#fffdf8" stroke-width="11" opacity=".58"/><text x="760" y="83" text-anchor="end" fill="#53675c" font-size="13" font-weight="700">SKY</text></g>
+    <g transform="translate(0 244)"><path d="M0 68L296 0L620 70L319 142Z" fill="#d8d0c4" fill-opacity=".88" stroke="#8f887e" stroke-width="2"/><path d="M103 83L171 42L217 64L275 25L349 56L405 34L524 68L319 122Z" fill="#6a6660" opacity=".72"/><text x="760" y="83" text-anchor="end" fill="#716b63" font-size="13" font-weight="700">DISTANT CITY</text></g>
+    <g transform="translate(0 198)"><path d="M0 68L296 0L620 70L319 142Z" fill="#a95649" fill-opacity=".82" stroke="#803f36" stroke-width="2"/><path d="M224 48L355 19L531 56L392 91Z" fill="#4f302e"/><g fill="#f5e9d6"><rect x="277" y="45" width="27" height="18" transform="skewY(-12)"/><rect x="337" y="34" width="27" height="18" transform="skewY(-12)"/><rect x="402" y="35" width="27" height="18" transform="skewY(12)"/></g><text x="760" y="83" text-anchor="end" fill="#803f36" font-size="13" font-weight="700">BUILDINGS</text></g>
+    <g transform="translate(0 152)"><path d="M0 68L296 0L620 70L319 142Z" fill="#718578" fill-opacity=".84" stroke="#53675c" stroke-width="2"/><path d="M66 79C177 51 257 72 354 48C444 26 517 50 572 65" fill="none" stroke="#e7efea" stroke-width="7" opacity=".48"/><path d="M135 97C256 68 367 92 497 61" fill="none" stroke="#d1ddd6" stroke-width="4" opacity=".66"/><text x="760" y="83" text-anchor="end" fill="#53675c" font-size="13" font-weight="700">WATER</text></g>
+    <g transform="translate(0 106)"><path d="M0 68L296 0L620 70L319 142Z" fill="#f4d19a" fill-opacity=".36" stroke="#bd8b4c" stroke-width="2"/><path d="M360 37C346 59 367 78 351 105M418 43C401 65 421 84 404 111" fill="none" stroke="#bd8b4c" stroke-width="10" opacity=".7"/><text x="760" y="83" text-anchor="end" fill="#8d6738" font-size="13" font-weight="700">REFLECTIONS</text></g>
+    <g transform="translate(0 60)"><path d="M0 68L296 0L620 70L319 142Z" fill="#565b59" fill-opacity=".72" stroke="#252422" stroke-width="2"/><path d="M98 81L214 52L286 70L235 107L126 111Z" fill="#a95649" stroke="#252422" stroke-width="5"/><path d="M225 57L290 26" stroke="#252422" stroke-width="5"/><text x="760" y="83" text-anchor="end" fill="#252422" font-size="13" font-weight="700">SUBJECT</text></g>
+    <g transform="translate(0 14)"><path d="M0 68L296 0L620 70L319 142Z" fill="#fffdf8" fill-opacity=".3" stroke="#a95649" stroke-width="3" stroke-dasharray="8 8"/><path d="M173 84C250 38 370 32 474 61" fill="none" stroke="#fffdf8" stroke-width="7" opacity=".75"/><text x="760" y="83" text-anchor="end" fill="#a95649" font-size="13" font-weight="800">ATMOSPHERE</text></g>
+  </g>
+
+  <g transform="translate(70 515)" font-family="Inter, Arial, sans-serif">
+    <rect width="1300" height="34" rx="17" fill="#dce4dd"/>
+    <text x="22" y="22" fill="#53675c" font-size="12" font-weight="750">STABLE IDS · LOCAL PATCHES · HASH-PRESERVED LAYERS</text>
+    <text x="1278" y="22" text-anchor="end" fill="#53675c" font-size="11" font-weight="750">EDIT THE TARGET · KEEP THE WHOLE</text>
+  </g>
+</svg>

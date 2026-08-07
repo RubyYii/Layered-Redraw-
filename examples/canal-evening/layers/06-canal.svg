@@ -32,7 +32,7 @@
       <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2" />
     </pattern>
   </defs>
-  <g id="layer-canal" data-layer="true" data-bbox="190 468 1010 312" inkscape:groupmode="layer" inkscape:label="运河水面">
+  <g id="layer-canal" data-layer="true" data-label-zh="运河水面" data-label-en="Canal water" data-bbox="190 468 1010 312" inkscape:groupmode="layer" inkscape:label="运河水面">
     <path id="water-surface" d="M205 480 L600 448 L1200 508 L1200 780 L320 780 Z" fill="url(#water-gradient)" />
     <path id="water-soft-bank" d="M215 488 C500 505 740 475 1200 536" fill="none" stroke="#a5b49d" stroke-width="18" opacity="0.2" />
     <path id="water-hatch-field" d="M235 502 L598 470 L1200 527 L1200 780 L332 780 Z" fill="url(#water-hatch)" opacity="0.75" />

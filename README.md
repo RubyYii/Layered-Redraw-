@@ -30,7 +30,7 @@ Layered Redraw 是一个本地优先的 Codex 插件与 SVG 工程格式。它�
     <td width="50%" align="center">
       <strong>语义图层编辑器</strong><br>
       <sub>选图层、框选区域或用纯文本描述修改范围</sub><br><br>
-      <img src="assets/editor-preview.jpg" alt="Layered Redraw 图层编辑器" width="100%">
+      <img src="assets/editor-preview.zh-CN.jpg" alt="Layered Redraw 中文图层编辑器" width="100%">
     </td>
   </tr>
 </table>
@@ -71,7 +71,7 @@ Codex 会先确认画面情绪、构图取舍、风格、颜色、主体和细�
 - `$redraw-in-layers`：引导式照片重绘与局部修改 Codex Skill。
 - 严格的 SVG 工程约束：5–20 个非空顶层语义图层，通常为 8–12 个。
 - 无第三方依赖的 Python 工具：校验、Manifest、分层导出、定向补丁和编辑器服务。
-- 本地浏览器编辑器：图层点击、框选、纯文本模式、显示/锁定控制和 `edit-request.json` 导出。
+- 本地浏览器编辑器：独立的中文 / English 文案、图层点击、框选、纯文本模式、显示/锁定控制和 `edit-request.json` 导出。
 - 一个完全由路径、图形、渐变、图案、文字和 SVG 滤镜绘制的 10 图层运河示例。
 - 未修改图层哈希保护，避免一次局部调整意外重构整张作品。
 
@@ -90,11 +90,12 @@ python skills/redraw-in-layers/scripts/layered_redraw.py serve examples/canal-ev
 
 在编辑器中：
 
-1. 从左侧选择语义图层，或者直接点击画布中的对象。
-2. 使用“图层点击”“框选”或“纯文本”模式确定作用范围。
-3. 用中文或英文描述希望发生的变化。
-4. 生成并下载 `edit-request.json`。
-5. 将工程和修改请求交给 Codex，调用 `$redraw-in-layers`。
+1. 在右上角选择“中文”或“EN”；界面文案、动态提示和示例图层名称会一起切换。
+2. 从左侧选择语义图层，或者直接点击画布中的对象。
+3. 使用“图层点击”“框选”或“纯文本”模式确定作用范围。
+4. 用中文或英文描述希望发生的变化。
+5. 生成并下载 `edit-request.json`。
+6. 将工程和修改请求交给 Codex，调用 `$redraw-in-layers`。
 
 ## 安装并调用 Skill
 

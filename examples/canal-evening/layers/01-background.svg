@@ -32,7 +32,7 @@
       <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2" />
     </pattern>
   </defs>
-  <g id="layer-background" data-layer="true" data-bbox="0 0 1200 780" inkscape:groupmode="layer" inkscape:label="背景纸色">
+  <g id="layer-background" data-layer="true" data-label-zh="背景纸色" data-label-en="Background paper" data-bbox="0 0 1200 780" inkscape:groupmode="layer" inkscape:label="背景纸色">
     <rect id="background-paper" x="0" y="0" width="1200" height="780" fill="#f5f0e7" />
   </g>
 </svg>

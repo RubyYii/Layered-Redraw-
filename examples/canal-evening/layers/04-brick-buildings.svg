@@ -32,7 +32,7 @@
       <path d="M2 12 C10 8 20 15 34 9" fill="none" stroke="#d7ded2" stroke-opacity="0.2" stroke-width="2" />
     </pattern>
   </defs>
-  <g id="layer-brick-buildings" data-layer="true" data-bbox="520 70 680 522" inkscape:groupmode="layer" inkscape:label="砖楼主体">
+  <g id="layer-brick-buildings" data-layer="true" data-label-zh="砖楼主体" data-label-en="Brick buildings" data-bbox="520 70 680 522" inkscape:groupmode="layer" inkscape:label="砖楼主体">
     <path id="warehouse-main" d="M620 246 L1200 62 L1200 566 L600 520 Z" fill="url(#brick-gradient)" />
     <path id="warehouse-side" d="M520 325 L620 246 L600 520 L505 540 Z" fill="#50342f" />
     <path id="warehouse-roof" d="M608 231 L1190 47 L1200 62 L620 260 Z" fill="#28292a" />

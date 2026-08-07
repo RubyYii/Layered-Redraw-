@@ -211,6 +211,41 @@ textarea:focus-visible,
   gap: 7px;
 }
 
+.locale-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgb(255 253 248 / 72%);
+}
+
+.locale-button {
+  min-width: 36px;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+}
+
+.locale-button:hover {
+  color: var(--ink);
+}
+
+.locale-button.is-active {
+  background: var(--ink);
+  color: var(--paper-bright);
+  box-shadow: 0 2px 7px rgb(37 36 34 / 16%);
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -1060,22 +1095,20 @@ textarea:focus-visible,
 
   .brand-copy small,
   .document-kicker,
-  .top-actions .button span,
+  .top-actions .button > span:not([aria-hidden]),
   .footer-shortcut {
     display: none;
   }
 
-  .top-actions .button-quiet:nth-of-type(2),
-  .top-actions .button-quiet:nth-of-type(3) {
+  .top-actions .button-quiet,
+  .top-actions label.button-quiet {
     min-width: 36px;
     padding: 0 8px;
-    font-size: 0;
   }
 
-  .top-actions .button-quiet:nth-of-type(2) span,
-  .top-actions .button-quiet:nth-of-type(3) span {
+  .top-actions .button > span[aria-hidden],
+  #topExportButton > span {
     display: inline;
-    font-size: 14px;
   }
 
   .workspace {

@@ -18,7 +18,7 @@
     "category": "Design",
     "capabilities": ["Interactive", "Write", "Local-first"],
     "brandColor": "#7A8D80",
-    "screenshots": ["./assets/editor-preview.jpg"],
+    "screenshots": ["./assets/editor-preview.zh-CN.jpg", "./assets/editor-preview.en.jpg"],
     "defaultPrompt": [
       "Interview me, then redraw this photo in editable SVG layers.",
       "Open my layered SVG and change only the selected objects.",

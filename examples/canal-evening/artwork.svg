@@ -40,12 +40,12 @@
     </pattern>
   </defs>
 
-  <g id="layer-background" data-layer="true" data-bbox="0 0 1200 780"
+  <g id="layer-background" data-layer="true" data-label-zh="背景纸色" data-label-en="Background paper" data-bbox="0 0 1200 780"
      inkscape:groupmode="layer" inkscape:label="背景纸色">
     <rect id="background-paper" x="0" y="0" width="1200" height="780" fill="#f5f0e7"/>
   </g>
 
-  <g id="layer-sky" data-layer="true" data-bbox="0 0 1200 410"
+  <g id="layer-sky" data-layer="true" data-label-zh="暮色天空" data-label-en="Dusk sky" data-bbox="0 0 1200 410"
      inkscape:groupmode="layer" inkscape:label="暮色天空">
     <rect id="sky-field" x="0" y="0" width="1200" height="430" fill="url(#sky-gradient)"/>
     <path id="cloud-bank-one" d="M0 180 C180 140 330 210 500 170 C650 135 810 182 970 136 C1070 108 1140 122 1200 105 L1200 250 L0 250 Z"
@@ -55,7 +55,7 @@
     <circle id="evening-sun" cx="250" cy="300" r="58" fill="#d6a875" opacity="0.14"/>
   </g>
 
-  <g id="layer-distant-city" data-layer="true" data-bbox="0 282 650 242"
+  <g id="layer-distant-city" data-layer="true" data-label-zh="远处城市" data-label-en="Distant city" data-bbox="0 282 650 242"
      inkscape:groupmode="layer" inkscape:label="远处城市">
     <path id="distant-roofs" d="M0 425 L0 365 L70 365 L70 334 L142 334 L142 382 L220 382 L220 318 L302 318 L302 355 L385 355 L385 302 L448 302 L448 346 L525 346 L525 283 L600 283 L600 430 Z"
           fill="#6d6863" opacity="0.66"/>
@@ -66,7 +66,7 @@
           fill="#c59a61" opacity="0.55"/>
   </g>
 
-  <g id="layer-brick-buildings" data-layer="true" data-bbox="520 70 680 522"
+  <g id="layer-brick-buildings" data-layer="true" data-label-zh="砖楼主体" data-label-en="Brick buildings" data-bbox="520 70 680 522"
      inkscape:groupmode="layer" inkscape:label="砖楼主体">
     <path id="warehouse-main" d="M620 246 L1200 62 L1200 566 L600 520 Z" fill="url(#brick-gradient)"/>
     <path id="warehouse-side" d="M520 325 L620 246 L600 520 L505 540 Z" fill="#50342f"/>
@@ -80,7 +80,7 @@
           fill="none" stroke="#171c1d" stroke-width="8" stroke-linecap="square"/>
   </g>
 
-  <g id="layer-windows" data-layer="true" data-bbox="646 128 516 298"
+  <g id="layer-windows" data-layer="true" data-label-zh="暖色窗户" data-label-en="Warm windows" data-bbox="646 128 516 298"
      inkscape:groupmode="layer" inkscape:label="暖色窗户">
     <g id="upper-window-row" fill="#d8d8d1" stroke="#221f20" stroke-width="7">
       <path id="window-u1" d="M1030 139 l55 -15 v48 l-55 13z"/>
@@ -104,14 +104,14 @@
     </g>
   </g>
 
-  <g id="layer-canal" data-layer="true" data-bbox="190 468 1010 312"
+  <g id="layer-canal" data-layer="true" data-label-zh="运河水面" data-label-en="Canal water" data-bbox="190 468 1010 312"
      inkscape:groupmode="layer" inkscape:label="运河水面">
     <path id="water-surface" d="M205 480 L600 448 L1200 508 L1200 780 L320 780 Z" fill="url(#water-gradient)"/>
     <path id="water-soft-bank" d="M215 488 C500 505 740 475 1200 536" fill="none" stroke="#a5b49d" stroke-width="18" opacity="0.2"/>
     <path id="water-hatch-field" d="M235 502 L598 470 L1200 527 L1200 780 L332 780 Z" fill="url(#water-hatch)" opacity="0.75"/>
   </g>
 
-  <g id="layer-reflections" data-layer="true" data-bbox="510 510 650 270"
+  <g id="layer-reflections" data-layer="true" data-label-zh="灯光倒影" data-label-en="Light reflections" data-bbox="510 510 650 270"
      inkscape:groupmode="layer" inkscape:label="灯光倒影">
     <path id="reflection-amber-one" d="M865 530 C845 590 886 628 850 700 C838 730 853 757 847 780"
           fill="none" stroke="#e0a75d" stroke-width="20" stroke-linecap="round" opacity="0.45"/>
@@ -123,7 +123,7 @@
           fill="none" stroke="#d7d9c8" stroke-width="8" stroke-linecap="round" opacity="0.36"/>
   </g>
 
-  <g id="layer-boat" data-layer="true" data-bbox="205 493 340 178"
+  <g id="layer-boat" data-layer="true" data-label-zh="停泊船只" data-label-en="Moored boat" data-bbox="205 493 340 178"
      inkscape:groupmode="layer" inkscape:label="停泊船只">
     <path id="boat-hull" d="M218 567 L505 542 L545 603 L494 652 L260 663 L209 620 Z" fill="#252c2d"/>
     <path id="boat-side" d="M228 580 L505 557 L520 604 L480 628 L251 638 Z" fill="#6e312d"/>
@@ -134,7 +134,7 @@
     <line id="boat-mooring" x1="510" y1="560" x2="610" y2="486" stroke="#252829" stroke-width="4"/>
   </g>
 
-  <g id="layer-walkway" data-layer="true" data-bbox="0 432 354 348"
+  <g id="layer-walkway" data-layer="true" data-label-zh="前景步道" data-label-en="Foreground walkway" data-bbox="0 432 354 348"
      inkscape:groupmode="layer" inkscape:label="前景步道">
     <path id="walkway-field" d="M0 424 L215 480 L338 780 L0 780 Z" fill="url(#walk-gradient)"/>
     <path id="walkway-edge" d="M205 475 C238 560 280 670 330 780" fill="none" stroke="#272c2d" stroke-width="18"/>
@@ -154,7 +154,7 @@
           fill="none" stroke="#d1c9bc" stroke-width="3" opacity="0.36"/>
   </g>
 
-  <g id="layer-atmosphere" data-layer="true" data-bbox="0 0 1200 780"
+  <g id="layer-atmosphere" data-layer="true" data-label-zh="空气与收笔" data-label-en="Atmosphere and finish" data-bbox="0 0 1200 780"
      inkscape:groupmode="layer" inkscape:label="空气与收笔" style="pointer-events:none">
     <path id="mist-line" d="M70 430 C340 390 580 432 810 395 C974 369 1090 382 1180 350"
           fill="none" stroke="#f6f0e6" stroke-width="34" stroke-linecap="round" opacity="0.12"/>

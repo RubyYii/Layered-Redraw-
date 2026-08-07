@@ -4,7 +4,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-![Layered Redraw — from photographs to editable layered SVG](assets/readme/hero.svg)
+![Layered Redraw — from photographs to editable layered SVG](assets/readme/hero.en.svg)
 
 Layered Redraw is a local-first Codex plugin and SVG project format for turning reference photographs into intentionally redrawn, editable vector artwork. It favors 8–12 stable semantic layers, supports multiple drawing styles, and treats localized revision as a patch rather than a full regeneration.
 
@@ -12,7 +12,7 @@ The project deliberately does **not** call an image-generation model. Codex anal
 
 ## Understand the workflow in 30 seconds
 
-![Four steps from a reference photo to locally editable SVG art](assets/readme/workflow.svg)
+![Four steps from a reference photo to locally editable SVG art](assets/readme/workflow.en.svg)
 
 ## The output is more than an interface
 
@@ -26,12 +26,12 @@ The project deliberately does **not** call an image-generation model. Codex anal
     <td width="50%" align="center">
       <strong>A semantic-layer editor</strong><br>
       <sub>Select layers, frame a region, or describe the scope in text</sub><br><br>
-      <img src="assets/editor-preview.jpg" alt="Layered Redraw semantic-layer editor" width="100%">
+      <img src="assets/editor-preview.en.jpg" alt="Layered Redraw English semantic-layer editor" width="100%">
     </td>
   </tr>
 </table>
 
-![Layered Redraw semantic layer architecture](assets/readme/layer-stack.svg)
+![Layered Redraw semantic layer architecture](assets/readme/layer-stack.en.svg)
 
 ## Fastest way to use it
 
@@ -67,7 +67,7 @@ Open the local editor, select layers or frame a region, export `edit-request.jso
 - `$redraw-in-layers`, a Codex skill for guided photo-derived SVG drawing and localized revision.
 - A strict project contract: 5–20 non-empty top-level semantic layers, normally 8–12.
 - A dependency-free Python utility for validation, manifests, layer exports, scoped patches, and editor serving.
-- A local browser editor with layer click, rectangle selection, pure-text mode, visibility/lock controls, client-side validation, and `edit-request.json` export.
+- A local browser editor with distinct Chinese / English copy, layer click, rectangle selection, pure-text mode, visibility/lock controls, client-side validation, and `edit-request.json` export.
 - A ten-layer canal demonstration project made only from vector paths, shapes, gradients, patterns, text, and SVG filters.
 - Hash protection for unchanged layers, preventing a local adjustment from silently rebuilding the entire artwork.
 
@@ -86,11 +86,12 @@ If the browser does not open automatically, visit `http://127.0.0.1:8765/`.
 
 In the editor:
 
-1. Select a semantic layer from the left panel or click an object on the canvas.
-2. Switch to rectangle selection to select a visual region, or choose pure-text mode to let Codex infer the target.
-3. Describe the desired change in Chinese or English.
-4. Generate and download `edit-request.json`.
-5. Attach the project and request to Codex, then invoke `$redraw-in-layers`.
+1. Choose 中文 or EN in the top-right corner; the interface, dynamic messages, and demo layer names switch together.
+2. Select a semantic layer from the left panel or click an object on the canvas.
+3. Switch to rectangle selection to select a visual region, or choose pure-text mode to let Codex infer the target.
+4. Describe the desired change in Chinese or English.
+5. Generate and download `edit-request.json`.
+6. Attach the project and request to Codex, then invoke `$redraw-in-layers`.
 
 ## Invoke the skill
 
