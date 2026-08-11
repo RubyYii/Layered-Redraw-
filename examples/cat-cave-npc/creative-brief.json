@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "status": "locked",
+  "title": "狸花*保单 NPC Cave Scene 02",
+  "output_mode": "raster-layered",
+  "style": "pixel-art",
+  "intent": "将第二张床下猫咪照片重绘为同系列洞穴 NPC 场景，并保持猫、财宝与游戏 UI 可独立编辑。",
+  "source_reference": "private source intentionally excluded from the public example",
+  "accepted_composite": "artwork.png",
+  "composition": {
+    "logical_canvas": [384, 216],
+    "delivery_scale": 4,
+    "camera": "floor-level wide view into a low cave",
+    "primary_subject_box": [188, 65, 303, 143],
+    "palette_size": 32,
+    "lighting": "warm amber cave light with pale rear opening",
+    "occlusion_order": [
+      "cave background",
+      "foreground rock frame",
+      "cave opening",
+      "treasure chest",
+      "loose treasure",
+      "cat NPC",
+      "nameplate",
+      "dialogue UI"
+    ]
+  },
+  "artwork_text_exception": {
+    "reason": "Explicit user request for in-world NPC UI",
+    "name": "狸花*保单",
+    "dialogue": "找本喵干什么"
+  },
+  "layer_count": 10,
+  "extraction": {
+    "method": "semantic binary masks plus palette-constrained background repair",
+    "default_composite": "pixel-identical to accepted 32-colour master",
+    "mask_directory": "masks/"
+  }
+}

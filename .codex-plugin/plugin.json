@@ -1,28 +1,34 @@
 {
   "name": "layered-redraw",
-  "version": "0.1.0",
-  "description": "Interview users about visual intent, then redraw reference photos as editable semantic-layer SVG projects.",
+  "version": "0.6.0",
+  "description": "Create non-destructive semantic-layer artwork from RGB, RGB-D, prompt, and optional relative-depth evidence across vector, raster, and pixel workflows.",
   "author": {
     "name": "RubyYii",
     "url": "https://github.com/RubyYii"
   },
   "homepage": "https://github.com/RubyYii/Layered-Redraw-",
   "repository": "https://github.com/RubyYii/Layered-Redraw-",
-  "keywords": ["svg", "vector-art", "layered-illustration", "photo-redraw", "codex-skill"],
+  "keywords": ["svg", "vector-art", "raster-art", "pixel-art", "rgbd", "depth-estimation", "multi-reference", "semantic-layers", "art-direction", "design-presets", "design-proofs", "parameterized-design", "openraster", "png-layers", "non-destructive", "layered-illustration", "photo-redraw", "codex-skill"],
   "skills": "./skills/",
   "interface": {
     "displayName": "Layered Redraw",
-    "shortDescription": "Redraw photos as editable layered SVG artwork.",
-    "longDescription": "Turn a reference photo and a short art-direction conversation into a portable SVG project with 5–20 stable semantic layers, deterministic validation, and localized edits.",
+    "shortDescription": "Plan from RGB and depth, then redraw in editable layers.",
+    "longDescription": "Turn one or more RGB references, optional RGB-D or estimated relative depth, a planning prompt, and an art-direction conversation into artwork with 5–20 stable semantic layers. Raw reference evidence remains immutable while Guided mode offers reusable visual-system presets and Art Direction exposes composition through material. The workflow can compare RGB and depth, resolve semantic regions into a bounded layer plan, generate parameterized A/B/C proofs, and promote one locked direction before production while retaining masks, recoverable history, quality gates, hybrid sources, and OpenRaster round trips.",
     "developerName": "RubyYii",
     "category": "Design",
     "capabilities": ["Interactive", "Write", "Local-first"],
     "brandColor": "#7A8D80",
     "screenshots": ["./assets/editor-preview.zh-CN.jpg", "./assets/editor-preview.en.jpg"],
     "defaultPrompt": [
-      "Interview me, then redraw this photo in editable SVG layers.",
-      "Open my layered SVG and change only the selected objects.",
-      "Validate this SVG project without altering the artwork."
+      "Interview me, then redraw this photo as editable SVG layers.",
+      "Use Guided mode and show me composition-first design presets for this photo.",
+      "Use Art Direction mode so I can control proportion, space, form, value, and colour.",
+      "Register this RGB source, estimate relative depth, and use my prompt to plan 8–12 semantic layers.",
+      "Pair this RGB image with its supplied depth map, then keep the subject independently editable.",
+      "Generate A/B/C parameterized design proofs, let me lock one, then promote it to production.",
+      "Use raster-layered mode to generate editable PNG layers from this photo.",
+      "Create GBA warm-narrative pixel art with editable semantic layers.",
+      "Open my layered project and change only the selected or masked layers."
     ]
   }
 }

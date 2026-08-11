@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "source": "artwork.png",
+  "logical_canvas": [384, 216],
+  "palette_colors": 32,
+  "alpha_mode": "binary",
+  "semantic_layers": 10,
+  "background_repair": "OpenCV Telea inpaint constrained back to the shared source palette",
+  "reconstruction_check": "staging/reconstruction-check.png",
+  "contact_sheet": "staging/layer-contact-sheet.png",
+  "default_composite_pixel_identical": true,
+  "notes": "Masks are deliberately semantic and moderately generous around complex silhouettes so selected objects remain practical to edit."
+}

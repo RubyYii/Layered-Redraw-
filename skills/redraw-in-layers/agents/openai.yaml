@@ -1,4 +1,4 @@
 interface:
   display_name: "Layered Redraw"
-  short_description: "Turn photos into editable layered SVG art"
-  default_prompt: "Use $redraw-in-layers to interview me about the desired feeling, then redraw my photo as editable layered SVG art."
+  short_description: "RGB/depth planning for editable semantic layers"
+  default_prompt: "Use $redraw-in-layers to register my RGB or RGB-D references, preserve raw depth evidence, use my prompt to resolve an editable 8–12-layer semantic plan, compare A/B/C design proofs when direction is unsettled, and keep artwork text disabled."

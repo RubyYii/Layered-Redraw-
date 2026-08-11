@@ -1,0 +1,43 @@
+{
+  "id": "pixel-art",
+  "name": {
+    "zh": "经典像素画",
+    "en": "Classic pixel art"
+  },
+  "compatible_modes": [
+    "raster-layered"
+  ],
+  "palette": {
+    "size": 32,
+    "bias": "shared project palette"
+  },
+  "mark_making": "purposeful pixel clusters",
+  "edges": "hard pixel",
+  "texture": "controlled dithering",
+  "abstraction": 0.5,
+  "design_profile": {
+    "composition": "clear silhouette hierarchy designed at thumbnail scale",
+    "proportion": "exaggerate identity-bearing forms to survive low resolution",
+    "space_model": "discrete depth bands with overlap and palette separation",
+    "shape_grammar": "clean pixel clusters with intentional stair-stepping and no isolated noise",
+    "value_structure": "four to six grouped values checked in monochrome",
+    "color_system": "one shared indexed-style palette with controlled ramps",
+    "edge_system": "binary hard edges and cluster-aware curves",
+    "lighting": "designed value ramps rather than downsampled photographic light",
+    "rhythm": "repeat cluster sizes and dither patterns consistently across layers",
+    "forbid_artwork_text": true
+  },
+  "preferred_layer_types": [
+    "pixel"
+  ],
+  "pixel_art": {
+    "palette_size": 32,
+    "preview_scale": 4,
+    "alpha_mode": "binary",
+    "resampling": "nearest"
+  },
+  "prompt_constraints": [
+    "Draw on the logical pixel grid",
+    "Never use anti-aliasing or partial alpha"
+  ]
+}

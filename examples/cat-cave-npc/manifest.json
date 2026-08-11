@@ -1,0 +1,406 @@
+{
+  "schema_version": "1.0",
+  "kind": "layered-raster-manifest",
+  "title": "狸花*保单 NPC Cave Scene 02",
+  "revision": "837fac5c3ee9",
+  "generated_at": "2026-08-11T12:20:37.112440+00:00",
+  "canvas": {
+    "width": 384,
+    "height": 216,
+    "color_space": "sRGB"
+  },
+  "output_mode": "raster-layered",
+  "style": "pixel-art",
+  "style_recipe": "style-recipe.json",
+  "workflow_mode": "guided",
+  "design_plan": "design-plan.json",
+  "design_preset": "gba-warm-story",
+  "design_plan_sha256": "814dc4f1080dd963aadf7492fe9050aabf3d1f1dc78a56b2d3a2a371f9b5ed70",
+  "layer_model": "semantic",
+  "pixel_art": {
+    "palette_size": 32,
+    "preview_scale": 4,
+    "alpha_mode": "binary",
+    "resampling": "nearest"
+  },
+  "layer_count": 10,
+  "canonical_composite": "artwork.png",
+  "layers": [
+    {
+      "id": "layer-cave-background",
+      "label": "洞穴背景 / Cave background",
+      "label_zh": "洞穴背景",
+      "label_en": "Cave background",
+      "z_index": 1,
+      "file": "layers/01-cave-background.png",
+      "sha256": "312ec9f795f0bd7ef21b94cf6a8f8f2908ae56f01dfb497f6a1a99bad953c6a6",
+      "state_sha256": "202b8e428ad22d2c82d0e2888f42bfa28bcc794ce5dd38b543a5ed2e18803954",
+      "layer_type": "pixel",
+      "editable_source": null,
+      "editable_source_sha256": null,
+      "width": 384,
+      "height": 216,
+      "pixel_mode": "RGB",
+      "has_alpha": false,
+      "alpha_bbox": [
+        0,
+        0,
+        384,
+        216
+      ],
+      "alpha_extrema": [
+        255,
+        255
+      ],
+      "partial_alpha_pixels": 0,
+      "light_partial_pixels": 0,
+      "visible_pixels": 82944,
+      "visible": true,
+      "locked": false,
+      "opacity": 1.0,
+      "blend_mode": "normal",
+      "depends_on": [],
+      "error": null
+    },
+    {
+      "id": "layer-foreground-rock-frame",
+      "label": "前景岩框 / Foreground rock frame",
+      "label_zh": "前景岩框",
+      "label_en": "Foreground rock frame",
+      "z_index": 2,
+      "file": "layers/02-foreground-rock-frame.png",
+      "sha256": "01764aef4df4dd9b2692f39deba4f0ab694b5241077fbe0f242beb9ade1d557d",
+      "state_sha256": "4e23221de8fcdb1de13b9af8d891810ac838c0b02955098f36ba6a34f39296b9",
+      "layer_type": "pixel",
+      "editable_source": null,
+      "editable_source_sha256": null,
+      "width": 384,
+      "height": 216,
+      "pixel_mode": "RGBA",
+      "has_alpha": true,
+      "alpha_bbox": [
+        0,
+        0,
+        384,
+        216
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "partial_alpha_pixels": 0,
+      "light_partial_pixels": 0,
+      "visible_pixels": 27849,
+      "visible": true,
+      "locked": false,
+      "opacity": 1.0,
+      "blend_mode": "normal",
+      "depends_on": [
+        "layer-cave-background"
+      ],
+      "error": null
+    },
+    {
+      "id": "layer-cave-opening",
+      "label": "洞口与远光 / Cave opening",
+      "label_zh": "洞口与远光",
+      "label_en": "Cave opening",
+      "z_index": 3,
+      "file": "layers/03-cave-opening.png",
+      "sha256": "2931dffbf09cab40af8935f2f9fa498fbd2a61867b1be2d80d6b008be6f5d6ae",
+      "state_sha256": "8606daa78953f8cc6d09e8bb64f698c9612b7c054f702341107b3c8456698360",
+      "layer_type": "pixel",
+      "editable_source": null,
+      "editable_source_sha256": null,
+      "width": 384,
+      "height": 216,
+      "pixel_mode": "RGBA",
+      "has_alpha": true,
+      "alpha_bbox": [
+        300,
+        67,
+        55,
+        49
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "partial_alpha_pixels": 0,
+      "light_partial_pixels": 0,
+      "visible_pixels": 2093,
+      "visible": true,
+      "locked": false,
+      "opacity": 1.0,
+      "blend_mode": "normal",
+      "depends_on": [
+        "layer-cave-background"
+      ],
+      "error": null
+    },
+    {
+      "id": "layer-treasure-chest",
+      "label": "宝箱 / Treasure chest",
+      "label_zh": "宝箱",
+      "label_en": "Treasure chest",
+      "z_index": 4,
+      "file": "layers/04-treasure-chest.png",
+      "sha256": "557d142bc70c9fe1e9127b6c72555fa74edc822707abb6d4a76436b7a3ebe893",
+      "state_sha256": "343c1a80d8bce5adc2c9bfa24d5b02f7c441c72ade1c7bdac941fd85f878edf5",
+      "layer_type": "pixel",
+      "editable_source": null,
+      "editable_source_sha256": null,
+      "width": 384,
+      "height": 216,
+      "pixel_mode": "RGBA",
+      "has_alpha": true,
+      "alpha_bbox": [
+        72,
+        77,
+        68,
+        39
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "partial_alpha_pixels": 0,
+      "light_partial_pixels": 0,
+      "visible_pixels": 2461,
+      "visible": true,
+      "locked": false,
+      "opacity": 1.0,
+      "blend_mode": "normal",
+      "depends_on": [
+        "layer-cave-background"
+      ],
+      "error": null
+    },
+    {
+      "id": "layer-loose-treasure",
+      "label": "金币与宝石 / Loose treasure",
+      "label_zh": "金币与宝石",
+      "label_en": "Loose treasure",
+      "z_index": 5,
+      "file": "layers/05-loose-treasure.png",
+      "sha256": "be5c0d1155427b81897f8d4b9ff4c946ad54d5fe167203ff4364a7a999c3d740",
+      "state_sha256": "193bbc140f75f4a6a56bb5d4ef802aeefbca5f4e9c9fb394c69cedfcded20d4e",
+      "layer_type": "pixel",
+      "editable_source": null,
+      "editable_source_sha256": null,
+      "width": 384,
+      "height": 216,
+      "pixel_mode": "RGBA",
+      "has_alpha": true,
+      "alpha_bbox": [
+        72,
+        112,
+        103,
+        41
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "partial_alpha_pixels": 0,
+      "light_partial_pixels": 0,
+      "visible_pixels": 3642,
+      "visible": true,
+      "locked": false,
+      "opacity": 1.0,
+      "blend_mode": "normal",
+      "depends_on": [
+        "layer-treasure-chest"
+      ],
+      "error": null
+    },
+    {
+      "id": "layer-cat-npc",
+      "label": "狸花*保单 / Cat NPC",
+      "label_zh": "猫咪 NPC",
+      "label_en": "Cat NPC",
+      "z_index": 6,
+      "file": "layers/06-cat-npc.png",
+      "sha256": "39538e69063ab6ebe3faec9a5971c5006f809099dfdec10651c476fd90a12822",
+      "state_sha256": "61c01e2d2d873c2bafca85097a262b6d9f6dea79c44fb37b3ef16cbf1ff63236",
+      "layer_type": "pixel",
+      "editable_source": null,
+      "editable_source_sha256": null,
+      "width": 384,
+      "height": 216,
+      "pixel_mode": "RGBA",
+      "has_alpha": true,
+      "alpha_bbox": [
+        190,
+        69,
+        111,
+        73
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "partial_alpha_pixels": 0,
+      "light_partial_pixels": 0,
+      "visible_pixels": 6759,
+      "visible": true,
+      "locked": false,
+      "opacity": 1.0,
+      "blend_mode": "normal",
+      "depends_on": [
+        "layer-cave-background"
+      ],
+      "error": null
+    },
+    {
+      "id": "layer-nameplate-panel",
+      "label": "名字牌 / Nameplate panel",
+      "label_zh": "名字牌",
+      "label_en": "Nameplate panel",
+      "z_index": 7,
+      "file": "layers/07-nameplate-panel.png",
+      "sha256": "67c513fea4986959d9dd192464adf8e27e674368a59224b704f9dbc4a5f59c9e",
+      "state_sha256": "506900ed152f266dbc909ad4b3c108bd1b49b0d6860a9acb6d7a8739ac859c2c",
+      "layer_type": "pixel",
+      "editable_source": null,
+      "editable_source_sha256": null,
+      "width": 384,
+      "height": 216,
+      "pixel_mode": "RGBA",
+      "has_alpha": true,
+      "alpha_bbox": [
+        201,
+        35,
+        79,
+        39
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "partial_alpha_pixels": 0,
+      "light_partial_pixels": 0,
+      "visible_pixels": 2192,
+      "visible": true,
+      "locked": false,
+      "opacity": 1.0,
+      "blend_mode": "normal",
+      "depends_on": [
+        "layer-cat-npc"
+      ],
+      "error": null
+    },
+    {
+      "id": "layer-nameplate-text",
+      "label": "名字文字 / Nameplate text",
+      "label_zh": "名字文字",
+      "label_en": "Nameplate text",
+      "z_index": 8,
+      "file": "layers/08-nameplate-text.png",
+      "sha256": "39391394c7172705ffcef13f22db350ef10cde3e03feda5cad474c748fbbec88",
+      "state_sha256": "c1dc5c568cb32678b51b585e6732a757cb28bb03dc199566fc2504de5db48f60",
+      "layer_type": "pixel",
+      "editable_source": null,
+      "editable_source_sha256": null,
+      "width": 384,
+      "height": 216,
+      "pixel_mode": "RGBA",
+      "has_alpha": true,
+      "alpha_bbox": [
+        210,
+        43,
+        63,
+        15
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "partial_alpha_pixels": 0,
+      "light_partial_pixels": 0,
+      "visible_pixels": 513,
+      "visible": true,
+      "locked": false,
+      "opacity": 1.0,
+      "blend_mode": "normal",
+      "depends_on": [
+        "layer-nameplate-panel"
+      ],
+      "error": null
+    },
+    {
+      "id": "layer-dialogue-panel",
+      "label": "对话框 / Dialogue panel",
+      "label_zh": "对话框",
+      "label_en": "Dialogue panel",
+      "z_index": 9,
+      "file": "layers/09-dialogue-panel.png",
+      "sha256": "c175e3ccfa2969b165a4b699e81a69e86a0e34951469256bee4e2624f7e895bb",
+      "state_sha256": "4d555578de931b40096db42f086921fba2a5a6d57562340210fadd2527158815",
+      "layer_type": "pixel",
+      "editable_source": null,
+      "editable_source_sha256": null,
+      "width": 384,
+      "height": 216,
+      "pixel_mode": "RGBA",
+      "has_alpha": true,
+      "alpha_bbox": [
+        27,
+        153,
+        331,
+        57
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "partial_alpha_pixels": 0,
+      "light_partial_pixels": 0,
+      "visible_pixels": 18180,
+      "visible": true,
+      "locked": false,
+      "opacity": 1.0,
+      "blend_mode": "normal",
+      "depends_on": [],
+      "error": null
+    },
+    {
+      "id": "layer-dialogue-text",
+      "label": "对白与继续标记 / Dialogue text",
+      "label_zh": "对白与继续标记",
+      "label_en": "Dialogue text and cursor",
+      "z_index": 10,
+      "file": "layers/10-dialogue-text.png",
+      "sha256": "7e638679eecee6c7918e78c32af82073467bf05a204452c26c3b50c73f674e10",
+      "state_sha256": "be3668e8ddfcd40140ffffc5df906dd3afddde4c971d541ca3df1d63910c88b6",
+      "layer_type": "pixel",
+      "editable_source": null,
+      "editable_source_sha256": null,
+      "width": 384,
+      "height": 216,
+      "pixel_mode": "RGBA",
+      "has_alpha": true,
+      "alpha_bbox": [
+        45,
+        165,
+        305,
+        42
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "partial_alpha_pixels": 0,
+      "light_partial_pixels": 0,
+      "visible_pixels": 687,
+      "visible": true,
+      "locked": false,
+      "opacity": 1.0,
+      "blend_mode": "normal",
+      "depends_on": [
+        "layer-dialogue-panel"
+      ],
+      "error": null
+    }
+  ]
+}
