@@ -648,12 +648,17 @@ def quality_report(raw_target: str | Path) -> dict[str, Any]:
         "no_alpha_halo_warning": not any("alpha halos" in item for item in validation["warnings"]),
         "no_baked_upper_layer_warning": not any("baked lower-layer" in item for item in validation["warnings"]),
     }
-    score = max(0, 100 - len(validation["errors"]) * 20 - len(validation["warnings"]) * 4)
+    engineering_score = max(0, 100 - len(validation["errors"]) * 20 - len(validation["warnings"]) * 4)
     return {
         "ok": validation["ok"],
         "project": str(project_dir),
         "revision": manifest["revision"],
-        "score": score,
+        "assessment_scope": "layer-files-and-project-contract-only",
+        "engineering_score": engineering_score,
+        "visual_quality": {
+            "status": "not-assessed",
+            "human_confirmed": False,
+        },
         "checks": checks,
         "errors": validation["errors"],
         "warnings": validation["warnings"],
@@ -671,6 +676,21 @@ def quality_report(raw_target: str | Path) -> dict[str, Any]:
 
 
 def _atomic_save_png(image: Any, destination: Path) -> None:
+    # PNG compression is not byte-for-byte stable across every Pillow/zlib
+    # platform combination.  Derived previews are current when their decoded
+    # RGBA pixels are current, so keep an existing equivalent file instead of
+    # rewriting it with a platform-specific encoding.  This also keeps the
+    # composition hashes and generated_at value stable across Windows/Linux.
+    if destination.is_file():
+        try:
+            with _require_pillow().open(destination) as existing:
+                if existing.size == image.size and existing.convert("RGBA").tobytes() == image.convert(
+                    "RGBA"
+                ).tobytes():
+                    return
+        except OSError:
+            # A corrupt or unreadable destination is replaced below.
+            pass
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         mode="wb", suffix=".png", prefix="layered-raster-", dir=destination.parent, delete=False
@@ -714,6 +734,10 @@ def _blend_composite(base: Any, layer: Any, blend_mode: str) -> Any:
 def compose_project(raw_target: str | Path) -> dict[str, Any]:
     pillow = _require_pillow()
     project_dir, config, _, index = resolve_project(raw_target)
+    manifest_path = project_dir / "manifest.json"
+    composition_path = project_dir / "composition.json"
+    previous_manifest = _read_json(manifest_path)
+    previous_composition = _read_json(composition_path)
     report = validate_project(project_dir)
     if report["errors"]:
         raise RasterLayeredError("Cannot compose invalid raster project: " + "; ".join(report["errors"]))
@@ -749,7 +773,11 @@ def compose_project(raw_target: str | Path) -> dict[str, Any]:
     _atomic_save_png(composite, composite_path)
     _atomic_save_png(preview, preview_path)
     manifest = build_manifest(project_dir)
-    _write_json(project_dir / "manifest.json", manifest)
+    if previous_manifest.get("revision") == manifest["revision"] and isinstance(
+        previous_manifest.get("generated_at"), str
+    ):
+        manifest["generated_at"] = previous_manifest["generated_at"]
+    _write_json(manifest_path, manifest)
     composition = {
         "schema_version": "1.0",
         "kind": "layered-raster-composition",
@@ -763,7 +791,13 @@ def compose_project(raw_target: str | Path) -> dict[str, Any]:
         "preview_size": [preview.width, preview.height],
         "resampling": "nearest" if preview_scale > 1 else "none",
     }
-    _write_json(project_dir / "composition.json", composition)
+    comparable = {key: value for key, value in composition.items() if key != "generated_at"}
+    previous_comparable = {
+        key: value for key, value in previous_composition.items() if key != "generated_at"
+    }
+    if comparable == previous_comparable and isinstance(previous_composition.get("generated_at"), str):
+        composition["generated_at"] = previous_composition["generated_at"]
+    _write_json(composition_path, composition)
     return {
         "ok": True,
         "project": str(project_dir),

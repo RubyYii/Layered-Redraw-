@@ -13,9 +13,11 @@ import base64
 import binascii
 import copy
 import hashlib
+import hmac
 import json
 import os
 import re
+import secrets
 import sys
 import tempfile
 import webbrowser
@@ -73,6 +75,18 @@ ET.register_namespace("xlink", XLINK_NS)
 
 class LayeredRedrawError(RuntimeError):
     """Raised for contract or input failures that should be shown to users."""
+
+
+class EditorRequestError(LayeredRedrawError):
+    """A local-editor request rejected before project state is touched."""
+
+    def __init__(self, message: str, *, status: int) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+EDITOR_SESSION_HEADER = "X-Layered-Redraw-Token"
+MAX_EDITOR_JSON_BYTES = 32 * 1024 * 1024
 
 
 def local_name(tag: str) -> str:
@@ -289,15 +303,19 @@ def validate_tree(root: ET.Element, config: dict[str, Any]) -> dict[str, list[st
     output_mode = config.get("output_mode", "vector-strict")
 
     if config.get("design_plan"):
-        visible_artwork_text = [
-            node
-            for layer in layers
-            for node in layer.iter()
-            if local_name(node.tag) in {"text", "tspan"} and (node.text or "").strip()
-        ]
-        if visible_artwork_text:
+        allowed_text_layers = set(config.get("_allowed_text_layers", []))
+        unexpected_text_layers = []
+        for layer in layers:
+            has_visible_text = any(
+                local_name(node.tag) in {"text", "tspan"} and (node.text or "").strip()
+                for node in layer.iter()
+            )
+            if has_visible_text and layer.get("id") not in allowed_text_layers:
+                unexpected_text_layers.append(layer.get("id") or "<missing-layer-id>")
+        if unexpected_text_layers:
             errors.append(
-                "v0.6 design projects keep artwork text disabled; remove visible text from semantic layers."
+                "Visible SVG text is only allowed in design-plan.json text_policy.allowed_layers; "
+                f"unexpected text in: {', '.join(unexpected_text_layers)}."
             )
 
     view_box = root.get("viewBox")
@@ -413,7 +431,18 @@ def validate_project(raw_target: str | Path, *, write_manifest_file: bool = Fals
         return RASTER.validate_project(raw_target, write_manifest_file=write_manifest_file)
     svg_path, project_dir, config = resolve_project(raw_target)
     root = parse_svg(svg_path)
-    report = validate_tree(root, config)
+    validation_config = dict(config)
+    design_plan_error: str | None = None
+    if config.get("design_plan"):
+        try:
+            plan = FEATURES.load_design_plan(project_dir)
+            text_policy = plan.get("text_policy", {})
+            validation_config["_allowed_text_layers"] = text_policy.get("allowed_layers", [])
+        except FEATURES.ProjectFeatureError as exc:
+            design_plan_error = str(exc)
+    report = validate_tree(root, validation_config)
+    if design_plan_error:
+        report["errors"].append(f"Invalid design plan: {design_plan_error}")
     if config.get("style_recipe"):
         recipe_path = project_dir / str(config.get("style_recipe"))
         if not recipe_path.is_file():
@@ -891,12 +920,14 @@ def quality_report(raw_target: str | Path) -> dict[str, Any]:
         "stable_layer_ids": all(LAYER_ID_RE.fullmatch(str(layer.get("id"))) for layer in manifest["layers"]),
         "all_layers_editable": all(layer.get("object_count", 0) > 0 for layer in manifest["layers"]),
     }
-    score = max(0, 100 - len(validation["errors"]) * 20 - len(validation["warnings"]) * 4)
+    engineering_score = max(0, 100 - len(validation["errors"]) * 20 - len(validation["warnings"]) * 4)
     return {
         "ok": validation["ok"],
         "project": str(project_dir),
         "revision": manifest["revision"],
-        "score": score,
+        "assessment_scope": "svg-structure-and-project-contract-only",
+        "engineering_score": engineering_score,
+        "visual_quality": {"status": "not-assessed", "human_confirmed": False},
         "checks": checks,
         "errors": validation["errors"],
         "warnings": validation["warnings"],
@@ -1052,7 +1083,20 @@ def plugin_root_from_script() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
-def serve_editor(raw_target: str | Path, *, host: str, port: int, open_browser: bool) -> None:
+def serve_editor(
+    raw_target: str | Path,
+    *,
+    host: str,
+    port: int,
+    open_browser: bool,
+    _ready_callback: Any | None = None,
+) -> None:
+    normalized_host = host.strip().lower().rstrip(".")
+    if normalized_host not in {"127.0.0.1", "localhost"}:
+        raise LayeredRedrawError(
+            "The local editor only binds to loopback (127.0.0.1 or localhost). "
+            "Use a production service with authentication for remote access."
+        )
     mode = target_output_mode(raw_target)
     raster_layer_paths: dict[str, Path] = {}
     if mode == "raster-layered":
@@ -1100,7 +1144,14 @@ def serve_editor(raw_target: str | Path, *, host: str, port: int, open_browser: 
         write_json(project_dir / "manifest.json", manifest)
         return manifest
 
+    session_token = secrets.token_urlsafe(32)
+    allowed_hosts: set[str] = set()
+    allowed_origins: set[str] = set()
+
     class Handler(SimpleHTTPRequestHandler):
+        server_version = "LayeredRedrawEditor/0.6"
+        sys_version = ""
+
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, directory=str(editor_dir), **kwargs)
 
@@ -1112,6 +1163,8 @@ def serve_editor(raw_target: str | Path, *, host: str, port: int, open_browser: 
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(payload)))
             self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
             self.end_headers()
             self.wfile.write(payload)
 
@@ -1121,27 +1174,72 @@ def serve_editor(raw_target: str | Path, *, host: str, port: int, open_browser: 
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))
             self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
             self.end_headers()
             self.wfile.write(payload)
 
-        def _read_json_body(self, *, limit: int = 70_000_000) -> dict[str, Any]:
+        def _validate_host(self) -> None:
+            request_host = self.headers.get("Host", "").strip().lower().rstrip(".")
+            if request_host not in allowed_hosts:
+                raise EditorRequestError("Rejected Host header for local editor", status=403)
+
+        def _authorize_mutation(self) -> None:
+            self._validate_host()
+            origin = self.headers.get("Origin", "").strip().lower().rstrip("/")
+            if origin not in allowed_origins:
+                raise EditorRequestError("Mutation requests require a same-origin Origin header", status=403)
+            referer = self.headers.get("Referer", "").strip().lower()
+            if referer and not any(referer == allowed or referer.startswith(allowed + "/") for allowed in allowed_origins):
+                raise EditorRequestError("Rejected cross-origin Referer header", status=403)
+            fetch_site = self.headers.get("Sec-Fetch-Site", "").strip().lower()
+            if fetch_site and fetch_site not in {"same-origin", "none"}:
+                raise EditorRequestError("Rejected cross-site mutation request", status=403)
+            supplied_token = self.headers.get(EDITOR_SESSION_HEADER, "")
+            if not supplied_token or not hmac.compare_digest(supplied_token, session_token):
+                raise EditorRequestError("Missing or invalid local editor session token", status=403)
+            content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+            if content_type != "application/json":
+                raise EditorRequestError("Mutation requests require Content-Type: application/json", status=415)
+
+        def _read_json_body(self, *, limit: int = MAX_EDITOR_JSON_BYTES) -> dict[str, Any]:
             try:
                 length = int(self.headers.get("Content-Length", "0"))
             except ValueError as exc:
-                raise LayeredRedrawError("Invalid Content-Length") from exc
-            if length <= 0 or length > limit:
-                raise LayeredRedrawError("Request body is empty or exceeds the local editor limit")
+                raise EditorRequestError("Invalid Content-Length", status=400) from exc
+            if length <= 0:
+                raise EditorRequestError("Request body is empty", status=400)
+            if length > limit:
+                raise EditorRequestError(
+                    f"Request body exceeds the {limit}-byte local editor limit",
+                    status=413,
+                )
             try:
                 value = json.loads(self.rfile.read(length).decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                raise LayeredRedrawError(f"Invalid JSON request: {exc}") from exc
+                raise EditorRequestError(f"Invalid JSON request: {exc}", status=400) from exc
             if not isinstance(value, dict):
-                raise LayeredRedrawError("Request JSON root must be an object")
+                raise EditorRequestError("Request JSON root must be an object", status=400)
             return value
 
         def do_GET(self) -> None:
+            try:
+                self._validate_host()
+            except EditorRequestError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=exc.status)
+                return
             parsed = urlparse(self.path)
             path = parsed.path
+            if path == "/api/session":
+                self._send_json(
+                    {
+                        "ok": True,
+                        "token": session_token,
+                        "header": EDITOR_SESSION_HEADER,
+                        "max_request_bytes": MAX_EDITOR_JSON_BYTES,
+                    }
+                )
+                return
             if path == "/api/artwork":
                 self._send_bytes(artwork_payload(), "image/svg+xml; charset=utf-8")
                 return
@@ -1241,6 +1339,7 @@ def serve_editor(raw_target: str | Path, *, host: str, port: int, open_browser: 
         def do_POST(self) -> None:
             path = urlparse(self.path).path
             try:
+                self._authorize_mutation()
                 body = self._read_json_body()
                 if path == "/api/references/add":
                     data_url = body.get("data_url")
@@ -1452,6 +1551,8 @@ def serve_editor(raw_target: str | Path, *, host: str, port: int, open_browser: 
                     self._send_json(undo_to_snapshot(project_dir, snapshot_id))
                     return
                 self.send_error(404, "Unknown local editor action")
+            except EditorRequestError as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=exc.status)
             except (
                 LayeredRedrawError,
                 RASTER.RasterLayeredError,
@@ -1462,9 +1563,15 @@ def serve_editor(raw_target: str | Path, *, host: str, port: int, open_browser: 
                 self._send_json({"ok": False, "error": str(exc)}, status=400)
 
     server = ThreadingHTTPServer((host, port), Handler)
-    url = f"http://{host}:{server.server_port}/"
+    actual_port = server.server_port
+    allowed_hosts.update({f"127.0.0.1:{actual_port}", f"localhost:{actual_port}"})
+    allowed_origins.update({f"http://127.0.0.1:{actual_port}", f"http://localhost:{actual_port}"})
+    url = f"http://{host}:{actual_port}/"
     print(f"Layered Redraw editor: {url}")
     print(f"Project: {project_dir}")
+    print("Security: loopback-only, same-origin JSON mutations, per-run session token")
+    if callable(_ready_callback):
+        _ready_callback(server, url)
     if open_browser:
         webbrowser.open(url)
     try:
@@ -1537,7 +1644,10 @@ def build_parser() -> argparse.ArgumentParser:
     design_parser = subparsers.add_parser("design", help="Show the resolved design plan")
     design_parser.add_argument("target")
 
-    design_check_parser = subparsers.add_parser("design-check", help="Validate composition and style intent")
+    design_check_parser = subparsers.add_parser(
+        "design-check",
+        help="Inspect plan-schema completeness and declared asset contracts (not artistic quality)",
+    )
     design_check_parser.add_argument("target")
 
     apply_preset_parser = subparsers.add_parser("apply-preset", help="Apply a guided design preset")

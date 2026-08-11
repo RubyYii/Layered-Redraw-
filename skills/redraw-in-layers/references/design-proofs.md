@@ -18,7 +18,7 @@ Each variant must contain:
 - `render-request.json` for creating a scene-specific vector or raster preview;
 - stable A/B/C identity even when a rendered preview later replaces the schematic.
 
-Do not treat the deterministic schematic as a finished drawing. It visualizes parameter relationships without pretending to reconstruct the uploaded scene. When Codex creates a real low-detail proof, register the rendered PNG with `proof-register`; never overwrite the candidate plan.
+Do not treat the deterministic schematic as a finished drawing or as evidence that an effect works on the source scene. It visualizes parameter relationships without pretending to reconstruct the uploaded scene. A visual-effect claim requires a scene-specific rendered PNG registered with `proof-register`, its source/provenance record, and human review; never overwrite the candidate plan.
 
 ## Two-stage workflow
 

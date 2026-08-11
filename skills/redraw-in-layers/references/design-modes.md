@@ -1,6 +1,6 @@
 # Design modes
 
-Layered Redraw uses one `design-plan.json` contract with two interfaces. Both modes control composition before marks or colour. Neither mode may add artwork text in v0.6.
+Layered Redraw uses one `design-plan.json` contract with two interfaces. Both modes control composition before marks or colour. Artwork text is forbidden by default; an explicit user request may allow only the stable layer IDs listed by the plan's text policy.
 
 ## Guided mode
 
@@ -14,7 +14,7 @@ Use Guided mode by default. It is for users who want a strong result without man
 
 For reference intelligence, Guided mode exposes scene upload, relative-depth generation, a planning prompt, a faithful/art-directed choice, and the 5–20 layer target. Model, device, RGB-D direction, and numeric depth transforms stay hidden.
 
-Bundled presets are full visual systems, not brush packs. Each fixes composition, proportion, space, form, value, colour, edge, and material behaviour. Pixel-only presets must not be offered to non-pixel projects.
+Bundled presets are complete visual-parameter contracts, not brush packs or proof that an effect has been rendered successfully. Each fixes composition, proportion, space, form, value, colour, edge, and material behaviour. Pixel-only presets must not be offered to non-pixel projects.
 
 ## Art Direction mode
 
@@ -52,7 +52,7 @@ Use `structure`, then `colour-material`, when the user needs separate compositio
 
 Run `design-check` before detailed drawing and again before delivery. A ready plan must:
 
-- keep `artwork_text` false;
+- keep `artwork_text` false unless an explicit text exception declares every allowed layer ID;
 - define every parameter group;
 - include proportion and negative-space decisions;
 - include a full style design profile from composition through rhythm;

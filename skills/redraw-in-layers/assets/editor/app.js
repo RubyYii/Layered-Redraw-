@@ -149,8 +149,8 @@ const TRANSLATIONS = {
     restoreVersion: "恢复",
     historyRestored: "历史版本已恢复。",
     historyPreviewUnavailable: "这个版本没有可显示的位图预览。",
-    qualityScore: "质量评分 {score}/100",
-    designReadiness: "设计完整度 {score}/100",
+    qualityScore: "工程质量 {score}/100",
+    designReadiness: "计划结构完整度 {score}/100",
     clipboardDenied: "浏览器未允许剪贴板访问，请使用下载。",
     chooseSvgFile: "请选择 .svg 文件。",
     svgLoadFailed: "SVG 载入失败",
@@ -212,10 +212,10 @@ const TRANSLATIONS = {
     exposedControlsLabel: "普通模式开放参数",
     createPreset: "创建模板",
     designSaved: "设计参数已保存，并创建了可恢复版本。",
-    presetApplied: "设计模板已应用；画面文字保持关闭。",
+    presetApplied: "设计模板已应用；文字策略已按工程合同更新。",
     presetCreated: "自定义模板已加入普通模式。",
     presetUnavailable: "当前工程模式不支持这个模板。",
-    designReadiness: "设计准备度 {score}%",
+    designReadiness: "计划结构完整度 {score}%",
     builtInPreset: "内置",
     userPreset: "自定义",
     proofStudioKicker: "PARAMETER PROOFS",
@@ -441,8 +441,8 @@ const TRANSLATIONS = {
     restoreVersion: "Restore",
     historyRestored: "History revision restored.",
     historyPreviewUnavailable: "This revision has no bitmap preview to compare.",
-    qualityScore: "Quality score {score}/100",
-    designReadiness: "Design readiness {score}/100",
+    qualityScore: "Engineering quality {score}/100",
+    designReadiness: "Plan schema completeness {score}/100",
     clipboardDenied: "Clipboard access was denied. Download the file instead.",
     chooseSvgFile: "Choose an .svg file.",
     svgLoadFailed: "SVG failed to load",
@@ -504,10 +504,10 @@ const TRANSLATIONS = {
     exposedControlsLabel: "Controls exposed in Guided mode",
     createPreset: "Create preset",
     designSaved: "Design parameters saved with a recoverable revision.",
-    presetApplied: "Design preset applied; artwork text remains disabled.",
+    presetApplied: "Design preset applied; the project text policy was updated from its contract.",
     presetCreated: "Custom preset added to Guided mode.",
     presetUnavailable: "This preset is not compatible with the current project mode.",
-    designReadiness: "Design readiness {score}%",
+    designReadiness: "Plan schema completeness {score}%",
     builtInPreset: "Built in",
     userPreset: "Custom",
     proofStudioKicker: "PARAMETER PROOFS",
@@ -733,6 +733,8 @@ const state = {
   referenceIntelligence: null,
   request: null,
   revision: null,
+  sessionHeader: "X-Layered-Redraw-Token",
+  sessionToken: null,
   selectedIds: new Set(),
   selectedPresetId: null,
   selectedObjectIds: new Set(),
@@ -2248,16 +2250,10 @@ async function persistMask() {
       canvas: { width: elements.maskCanvas.width, height: elements.maskCanvas.height },
     };
   }
-  const response = await fetch("/api/mask", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      data_url: elements.maskCanvas.toDataURL("image/png"),
-      selection_mode: state.mode,
-    }),
+  const result = await postProjectAction("/api/mask", {
+    data_url: elements.maskCanvas.toDataURL("image/png"),
+    selection_mode: state.mode,
   });
-  const result = await response.json();
-  if (!response.ok || !result.ok) throw new Error(result.error || "Mask save failed");
   state.maskMeta = result.mask;
   state.maskDirty = false;
   showToast(t("maskSaved"));
@@ -2401,10 +2397,26 @@ async function readSvgFile(file) {
   }
 }
 
+async function ensureEditorSession() {
+  if (state.sessionToken) return;
+  const response = await fetch("/api/session", { cache: "no-store", credentials: "same-origin" });
+  const session = await response.json();
+  if (!response.ok || !session.ok || !session.token) {
+    throw new Error(session.error || `Unable to establish editor session (HTTP ${response.status})`);
+  }
+  state.sessionToken = session.token;
+  state.sessionHeader = session.header || "X-Layered-Redraw-Token";
+}
+
 async function postProjectAction(path, payload) {
+  await ensureEditorSession();
   const response = await fetch(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+      [state.sessionHeader]: state.sessionToken,
+    },
     body: JSON.stringify(payload),
   });
   const result = await response.json();
@@ -2531,11 +2543,11 @@ async function runQualityReport() {
       warnings: [...(report.warnings || []), ...(designReport.warnings || [])],
     }, false);
     const designScore = document.createElement("li");
-    designScore.textContent = t("designReadiness", { score: designReport.readiness });
+    designScore.textContent = t("designReadiness", { score: designReport.plan_schema_completeness });
     const score = document.createElement("li");
-    score.textContent = t("qualityScore", { score: report.score });
+    score.textContent = t("qualityScore", { score: report.engineering_score });
     elements.validationResults.prepend(score, designScore);
-    showToast(`${t("qualityScore", { score: report.score })} · ${t("designReadiness", { score: designReport.readiness })}`);
+    showToast(`${t("qualityScore", { score: report.engineering_score })} · ${t("designReadiness", { score: designReport.plan_schema_completeness })}`);
   } catch (error) {
     showToast(t("serverActionFailed", { detail: error.message || String(error) }));
   }

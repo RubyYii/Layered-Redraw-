@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import http.client
 import json
 import shutil
 import tempfile
+import threading
 import unittest
 import zipfile
 from pathlib import Path
@@ -632,9 +634,72 @@ class LayeredRedrawTests(unittest.TestCase):
 
             quality = TOOLS.FEATURES.design_quality_report(project)
             self.assertTrue(quality["ok"], quality["errors"])
-            self.assertEqual(quality["readiness"], 100)
-            self.assertTrue(quality["checks"]["not_surface_only"])
-            self.assertTrue(quality["checks"]["style_is_full_design_system"])
+            self.assertEqual(quality["plan_schema_completeness"], 100)
+            self.assertTrue(quality["engineering_contract"]["checks"]["plan_declares_structural_change"])
+            self.assertTrue(quality["engineering_contract"]["checks"]["style_profile_schema_complete"])
+            self.assertEqual(quality["visual_quality"]["status"], "not-assessed")
+            self.assertIs(quality["visual_quality"]["human_confirmed"], False)
+
+    def test_design_plan_digest_is_newline_independent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "newline-project"
+            TOOLS.create_project(
+                project,
+                title="Newline Stable",
+                layers=8,
+                width=120,
+                height=90,
+                mode="raster-layered",
+            )
+            config = json.loads((project / "project.json").read_text(encoding="utf-8"))
+            before = TOOLS.FEATURES.design_plan_sha256(project, config)
+            plan_path = project / "design-plan.json"
+            plan_path.write_bytes(plan_path.read_bytes().replace(b"\n", b"\r\n"))
+            after = TOOLS.FEATURES.design_plan_sha256(project, config)
+            self.assertEqual(before, after)
+
+    @unittest.skipUnless(Image is not None, "Pillow is required for raster fixture checks")
+    def test_atomic_png_save_preserves_equivalent_cross_platform_encoding(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            destination = Path(temp_dir) / "derived.png"
+            image = Image.new("RGBA", (12, 8), (24, 48, 72, 255))
+            image.save(destination, format="PNG", compress_level=0)
+            original_bytes = destination.read_bytes()
+
+            TOOLS.RASTER._atomic_save_png(image, destination)
+
+            self.assertEqual(destination.read_bytes(), original_bytes)
+
+            changed = image.copy()
+            changed.putpixel((0, 0), (25, 48, 72, 255))
+            TOOLS.RASTER._atomic_save_png(changed, destination)
+            self.assertNotEqual(destination.read_bytes(), original_bytes)
+            with Image.open(destination) as reopened:
+                self.assertEqual(reopened.convert("RGBA").getpixel((0, 0)), (25, 48, 72, 255))
+
+    @unittest.skipUnless(Image is not None, "Pillow is required for raster fixture checks")
+    def test_public_npc_fixture_is_current_and_text_policy_is_truthful(self) -> None:
+        source = ROOT / "examples" / "cat-cave-npc"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "cat-cave-npc"
+            shutil.copytree(source, project)
+            validation = TOOLS.RASTER.validate_project(project)
+            self.assertEqual(validation["warnings"], [])
+            design = TOOLS.FEATURES.design_quality_report(project)
+            self.assertTrue(design["ok"], design["errors"])
+            self.assertEqual(
+                design["asset_text_evidence"]["declared_text_layers"],
+                ["layer-dialogue-text", "layer-nameplate-text"],
+            )
+            self.assertIs(design["asset_text_evidence"]["policy_allows_text"], True)
+            self.assertEqual(design["visual_quality"]["status"], "not-assessed")
+
+            TOOLS.RASTER.compose_project(project)
+            tracked = ["artwork.png", "preview.png", "manifest.json", "composition.json"]
+            before = {name: (project / name).read_bytes() for name in tracked}
+            TOOLS.RASTER.compose_project(project)
+            after = {name: (project / name).read_bytes() for name in tracked}
+            self.assertEqual(before, after)
 
     def test_gba_design_preset_requires_a_pixel_art_project(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -854,7 +919,52 @@ class LayeredRedrawTests(unittest.TestCase):
             TOOLS.write_svg(svg_path, root)
             report = TOOLS.validate_project(project)
             self.assertFalse(report["ok"])
-            self.assertTrue(any("artwork text disabled" in error for error in report["errors"]))
+            self.assertTrue(any("text_policy.allowed_layers" in error for error in report["errors"]))
+
+    def test_vector_text_exception_is_layer_scoped_and_survives_proofs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "declared-text-project"
+            TOOLS.create_project(
+                project,
+                title="Declared Text",
+                layers=8,
+                width=120,
+                height=90,
+                mode="vector-strict",
+            )
+            svg_path, _, _ = TOOLS.resolve_project(project)
+            root = TOOLS.parse_svg(svg_path)
+            layers = TOOLS.top_layers(root)
+            for index, layer in enumerate(layers):
+                TOOLS.ET.SubElement(
+                    layer,
+                    TOOLS.svg_tag("rect"),
+                    {"x": str(index), "y": str(index), "width": "4", "height": "4", "fill": "#444"},
+                )
+            first_layer = layers[0]
+            layer_id = first_layer.get("id")
+            self.assertIsInstance(layer_id, str)
+
+            plan_path = project / "design-plan.json"
+            plan = TOOLS.FEATURES.read_json(plan_path, required=True)
+            plan["artwork_text"] = True
+            plan["text_policy"] = {
+                "mode": "allow-declared-layers",
+                "allowed_layers": [layer_id],
+                "reason": "Explicit test fixture label",
+            }
+            TOOLS.FEATURES.write_json(plan_path, plan)
+            text_node = TOOLS.ET.SubElement(first_layer, TOOLS.svg_tag("text"), {"x": "10", "y": "20"})
+            text_node.text = "OK"
+            TOOLS.write_svg(svg_path, root)
+
+            report = TOOLS.validate_project(project)
+            self.assertTrue(report["ok"], report["errors"])
+            proofs = TOOLS.PROOFS.create_design_proofs(project)["proofs"]["active"]
+            for variant in proofs["variants"]:
+                candidate = TOOLS.FEATURES.read_json(project / variant["design_plan"], required=True)
+                self.assertIs(candidate["artwork_text"], True)
+                self.assertEqual(candidate["text_policy"]["allowed_layers"], [layer_id])
 
     @unittest.skipUnless(Image is not None, "Pillow is required for history tests")
     def test_layer_settings_create_history_diff_and_undo(self) -> None:
@@ -906,6 +1016,109 @@ class LayeredRedrawTests(unittest.TestCase):
                 self.assertEqual(saved.mode, "L")
                 pixels = saved.get_flattened_data() if hasattr(saved, "get_flattened_data") else saved.getdata()
                 self.assertLessEqual(set(pixels), {0, 255})
+
+    @unittest.skipUnless(Image is not None, "Pillow is required for local editor tests")
+    def test_local_editor_rejects_cross_site_writes_and_oversized_uploads(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = self._make_raster_project(Path(temp_dir))
+            ready = threading.Event()
+            state: dict[str, object] = {}
+
+            def editor_ready(server: object, url: str) -> None:
+                state["server"] = server
+                state["url"] = url
+                ready.set()
+
+            thread = threading.Thread(
+                target=TOOLS.serve_editor,
+                kwargs={
+                    "raw_target": project,
+                    "host": "127.0.0.1",
+                    "port": 0,
+                    "open_browser": False,
+                    "_ready_callback": editor_ready,
+                },
+                daemon=True,
+            )
+            thread.start()
+            self.assertTrue(ready.wait(5), "local editor did not start")
+            server = state["server"]
+            port = server.server_port  # type: ignore[attr-defined]
+            origin = f"http://127.0.0.1:{port}"
+            index_path = project / "layers" / "index.json"
+            before = json.loads(index_path.read_text(encoding="utf-8"))
+            layer_id = before["layers"][0]["id"]
+            mutation = json.dumps({"layer_id": layer_id, "opacity": 0.37})
+
+            try:
+                connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                connection.request("GET", "/api/session")
+                response = connection.getresponse()
+                session = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(response.status, 200)
+                token = session["token"]
+                connection.close()
+
+                attack = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                attack.request(
+                    "POST",
+                    "/api/layer-settings",
+                    body=mutation,
+                    headers={"Content-Type": "text/plain", "Origin": "https://attacker.example"},
+                )
+                attack_response = attack.getresponse()
+                attack_response.read()
+                self.assertEqual(attack_response.status, 403)
+                attack.close()
+                unchanged = json.loads(index_path.read_text(encoding="utf-8"))
+                self.assertEqual(unchanged["layers"][0]["opacity"], 1.0)
+
+                rebound = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                rebound.putrequest("GET", "/api/session", skip_host=True)
+                rebound.putheader("Host", "attacker.example")
+                rebound.endheaders()
+                rebound_response = rebound.getresponse()
+                rebound_response.read()
+                self.assertEqual(rebound_response.status, 403)
+                rebound.close()
+
+                oversized = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                oversized.putrequest("POST", "/api/layer-settings")
+                oversized.putheader("Origin", origin)
+                oversized.putheader("Content-Type", "application/json")
+                oversized.putheader(TOOLS.EDITOR_SESSION_HEADER, token)
+                oversized.putheader("Content-Length", str(TOOLS.MAX_EDITOR_JSON_BYTES + 1))
+                oversized.endheaders()
+                oversized_response = oversized.getresponse()
+                oversized_response.read()
+                self.assertEqual(oversized_response.status, 413)
+                oversized.close()
+
+                valid = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                valid.request(
+                    "POST",
+                    "/api/layer-settings",
+                    body=mutation,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Origin": origin,
+                        TOOLS.EDITOR_SESSION_HEADER: token,
+                    },
+                )
+                valid_response = valid.getresponse()
+                valid_result = json.loads(valid_response.read().decode("utf-8"))
+                self.assertEqual(valid_response.status, 200, valid_result)
+                self.assertTrue(valid_result["ok"])
+                valid.close()
+                changed = json.loads(index_path.read_text(encoding="utf-8"))
+                self.assertEqual(changed["layers"][0]["opacity"], 0.37)
+            finally:
+                server.shutdown()  # type: ignore[attr-defined]
+                thread.join(timeout=5)
+
+    def test_local_editor_rejects_non_loopback_bind(self) -> None:
+        with self.assertRaises(TOOLS.LayeredRedrawError):
+            TOOLS.serve_editor(self.sample, host="0.0.0.0", port=0, open_browser=False)
 
     @unittest.skipUnless(Image is not None, "Pillow is required for OpenRaster tests")
     def test_openraster_export_and_import_round_trip(self) -> None:

@@ -134,6 +134,7 @@ def _design_basis_sha256(plan: dict[str, Any]) -> str:
         "selected_preset": plan.get("selected_preset"),
         "style": plan.get("style"),
         "artwork_text": plan.get("artwork_text"),
+        "text_policy": plan.get("text_policy"),
         "parameters": plan.get("parameters"),
     }
     return hashlib.sha256(
@@ -445,7 +446,8 @@ def _render_request(
         "requirements": {
             "detail_level": "low",
             "preserve_scene_identity": True,
-            "artwork_text": False,
+            "artwork_text": bool(plan.get("artwork_text")),
+            "text_policy": plan.get("text_policy"),
             "semantic_layer_target": "8-12 after promotion",
             "preview_registration": "render one flattened proof preview, then register it without changing its design-plan.json",
         },
@@ -512,7 +514,6 @@ def create_design_proofs(
         parameters = _apply_template(base_plan["parameters"], template, stage=stage, spread=spread)
         plan = deepcopy(base_plan)
         plan["parameters"] = parameters
-        plan["artwork_text"] = False
         plan["proof"] = {
             "set_id": set_id,
             "variant_id": variant_id,
@@ -695,9 +696,10 @@ def promote_design_proof(
     variant = _variant(proof_set, proof_set["selected"])
     plan_path = _resolve_inside(project, variant.get("design_plan"), field="proof design plan")
     plan = FEATURES.read_json(plan_path, required=True)
-    if plan.get("kind") != FEATURES.DESIGN_PLAN_KIND or plan.get("artwork_text") is not False:
-        raise DesignProofError("Selected proof design plan is invalid or enables artwork text")
-    plan["parameters"] = FEATURES.validate_design_parameters(plan.get("parameters"))
+    try:
+        plan = FEATURES.validate_design_plan(plan, project)
+    except FEATURES.ProjectFeatureError as exc:
+        raise DesignProofError(f"Selected proof design plan is invalid: {exc}") from exc
     if snapshot_manifest:
         FEATURES.create_snapshot(
             project,

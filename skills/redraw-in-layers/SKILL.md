@@ -7,13 +7,15 @@ description: Interview the user about visual intent, analyze one or more RGB or 
 
 Create portable, inspectable artwork in one of two project modes. Keep stable semantic layer IDs, recoverable revisions, and explicit edit ownership in both modes.
 
+This repository is an incubation prototype. It is not a released VULCA Effect Pack. Follow `docs/vulca-migration.md` for the upstream boundary and do not claim SDK integration until the corresponding upstream package is accepted and released.
+
 ## Choose the design interface
 
 - Default to `guided` workflow mode. Present compatible visual-system presets and only a few safe controls.
 - Switch to `expert` / Art Direction mode when the user wants direct control over composition, proportion, space, form, value, colour, edges, and material.
 - Use one `design-plan.json` in both modes. Guided controls must resolve into the same complete parameter schema used by expert mode.
 - Save an accepted expert plan as a project-local Guided preset when the user wants to reuse it.
-- Keep artwork text disabled in v0.6. Bilingual interface labels and project metadata are allowed; words must not be drawn into the artwork.
+- Forbid artwork text by default. Allow it only when the user explicitly requests it and `design-plan.json` names every permitted semantic layer in `text_policy.allowed_layers`; interface labels and project metadata do not need an exception.
 - Read `references/design-modes.md` before choosing or changing a preset, editing expert parameters, or saving a custom preset.
 - Read `references/design-proofs.md` before generating, registering, locking, or promoting A/B/C parameterized proofs.
 
@@ -45,9 +47,9 @@ Read `references/reference-intelligence.md` whenever the user supplies multiple 
 2. Determine whether the prompt already fixes the creative direction. When it does not, ask 3–5 high-information questions from `references/creative-brief.md`. Do not start detailed drawing in guided mode until the intent is understood.
 3. Summarize the answers as a concise creative brief, choose a design preset, and resolve `design-plan.json`. In quick mode, infer reasonable defaults and proceed without an extra confirmation turn.
 4. Propose 5–20 top-level semantic layers; target 8–12. Group minor objects by edit intent, semantic class, depth, and visual treatment rather than creating a layer per object.
-5. Generate exactly three parameterized A/B/C proofs when direction is unsettled. Prefer a `structure` proof before a `colour-material` proof; use `full` for a faster one-pass comparison. Select, lock, and promote one plan before detailed drawing. Use `direction-board` only for legacy or externally supplied 2–6 image contact sheets.
+5. Generate exactly three parameterized A/B/C proofs when direction is unsettled. The built-in SVGs are parameter schematics, not visual-effect evidence; register scene-specific rendered previews before using a proof to judge appearance. Prefer a `structure` proof before a `colour-material` proof; use `full` for a faster one-pass comparison. Select, lock, and promote one plan before detailed drawing. Use `direction-board` only for legacy or externally supplied 2–6 image contact sheets.
 6. Use stable top-level IDs such as `layer-background`, `layer-subject`, and `layer-lighting`. Keep style details as child groups and objects inside those layers.
-7. Default to `vector-strict`: paths, shapes, gradients, masks, patterns, and SVG filters only. Keep words out of the artwork in v0.6. Use embedded or linked raster texture only when the user explicitly selects hybrid mode.
+7. Default to `vector-strict`: paths, shapes, gradients, masks, patterns, and SVG filters only. Keep words out unless the accepted design plan declares explicit text-layer exceptions. Use embedded or linked raster texture only when the user explicitly selects hybrid mode.
 8. Package the result according to `references/output-contract.md` and run validation before delivery.
 
 ## Create raster-layered artwork
@@ -61,7 +63,7 @@ Read `references/raster-contract.md` before generating any layer files.
 5. Do not bake lower layers into upper files. Remove stray backgrounds, duplicated subjects, shadows owned by another layer, and accidental opaque borders before accepting a layer.
 6. Place accepted files at the paths declared in `layers/index.json`; keep candidates in `staging/`.
 7. Run `compose`, then `validate --write-manifest`. Visually inspect both the composite and individual alpha layers before delivery.
-8. Run `quality`, then deliver the PNG stack, composite, preview, style recipe, prompts, index, manifest, masks, and recoverable history. Export ORA when the user wants to continue in Krita or another OpenRaster editor.
+8. Run `quality` for engineering checks, then perform a separate human visual review. The command does not assess composition, style execution, or artistic quality. Deliver the PNG stack, composite, preview, style recipe, prompts, index, manifest, masks, and recoverable history. Export ORA when the user wants to continue in Krita or another OpenRaster editor.
 
 ## Edit existing artwork
 
@@ -84,7 +86,7 @@ Read `references/raster-contract.md` before generating any layer files.
 - Preserve recognizable scene logic and fixed registration across layers.
 - Design in this order: composition and crop, subject proportion, space, shape grammar, value groups, colour system, edge hierarchy, then material marks.
 - Reject style directions that change only brushes, grain, or texture while leaving the photographic composition untouched.
-- Do not draw titles, captions, labels, or other artwork text in v0.6.
+- Do not draw titles, captions, labels, or other artwork text unless the accepted design plan explicitly allows their stable layer IDs.
 - Keep registered RGB and canonical depth artifacts immutable. Prompt-directed depth changes belong in `directed-depth.json`, not in `depth-16.png`.
 - Use depth bands only for diagnosis and spatial reasoning; group final layers by semantics and edit intent.
 - In vector mode, prefer deliberate paths over noisy auto-traced geometry.
@@ -135,7 +137,7 @@ python scripts/layered_redraw.py plan-resolve <project> semantic-regions.json
 python scripts/layered_redraw.py serve <project-directory>
 ```
 
-Use `assets/editor/` for multi-reference registration, RGB/depth comparison, RGB-D import, optional relative-depth estimation, planning-request authoring, Guided presets, Art Direction controls, parameterized A/B/C proof creation and promotion, layer, box, lasso, brush, and text-described selection; mask persistence; composition controls; history comparison; undo; design quality reports; and request authoring. Preset and expert parameter changes participate in the revision hash and create recoverable snapshots where appropriate.
+Use `assets/editor/` for multi-reference registration, RGB/depth comparison, RGB-D import, optional relative-depth estimation, planning-request authoring, Guided presets, Art Direction controls, parameterized A/B/C proof creation and promotion, layer, box, lasso, brush, and text-described selection; mask persistence; composition controls; history comparison; undo; engineering and plan-schema reports; and request authoring. The server is loopback-only and mutations require the same-origin session token fetched by the bundled UI. Preset and expert parameter changes participate in the revision hash and create recoverable snapshots where appropriate.
 
 ## Load references selectively
 

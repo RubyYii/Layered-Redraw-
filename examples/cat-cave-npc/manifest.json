@@ -2,8 +2,8 @@
   "schema_version": "1.0",
   "kind": "layered-raster-manifest",
   "title": "狸花*保单 NPC Cave Scene 02",
-  "revision": "837fac5c3ee9",
-  "generated_at": "2026-08-11T12:20:37.112440+00:00",
+  "revision": "f81003718e9a",
+  "generated_at": "2026-08-11T15:49:09.829626+00:00",
   "canvas": {
     "width": 384,
     "height": 216,
@@ -15,7 +15,7 @@
   "workflow_mode": "guided",
   "design_plan": "design-plan.json",
   "design_preset": "gba-warm-story",
-  "design_plan_sha256": "814dc4f1080dd963aadf7492fe9050aabf3d1f1dc78a56b2d3a2a371f9b5ed70",
+  "design_plan_sha256": "db1ba78f1beb3211535205bb41a9fb523f4390e17508b8cb46cb58c860d14604",
   "layer_model": "semantic",
   "pixel_art": {
     "palette_size": 32,

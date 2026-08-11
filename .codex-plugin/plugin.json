@@ -1,7 +1,7 @@
 {
   "name": "layered-redraw",
-  "version": "0.6.0",
-  "description": "Create non-destructive semantic-layer artwork from RGB, RGB-D, prompt, and optional relative-depth evidence across vector, raster, and pixel workflows.",
+  "version": "0.6.1",
+  "description": "Incubation prototype for non-destructive semantic-layer artwork across vector, raster, and pixel workflows; canonical runtime capabilities are upstreamed to VULCA SDK as reviewed Effect Packs.",
   "author": {
     "name": "RubyYii",
     "url": "https://github.com/RubyYii"

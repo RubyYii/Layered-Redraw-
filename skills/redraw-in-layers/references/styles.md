@@ -7,7 +7,7 @@ Install the selected machine-readable recipe as `style-recipe.json`. List bundle
 | Style | Construction | Guardrail |
 |---|---|---|
 | Minimal line | sparse Bézier contours, varied stroke weight, open negative space | avoid automatic edge tracing |
-| Editorial poster | asymmetric crop, broad silhouettes, limited palette, geometric rhythm | keep artwork text disabled in v0.6 |
+| Editorial poster | asymmetric crop, broad silhouettes, limited palette, geometric rhythm | forbid artwork text unless declared layer exceptions are required |
 | Seal carving | red/stone fields, carved negative paths, irregular pressure | avoid copying protected artist signatures |
 | Pencil sketch | layered graphite strokes, hatch groups, pressure variation | group hatching with the owning object |
 | Ink wash | translucent shape washes, dry-edge masks, restrained black | avoid filter-heavy muddy output |

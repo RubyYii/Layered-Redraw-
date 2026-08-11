@@ -52,7 +52,7 @@ Record at least:
 - target layer count;
 - style family and deterministic procedural seed;
 - style recipe, layer types, dependencies, composition state, and history revision;
-- workflow mode, selected design preset, complete design parameters, and `artwork_text: false`;
+- workflow mode, selected design preset, complete design parameters, and an explicit text policy (default `artwork_text: false`; exceptions must list allowed layer IDs);
 - active proof set, selected/locked/promoted direction, stage, and proof provenance when proofs are used;
 - reference provenance without embedding private source data in public metadata.
 - active RGB/depth IDs, source and artifact hashes, relative-depth status, and semantic layer-plan provenance when reference intelligence is used.
