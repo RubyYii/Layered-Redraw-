@@ -1,0 +1,122 @@
+{
+  "schema_version": "1.0",
+  "kind": "layered-redraw-design-preset-catalog",
+  "controls": {
+    "faithfulness": {"min": 0.0, "max": 1.0, "default": 0.65},
+    "abstraction": {"min": 0.0, "max": 1.0, "default": 0.45},
+    "subject_emphasis": {"min": 0.0, "max": 1.0, "default": 0.6},
+    "space_flattening": {"min": 0.0, "max": 1.0, "default": 0.35},
+    "color_intensity": {"min": 0.0, "max": 1.0, "default": 0.55}
+  },
+  "presets": [
+    {
+      "id": "faithful-balanced",
+      "name": {"zh": "忠实平衡", "en": "Faithful balance"},
+      "description": {"zh": "保留照片空间关系，适度概括细节与色彩。", "en": "Preserve the photographed space while simplifying detail and colour."},
+      "style": "line-art",
+      "compatible_modes": ["vector-strict", "raster-layered"],
+      "swatches": ["#EEE8DE", "#718578", "#2F3431"],
+      "fixed": {
+        "composition": {"balance": "observed", "crop_strength": 0.1, "negative_space": 0.22, "asymmetry": 0.25, "subject_scale": 1.0},
+        "space": {"flattening": 0.15, "depth_separation": 0.8, "perspective_strength": 0.85},
+        "form": {"simplification": 0.3, "geometricity": 0.25, "exaggeration": 0.08, "contour_closure": 0.45},
+        "value": {"groups": 5, "contrast": 0.5, "focal_contrast": 0.62},
+        "color": {"intensity": 0.48, "palette_size": 16, "warmth": 0.0, "accent_ratio": 0.1},
+        "edge": {"hardness": 0.58, "hierarchy": 0.65},
+        "material": {"texture": 0.18, "mark_scale": 0.42}
+      },
+      "controls": {"faithfulness": 0.82, "abstraction": 0.28, "subject_emphasis": 0.52, "space_flattening": 0.15, "color_intensity": 0.48}
+    },
+    {
+      "id": "editorial-geometric",
+      "name": {"zh": "几何构成", "en": "Geometric composition"},
+      "description": {"zh": "用大形、比例夸张与不对称平衡重新设计画面。", "en": "Redesign the image with large shapes, proportion shifts, and asymmetric balance."},
+      "style": "poster-editorial",
+      "compatible_modes": ["vector-strict", "raster-layered"],
+      "swatches": ["#F4E9D8", "#B24B36", "#283934"],
+      "fixed": {
+        "composition": {"balance": "asymmetric", "crop_strength": 0.32, "negative_space": 0.28, "asymmetry": 0.72, "subject_scale": 1.22},
+        "space": {"flattening": 0.72, "depth_separation": 0.42, "perspective_strength": 0.38},
+        "form": {"simplification": 0.68, "geometricity": 0.82, "exaggeration": 0.38, "contour_closure": 0.78},
+        "value": {"groups": 4, "contrast": 0.72, "focal_contrast": 0.82},
+        "color": {"intensity": 0.66, "palette_size": 8, "warmth": 0.12, "accent_ratio": 0.09},
+        "edge": {"hardness": 0.84, "hierarchy": 0.72},
+        "material": {"texture": 0.18, "mark_scale": 0.7}
+      },
+      "controls": {"faithfulness": 0.42, "abstraction": 0.68, "subject_emphasis": 0.76, "space_flattening": 0.72, "color_intensity": 0.66}
+    },
+    {
+      "id": "stained-glass-luminous",
+      "name": {"zh": "透光彩色玻璃", "en": "Luminous stained glass"},
+      "description": {"zh": "压平透视，把主体与环境重组为封闭色格和深色结构线。", "en": "Flatten perspective into closed colour cells held by a dark structural network."},
+      "style": "stained-glass",
+      "compatible_modes": ["vector-strict", "raster-layered"],
+      "swatches": ["#1F2E37", "#E0A92E", "#3F75A8", "#A7443E"],
+      "fixed": {
+        "composition": {"balance": "monumental", "crop_strength": 0.24, "negative_space": 0.18, "asymmetry": 0.42, "subject_scale": 1.28},
+        "space": {"flattening": 0.84, "depth_separation": 0.46, "perspective_strength": 0.28},
+        "form": {"simplification": 0.58, "geometricity": 0.76, "exaggeration": 0.3, "contour_closure": 0.98},
+        "value": {"groups": 5, "contrast": 0.78, "focal_contrast": 0.9},
+        "color": {"intensity": 0.88, "palette_size": 14, "warmth": 0.1, "accent_ratio": 0.14},
+        "edge": {"hardness": 0.94, "hierarchy": 0.45},
+        "material": {"texture": 0.32, "mark_scale": 0.76}
+      },
+      "controls": {"faithfulness": 0.48, "abstraction": 0.64, "subject_emphasis": 0.82, "space_flattening": 0.84, "color_intensity": 0.88}
+    },
+    {
+      "id": "woodcut-dramatic",
+      "name": {"zh": "戏剧木刻", "en": "Dramatic woodcut"},
+      "description": {"zh": "重组为强烈黑白块面，以刀痕方向表现体积与节奏。", "en": "Rebuild the scene as bold value masses with carved directional rhythm."},
+      "style": "woodcut",
+      "compatible_modes": ["vector-strict", "raster-layered"],
+      "swatches": ["#F1E8D5", "#2A2824", "#A34535"],
+      "fixed": {
+        "composition": {"balance": "dynamic-diagonal", "crop_strength": 0.3, "negative_space": 0.32, "asymmetry": 0.68, "subject_scale": 1.18},
+        "space": {"flattening": 0.68, "depth_separation": 0.62, "perspective_strength": 0.42},
+        "form": {"simplification": 0.7, "geometricity": 0.58, "exaggeration": 0.28, "contour_closure": 0.72},
+        "value": {"groups": 3, "contrast": 0.94, "focal_contrast": 0.9},
+        "color": {"intensity": 0.38, "palette_size": 4, "warmth": 0.08, "accent_ratio": 0.08},
+        "edge": {"hardness": 0.91, "hierarchy": 0.78},
+        "material": {"texture": 0.72, "mark_scale": 0.64}
+      },
+      "controls": {"faithfulness": 0.46, "abstraction": 0.7, "subject_emphasis": 0.72, "space_flattening": 0.68, "color_intensity": 0.38}
+    },
+    {
+      "id": "paper-cut-soft",
+      "name": {"zh": "柔和剪纸", "en": "Soft paper cut"},
+      "description": {"zh": "以层叠轮廓、柔和投影和简化比例建立清晰景深。", "en": "Build depth with stacked silhouettes, softened shadows, and simplified proportion."},
+      "style": "poster-editorial",
+      "compatible_modes": ["vector-strict", "raster-layered"],
+      "swatches": ["#F2E8D5", "#C97A67", "#729384", "#35434A"],
+      "fixed": {
+        "composition": {"balance": "layered-calm", "crop_strength": 0.2, "negative_space": 0.3, "asymmetry": 0.48, "subject_scale": 1.12},
+        "space": {"flattening": 0.72, "depth_separation": 0.78, "perspective_strength": 0.34},
+        "form": {"simplification": 0.64, "geometricity": 0.44, "exaggeration": 0.2, "contour_closure": 0.9},
+        "value": {"groups": 4, "contrast": 0.56, "focal_contrast": 0.68},
+        "color": {"intensity": 0.58, "palette_size": 9, "warmth": 0.18, "accent_ratio": 0.12},
+        "edge": {"hardness": 0.78, "hierarchy": 0.58},
+        "material": {"texture": 0.24, "mark_scale": 0.74}
+      },
+      "controls": {"faithfulness": 0.54, "abstraction": 0.62, "subject_emphasis": 0.66, "space_flattening": 0.72, "color_intensity": 0.58}
+    },
+    {
+      "id": "gba-warm-story",
+      "name": {"zh": "GBA 暖色叙事", "en": "GBA warm story"},
+      "description": {"zh": "用有限像素色板、环境叙事和集中暖光重构场景。", "en": "Recompose the scene with a limited pixel palette, environmental story, and concentrated warm light."},
+      "style": "gba-warm-narrative",
+      "compatible_modes": ["raster-layered"],
+      "requires_pixel_art": true,
+      "swatches": ["#24243C", "#57506B", "#D0804A", "#F1C46D"],
+      "fixed": {
+        "composition": {"balance": "narrative-path", "crop_strength": 0.22, "negative_space": 0.24, "asymmetry": 0.54, "subject_scale": 1.16},
+        "space": {"flattening": 0.48, "depth_separation": 0.72, "perspective_strength": 0.62},
+        "form": {"simplification": 0.66, "geometricity": 0.68, "exaggeration": 0.24, "contour_closure": 0.76},
+        "value": {"groups": 5, "contrast": 0.7, "focal_contrast": 0.9},
+        "color": {"intensity": 0.72, "palette_size": 24, "warmth": 0.32, "accent_ratio": 0.1},
+        "edge": {"hardness": 1.0, "hierarchy": 0.7},
+        "material": {"texture": 0.42, "mark_scale": 0.32}
+      },
+      "controls": {"faithfulness": 0.5, "abstraction": 0.6, "subject_emphasis": 0.72, "space_flattening": 0.48, "color_intensity": 0.72}
+    }
+  ]
+}

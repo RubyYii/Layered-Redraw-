@@ -6,13 +6,24 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-![Layered Redraw：从照片到可编辑多图层 SVG](assets/readme/hero.svg)
+![Layered Redraw：从照片到可编辑多图层作品](assets/readme/hero.svg)
 
-Layered Redraw 是一个本地优先的 Codex 插件与 SVG 工程格式。它以参考照片为视觉依据，通过简短的创作访谈，将照片重新绘制为可编辑、可持续修改的多图层矢量作品。
+Layered Redraw 是一个本地优先的 Codex 插件与多图层工程格式。它以参考照片为视觉依据，通过简短的创作访谈，将照片重绘为可编辑、可持续修改的语义图层作品。
 
 项目默认使用 8–12 个稳定的语义图层，支持简笔画、海报、素描、水彩、油画、篆刻等不同绘制方向，并把局部修改视为受约束的图层补丁，而不是重新生成整张作品。
 
-本项目刻意**不调用图像生成模型**。Codex 会分析参考照片、确认创作意图，然后直接编写 SVG 几何、渐变、纹理、滤镜和图层结构。
+现在包含两种彼此独立的输出模式：
+
+- `vector-strict`（默认）：不调用生图模型，由 Codex 直接绘制 SVG 几何、渐变、纹理和滤镜。
+- `raster-layered`：调用可用的图像生成工具，生成同尺寸、可透明叠加的 PNG 语义图层，再合成为 `artwork.png`。局部修改只重新生成被选图层。
+
+像素画是 `raster-layered` 的正式风格预设：使用逻辑像素画布、共享有限色板、0/255 硬透明和最近邻放大预览，而不是对普通图片套像素化滤镜。
+
+v0.6 新增“参考图与空间”工作流：可注册多张 RGB 参考、导入配对深度图或用可选的 Depth Anything V2 后端估计相对深度，再把“原图 + 深度 + 提示词”解析为 5–20 个语义图层。原始深度永不被艺术参数改写；提示词只控制语义合并、独立编辑关系和空间解释。普通的“引导创作”保留少量安全参数，“艺术指导”开放模型、RGB-D 方向与空间压平／夸张。当前版本仍不向作品画面加入文字。
+
+正式绘制前还可以生成带参数的 A/B/C 设计稿。每个方案都保存完整参数、差异、低细节示意和真实预览渲染请求；选择并锁定一个方案后，才能晋升为最终 8–12 图层绘制的设计依据。
+
+这次升级的重点不是增加更多笔刷，而是让风格先改变画面设计：重新裁切、调整主体尺度、组织留白、压平或强化透视、概括形状、重组明暗，再决定色彩与材质。
 
 ## 30 秒理解工作方式
 
@@ -55,33 +66,57 @@ New-Item -ItemType Junction -Path $skillTarget -Target (Resolve-Path ".\skills\r
 ```text
 使用 $redraw-in-layers 处理本条上传的照片。
 先询问我希望的感觉、风格、配色和细节程度。
-确认后，生成 8–12 个语义图层的 vector-strict SVG 工程。
+确认后，根据我的选择生成 8–12 个语义图层的 vector-strict SVG，或 raster-layered PNG 工程。
 ```
 
 ### 3. 回答创作访谈
 
-Codex 会先确认画面情绪、构图取舍、风格、颜色、主体和细节程度，再开始绘制。默认输出 `artwork.svg`、创作简报、逐图层 Manifest 和分层导出。
+Codex 会先确认画面情绪、构图取舍、风格、颜色、主体和细节程度，再开始绘制。矢量模式输出 `artwork.svg`；位图生图模式输出不透明背景 PNG、带透明区域的上层 PNG、`artwork.png`、创作简报与逐图层 Manifest。
 
 ### 4. 修改某个区域
 
 启动本地编辑器，选中图层或框选区域，导出 `edit-request.json`，然后再次交给 `$redraw-in-layers`。补丁只允许修改命中的图层。
 
-## v0.1 已包含
+## v0.6 已包含
 
-- `$redraw-in-layers`：引导式照片重绘与局部修改 Codex Skill。
-- 严格的 SVG 工程约束：5–20 个非空顶层语义图层，通常为 8–12 个。
-- 无第三方依赖的 Python 工具：校验、Manifest、分层导出、定向补丁和编辑器服务。
+- `$redraw-in-layers`：引导式照片重绘、多图层生图与局部修改 Codex Skill。
+- 参考智能：多 RGB 角色注册、RGB-D 配对、可选单目相对深度估计、16 位深度证据、3–8 区间预览，以及提示词驱动的 5–20 图层规划。
+- “引导创作”：6 个内置构图优先模板，以及忠实度、抽象、主体强调、空间平面化和色彩强度等少量安全参数。
+- “艺术指导”：完整控制构图平衡、裁切、留白、主体比例、空间、造型、明暗组、色板、边缘和材质，并可保存为项目内双语模板。
+- `design-plan.json`：两种界面共享的设计合同；其哈希进入工程版本，设计变化可以追踪、比较和恢复。
+- 参数设计稿：结构稿、色彩与材质稿或完整稿三种阶段；固定生成 A/B/C，支持参数差异、真实 PNG 预览注册、选择、锁定与可恢复晋升。
+- 严格的双模式工程约束：5–20 个非空语义图层，通常为 8–12 个。
+- Python 工具支持校验、Manifest、分层导出／合成、定向补丁和编辑器服务；矢量功能无第三方依赖，位图功能使用 Pillow。
 - 本地浏览器编辑器：独立的中文 / English 文案、图层点击、框选、纯文本模式、显示/锁定控制和 `edit-request.json` 导出。
-- 一个完全由路径、图形、渐变、图案、文字和 SVG 滤镜绘制的 10 图层运河示例。
+- 一个完全由路径、图形、渐变、图案和 SVG 滤镜绘制的 10 图层运河示例。
 - 未修改图层哈希保护，避免一次局部调整意外重构整张作品。
+- `raster-layered`：同尺寸 RGBA PNG 图层、自动合成、透明通道与尺寸校验，以及 `replace-layer-file` 定向替换。
+- `pixel-art` 预设：默认 320×240、32 色、4× 最近邻预览，并校验抗锯齿半透明、图层不透明度和全工程色板上限。
+- 非破坏性版本历史：每次补丁、图层设置或 ORA 回读前自动快照；支持 `history`、`diff` 和可回退的 `undo`。
+- 套索与画笔蒙版：按原画布坐标保存二值 PNG，并与语义图层范围一起约束局部修改。
+- 图层合成控制：透明度、显示、锁定、顺序、双语名称，以及 normal／multiply／screen／overlay／darken／lighten。
+- 混合图层基础：每层保留注册 PNG，同时可声明 `raster`、`pixel` 或带 SVG `editable_source` 的 `vector` 来源。
+- 10 个从构图到节奏的完整风格配方、2–6 个方向小样联系表、依赖图层关系，以及图层质量与设计完整度双重报告。
+- OpenRaster `.ora` 导出与回读，方便在 Krita 等软件中继续手绘，再同步回 Layered Redraw。
 
-当前编辑器负责**确定修改范围并生成修改请求**，不会自行理解艺术语言或直接改写 SVG。将导出的请求与工程交给 Codex，并调用 `$redraw-in-layers`，即可生成受约束补丁并验证其他图层保持不变。
+当前编辑器可以直接保存图层合成设置、蒙版和历史恢复；艺术语言仍由 Codex 解释。将导出的请求与工程交给 Codex，并调用 `$redraw-in-layers`，即可生成受约束的 SVG 补丁或 PNG 图层替换，并验证其他图层保持不变。
+
+## 可编辑像素 NPC 示例
+
+![洞穴猫咪 NPC 像素画预览](examples/cat-cave-npc/preview.png)
+
+![10 图层联系表](examples/cat-cave-npc/assets/layer-contact-sheet.png)
+
+[`examples/cat-cave-npc`](examples/cat-cave-npc) 是一个可直接检查、编辑和重新合成的公开示例：384×216、32 色、10 个语义图层，分别管理洞穴、前景岩石、洞口、宝箱、散落财宝、猫咪 NPC、名牌与对话框。示例同时提供透明 PNG 图层、二值蒙版、逐层提示、设计合同、质量清单和可在 Krita 中编辑的 [`NPC-Cave-Scene-02.ora`](examples/cat-cave-npc/NPC-Cave-Scene-02.ora)。为保护隐私，原始参考照片未收入仓库。
 
 ## 快速体验
 
-只需要 Python 3.10 或更高版本，无需安装第三方 Python 包。
+矢量模式只需要 Python 3.10 或更高版本。`raster-layered` 的校验与合成额外需要 Pillow；深度估计是独立的可选依赖：
 
 ```powershell
+python -m pip install Pillow
+# 仅在需要本地深度估计时：
+python -m pip install -r requirements-depth.txt
 python skills/redraw-in-layers/scripts/layered_redraw.py validate examples/canal-evening --write-manifest
 python skills/redraw-in-layers/scripts/layered_redraw.py serve examples/canal-evening --open
 ```
@@ -90,12 +125,13 @@ python skills/redraw-in-layers/scripts/layered_redraw.py serve examples/canal-ev
 
 在编辑器中：
 
-1. 在右上角选择“中文”或“EN”；界面文案、动态提示和示例图层名称会一起切换。
-2. 从左侧选择语义图层，或者直接点击画布中的对象。
-3. 使用“图层点击”“框选”或“纯文本”模式确定作用范围。
-4. 用中文或英文描述希望发生的变化。
-5. 生成并下载 `edit-request.json`。
-6. 将工程和修改请求交给 Codex，调用 `$redraw-in-layers`。
+1. 顶部选择“引导创作”或“艺术指导”，右上角选择“中文”或“EN”。
+2. 在“参考图与空间”添加主场景与补充参考；需要时估计相对深度，或在专家模式导入同尺寸单通道 RGB-D 深度。
+3. 描述哪些对象应独立、合并或作为叠加层，选择 5–20 的目标图层数并保存规划请求。
+4. 选择视觉模板或专家参数；再生成、选择、锁定并晋升 A/B/C 参数设计稿。
+5. 从左侧选择语义图层，或用图层点击、框选、套索、画笔和纯文本限定修改范围。
+6. 调整透明度、混合模式、顺序和双语名称；用历史区比较或恢复版本。
+7. 描述变化并下载 `edit-request.json`，再交给 Codex 与 `$redraw-in-layers`。
 
 ## 安装并调用 Skill
 
@@ -113,6 +149,50 @@ New-Item -ItemType Junction -Path $skillTarget -Target (Resolve-Path ".\skills\r
 先进行创作意图访谈；确认方向后，生成 8–12 个语义图层的 vector-strict SVG 工程。
 ```
 
+多图层生图模式：
+
+```text
+使用 $redraw-in-layers 的 raster-layered 模式处理本条上传的照片。
+不要输出矢量图；生成 8–12 个同尺寸 PNG 图层（背景不透明，其余保留透明区域），并合成为 artwork.png。
+```
+
+多图层像素画：
+
+```text
+使用 $redraw-in-layers 的 raster-layered / pixel-art 预设处理本条照片。
+使用 320×240 逻辑画布、32 色共享色板和 4× 最近邻预览；禁止抗锯齿、模糊、渐变与半透明边缘。
+输出 8–12 个可独立编辑的 PNG 图层、artwork.png 和 preview.png。
+```
+
+普通／引导模式：
+
+```text
+使用 $redraw-in-layers 的引导创作模式处理这张照片。
+先给我看构图优先的视觉模板；不要只更换笔刷，也不要在画面中加入文字。
+```
+
+专家／艺术指导模式：
+
+```text
+使用 $redraw-in-layers 的艺术指导模式处理这张照片。
+让我分别控制裁切、主体比例、留白、透视压平、形状概括、明暗组、色板、边缘和材质，再开始细化绘制。
+```
+
+原图＋提示词＋深度控制图层：
+
+```text
+使用 $redraw-in-layers 注册本条上传的原图，并估计相对深度。
+把人物保留为独立图层，合并远处建筑，把倒影作为叠加层；目标 10 层。
+保持原始深度证据不变，只在图层规划中艺术化解释空间。
+```
+
+带参数设计稿：
+
+```text
+使用 $redraw-in-layers 先为这张照片生成 A/B/C 三个参数设计稿。
+先比较结构稿；选定并锁定构图后，再生成色彩与材质稿，最后晋升为 8–12 图层正式绘制方案。
+```
+
 修改已有工程时：
 
 ```text
@@ -123,13 +203,24 @@ New-Item -ItemType Junction -Path $skillTarget -Target (Resolve-Path ".\skills\r
 ## 工程结构
 
 ```text
-project-name/
-├─ artwork.svg             # 可编辑的标准源文件
-├─ project.json            # 输出模式、风格、种子和标准路径
-├─ creative-brief.json     # 已确认的创作方向
-├─ manifest.json           # 修订号与逐图层哈希
-├─ layers/                 # 可重新生成的逐图层 SVG
-└─ patches/                # 已应用补丁的审计记录
+vector-project/                 raster-project/
+├─ artwork.svg                  ├─ artwork.png
+├─ project.json                 ├─ project.json
+├─ creative-brief.json          ├─ creative-brief.json
+├─ design-plan.json             ├─ design-plan.json
+├─ planning-request.json        ├─ planning-request.json
+├─ layer-plan.json              ├─ layer-plan.json
+├─ references/                  ├─ references/
+├─ manifest.json                ├─ manifest.json
+├─ style-recipe.json            ├─ style-recipe.json
+├─ presets/user/                ├─ presets/user/
+├─ proofs/sets/                 ├─ proofs/sets/
+├─ history/ 与 masks/           ├─ history/ 与 masks/
+├─ directions/                  ├─ directions/
+├─ layers/*.svg                 ├─ composition.json
+└─ patches/                     ├─ layers/index.json + *.png
+                                ├─ prompts/ 与 staging/
+                                └─ patches/
 ```
 
 顶层图层使用通用 SVG 分组和 Inkscape 图层元数据：
@@ -143,13 +234,33 @@ project-name/
 </g>
 ```
 
-`artwork.svg` 是工程的唯一标准源文件；`manifest.json` 和 `layers/` 都是可重新生成的派生内容。
+矢量工程以 `artwork.svg` 为标准源文件。位图工程以 `layers/index.json` 和 PNG 图层栈为标准源；`artwork.png` 与 `preview.png` 可随时重新合成。
 
 ## 命令行
 
 ```powershell
 # 创建一个空的 10 图层工程
 python skills/redraw-in-layers/scripts/layered_redraw.py new output/my-project --title "My Project"
+
+# 创建一个 10 图层位图生图工程
+python skills/redraw-in-layers/scripts/layered_redraw.py new output/my-raster-project --mode raster-layered --layers 10 --width 1200 --height 1600
+
+# 创建像素画工程；不指定尺寸时默认 320×240
+python skills/redraw-in-layers/scripts/layered_redraw.py new output/my-pixel-project --mode raster-layered --style pixel-art --layers 10 --palette-size 32 --pixel-scale 4
+
+# 注册原图，估计相对深度，并保存提示词驱动的图层规划
+python skills/redraw-in-layers/scripts/layered_redraw.py reference-add output/my-project scene.jpg --role primary-rgb
+python skills/redraw-in-layers/scripts/layered_redraw.py depth-estimate output/my-project --zones 5 --device auto
+python skills/redraw-in-layers/scripts/layered_redraw.py plan-request output/my-project "人物独立；远处建筑合并；倒影作为叠加层" --layers 10
+
+# 已有 RGB-D 时，导入同尺寸单通道深度；声明近处是高值或低值
+python skills/redraw-in-layers/scripts/layered_redraw.py depth-register output/my-project depth.png --raw-near high
+
+# Codex 分析出 semantic-regions.json 后，确定性解析正式图层方案
+python skills/redraw-in-layers/scripts/layered_redraw.py plan-resolve output/my-project semantic-regions.json
+
+# PNG 图层就位后进行合成
+python skills/redraw-in-layers/scripts/layered_redraw.py compose output/my-raster-project
 
 # 校验工程并刷新 manifest.json
 python skills/redraw-in-layers/scripts/layered_redraw.py validate output/my-project --write-manifest
@@ -162,13 +273,47 @@ python skills/redraw-in-layers/scripts/layered_redraw.py apply-patch output/my-p
 
 # 应用补丁并生成审计记录
 python skills/redraw-in-layers/scripts/layered_redraw.py apply-patch output/my-project patch.json
+
+# 质量报告、历史差异与恢复
+python skills/redraw-in-layers/scripts/layered_redraw.py quality output/my-project
+python skills/redraw-in-layers/scripts/layered_redraw.py history output/my-project
+python skills/redraw-in-layers/scripts/layered_redraw.py diff output/my-project <snapshot-id>
+python skills/redraw-in-layers/scripts/layered_redraw.py undo output/my-project <snapshot-id>
+
+# 非破坏性图层合成设置
+python skills/redraw-in-layers/scripts/layered_redraw.py layer-settings output/my-project layer-lighting --opacity 0.7 --blend-mode screen
+
+# 查看风格配方并制作方向小样板
+python skills/redraw-in-layers/scripts/layered_redraw.py styles
+python skills/redraw-in-layers/scripts/layered_redraw.py presets --project output/my-project
+python skills/redraw-in-layers/scripts/layered_redraw.py apply-preset output/my-project editorial-geometric --control abstraction=0.7
+python skills/redraw-in-layers/scripts/layered_redraw.py design output/my-project
+python skills/redraw-in-layers/scripts/layered_redraw.py design-check output/my-project
+python skills/redraw-in-layers/scripts/layered_redraw.py save-preset output/my-project my-direction --name-zh "我的方向" --name-en "My direction"
+python skills/redraw-in-layers/scripts/layered_redraw.py direction-board output/my-project --candidate "A=a.png" --candidate "B=b.png"
+
+# 生成、比较、锁定并晋升参数设计稿
+python skills/redraw-in-layers/scripts/layered_redraw.py proof-create output/my-project --stage structure --spread 0.65
+python skills/redraw-in-layers/scripts/layered_redraw.py proof-select output/my-project B
+python skills/redraw-in-layers/scripts/layered_redraw.py proof-lock output/my-project
+python skills/redraw-in-layers/scripts/layered_redraw.py proof-promote output/my-project
+
+# 与 Krita 等软件进行 OpenRaster 往返
+python skills/redraw-in-layers/scripts/layered_redraw.py export-ora output/my-raster-project
+python skills/redraw-in-layers/scripts/layered_redraw.py import-ora edited.ora output/my-raster-project
 ```
 
-支持的确定性补丁操作包括 `set-attributes`、`remove-attributes`、`set-text`、`replace-element` 和 `remove-element`。每个操作都必须位于 `expected_changed_layers` 指定的图层内。
+矢量补丁支持 `set-attributes`、`remove-attributes`、`set-text`、`replace-element` 和 `remove-element`。位图补丁支持 `replace-layer-file`。每个操作都必须位于 `expected_changed_layers` 指定的图层内。
 
 ## 手工编辑
 
 推荐使用 Inkscape 打开 `artwork.svg`，它对 SVG 图层结构的往返兼容性最好。Illustrator 和 Affinity Designer 也可以使用，但编辑后应重新运行校验，因为其他软件可能重命名 ID 或重组分组。
+
+位图工程可在 Photoshop、Affinity Photo、Krita 或 Photopea 中编辑：按 `index.json` 的由底到顶顺序导入 `layers/*.png`，修改后保持原始画布尺寸、透明通道和文件名，再运行 `compose` 与 `validate`。
+
+更推荐 Krita／OpenRaster 工作流：运行 `export-ora`，在外部软件中修改完整图层栈，再用 `import-ora` 同步回原工程。同步前会创建可恢复快照，并拒绝画布、图层数量或稳定 ID 不匹配的文件。
+
+像素画优先使用 Aseprite 或 Pixelorama。关闭抗锯齿，所有缩放使用最近邻，并保持共享色板与 0/255 硬透明。
 
 修改对象时，请保留顶层 `layer-*` 包装组及其稳定 ID。
 
@@ -178,7 +323,7 @@ python skills/redraw-in-layers/scripts/layered_redraw.py apply-patch output/my-p
 python -m unittest discover -s tests -v
 ```
 
-测试会校验示例工程、导出全部 10 个图层、在临时副本中应用单图层补丁，并确认所有未选图层的哈希保持不变。
+测试覆盖 SVG、普通 PNG、像素画、双设计模式、自定义模板、参数设计稿、风格设计系统、方向小样、蒙版、历史差异／恢复、混合图层和 OpenRaster 往返。
 
 ---
 

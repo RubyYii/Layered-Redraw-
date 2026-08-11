@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic utilities for Layered Redraw SVG projects.
+"""Deterministic utilities for Layered Redraw vector and raster projects.
 
 The artistic decisions belong to Codex and the user. This module protects the
 project contract: stable semantic layers, manifests, safe localized patches,
@@ -9,6 +9,8 @@ layer exports, and a local request-authoring editor.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import copy
 import hashlib
 import json
@@ -21,8 +23,17 @@ from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from xml.etree import ElementTree as ET
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+import raster_project as RASTER  # noqa: E402  (local sibling module)
+import project_features as FEATURES  # noqa: E402  (local sibling module)
+import design_proofs as PROOFS  # noqa: E402  (local sibling module)
+import reference_intelligence as REFERENCES  # noqa: E402  (local sibling module)
 
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -96,6 +107,16 @@ def write_json(path: Path, value: Any) -> None:
         json.dumps(value, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def target_output_mode(raw_target: str | Path) -> str:
+    target = Path(raw_target).expanduser().resolve()
+    if target.is_dir():
+        config = read_json(target / "project.json")
+        mode = config.get("output_mode")
+        if isinstance(mode, str) and mode:
+            return mode
+    return "vector-strict"
 
 
 def resolve_project(raw_target: str | Path) -> tuple[Path, Path, dict[str, Any]]:
@@ -181,6 +202,13 @@ def is_visible(layer: ET.Element) -> bool:
     return "display:none" not in style
 
 
+def layer_opacity(layer: ET.Element) -> float:
+    try:
+        return float(layer.get("opacity", "1"))
+    except ValueError:
+        return -1.0
+
+
 def build_manifest_from_root(
     root: ET.Element,
     *,
@@ -194,26 +222,53 @@ def build_manifest_from_root(
         title = title_node.text.strip() if title_node is not None and title_node.text else "Untitled"
     layers = []
     for index, layer in enumerate(top_layers(root), start=1):
+        layer_digest = element_hash(layer)
+        state_digest = hashlib.sha256(f"{index}:{layer_digest}".encode("utf-8")).hexdigest()
+        raw_depends = layer.get("data-depends-on", "")
         layers.append(
             {
                 "id": layer.get("id"),
                 "label": layer_label(layer),
                 "z_index": index,
-                "sha256": element_hash(layer),
+                "sha256": layer_digest,
+                "state_sha256": state_digest,
+                "layer_type": layer.get("data-layer-type", "vector"),
                 "object_count": graphic_count(layer),
                 "visible": is_visible(layer),
                 "locked": layer.get("data-locked") == "true",
+                "opacity": layer_opacity(layer),
+                "blend_mode": layer.get("data-blend-mode", "normal"),
+                "depends_on": [item for item in raw_depends.split() if item],
                 "bbox_hint": parse_bbox(layer.get("data-bbox")),
             }
         )
+    design_plan_digest = config.get("_design_plan_sha256")
+    revision = revision_for_bytes(payload)
+    if isinstance(design_plan_digest, str) and design_plan_digest:
+        revision_payload = {
+            "artwork_sha256": hashlib.sha256(payload).hexdigest(),
+            "design_plan_sha256": design_plan_digest,
+            "workflow_mode": config.get("workflow_mode"),
+            "design_preset": config.get("design_preset"),
+        }
+        revision = hashlib.sha256(
+            json.dumps(revision_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()[:12]
     return {
         "schema_version": "1.0",
         "kind": "layered-redraw-manifest",
         "title": title,
-        "revision": revision_for_bytes(payload),
+        "revision": revision,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "view_box": view_box,
         "output_mode": config.get("output_mode", "vector-strict"),
+        "style": config.get("style"),
+        "style_recipe": config.get("style_recipe"),
+        "workflow_mode": config.get("workflow_mode", "guided"),
+        "design_plan": config.get("design_plan"),
+        "design_preset": config.get("design_preset"),
+        "design_plan_sha256": design_plan_digest,
+        "layer_model": config.get("layer_model", "semantic-vector"),
         "layer_count": len(layers),
         "layers": layers,
     }
@@ -222,7 +277,9 @@ def build_manifest_from_root(
 def build_manifest(svg_path: Path, config: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = svg_path.read_bytes()
     root = parse_svg(svg_path)
-    return build_manifest_from_root(root, payload=payload, config=config or {})
+    manifest_config = dict(config or {})
+    manifest_config["_design_plan_sha256"] = FEATURES.design_plan_sha256(svg_path.parent, manifest_config)
+    return build_manifest_from_root(root, payload=payload, config=manifest_config)
 
 
 def validate_tree(root: ET.Element, config: dict[str, Any]) -> dict[str, list[str]]:
@@ -230,6 +287,18 @@ def validate_tree(root: ET.Element, config: dict[str, Any]) -> dict[str, list[st
     warnings: list[str] = []
     layers = top_layers(root)
     output_mode = config.get("output_mode", "vector-strict")
+
+    if config.get("design_plan"):
+        visible_artwork_text = [
+            node
+            for layer in layers
+            for node in layer.iter()
+            if local_name(node.tag) in {"text", "tspan"} and (node.text or "").strip()
+        ]
+        if visible_artwork_text:
+            errors.append(
+                "v0.6 design projects keep artwork text disabled; remove visible text from semantic layers."
+            )
 
     view_box = root.get("viewBox")
     if not view_box:
@@ -274,6 +343,8 @@ def validate_tree(root: ET.Element, config: dict[str, Any]) -> dict[str, list[st
         errors.append("Duplicate SVG IDs: " + ", ".join(duplicate_ids))
 
     seen_layers: set[str] = set()
+    dependency_graph: dict[str, list[str]] = {}
+    known_layer_ids = {layer.get("id") for layer in layers if isinstance(layer.get("id"), str)}
     for index, layer in enumerate(layers, start=1):
         layer_id = layer.get("id")
         if not layer_id:
@@ -288,9 +359,49 @@ def validate_tree(root: ET.Element, config: dict[str, Any]) -> dict[str, list[st
             errors.append(f"Layer {layer_id} is missing a human-readable label.")
         if graphic_count(layer) == 0:
             errors.append(f"Layer {layer_id} is empty.")
+        opacity = layer_opacity(layer)
+        if not 0 <= opacity <= 1:
+            errors.append(f"Layer {layer_id} opacity must be between 0 and 1.")
+        blend_mode = layer.get("data-blend-mode", "normal")
+        if blend_mode not in RASTER.SUPPORTED_BLEND_MODES:
+            errors.append(f"Layer {layer_id} uses unsupported blend mode: {blend_mode}")
+        layer_type = layer.get("data-layer-type", "vector")
+        if layer_type not in RASTER.SUPPORTED_LAYER_TYPES:
+            errors.append(f"Layer {layer_id} uses unsupported layer type: {layer_type}")
+        if output_mode == "vector-strict" and layer_type != "vector":
+            errors.append(f"vector-strict layer {layer_id} must use data-layer-type=vector.")
+        depends_on = [item for item in layer.get("data-depends-on", "").split() if item]
+        dependency_graph[layer_id] = depends_on
+        unknown_dependencies = sorted(set(depends_on) - known_layer_ids)
+        if unknown_dependencies:
+            errors.append(
+                f"Layer {layer_id} depends on unknown layers: {', '.join(unknown_dependencies)}."
+            )
+        if layer_id in depends_on:
+            errors.append(f"Layer {layer_id} cannot depend on itself.")
         bbox_raw = layer.get("data-bbox")
         if bbox_raw and parse_bbox(bbox_raw) is None:
             warnings.append(f"Layer {layer_id} has an invalid data-bbox hint.")
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit_dependency(layer_id: str) -> bool:
+        if layer_id in visiting:
+            return True
+        if layer_id in visited:
+            return False
+        visiting.add(layer_id)
+        has_cycle = any(
+            dependency in dependency_graph and visit_dependency(dependency)
+            for dependency in dependency_graph.get(layer_id, [])
+        )
+        visiting.remove(layer_id)
+        visited.add(layer_id)
+        return has_cycle
+
+    if any(visit_dependency(layer_id) for layer_id in dependency_graph):
+        errors.append("Layer data-depends-on relationships contain a cycle.")
 
     if output_mode not in {"vector-strict", "vector-textured", "hybrid"}:
         errors.append(f"Unknown output_mode: {output_mode}")
@@ -298,9 +409,15 @@ def validate_tree(root: ET.Element, config: dict[str, Any]) -> dict[str, list[st
 
 
 def validate_project(raw_target: str | Path, *, write_manifest_file: bool = False) -> dict[str, Any]:
+    if target_output_mode(raw_target) == "raster-layered":
+        return RASTER.validate_project(raw_target, write_manifest_file=write_manifest_file)
     svg_path, project_dir, config = resolve_project(raw_target)
     root = parse_svg(svg_path)
     report = validate_tree(root, config)
+    if config.get("style_recipe"):
+        recipe_path = project_dir / str(config.get("style_recipe"))
+        if not recipe_path.is_file():
+            report["warnings"].append("The project style recipe file is missing.")
     manifest = build_manifest(svg_path, config)
     manifest_path = project_dir / "manifest.json"
     previous = read_json(manifest_path)
@@ -331,6 +448,15 @@ def write_svg(path: Path, root: ET.Element, *, pretty: bool = True) -> None:
 
 
 def split_layers(raw_target: str | Path, output_dir: str | Path | None = None) -> dict[str, Any]:
+    if target_output_mode(raw_target) == "raster-layered":
+        project_dir, _, index_path, index = RASTER.resolve_project(raw_target)
+        layers = index.get("layers", [])
+        return {
+            "output_dir": str(index_path.parent),
+            "layer_count": len(layers) if isinstance(layers, list) else 0,
+            "message": "Raster layers are already stored as discrete files; use compose to rebuild the artwork.",
+            "project": str(project_dir),
+        }
     svg_path, project_dir, config = resolve_project(raw_target)
     root = parse_svg(svg_path)
     layers = top_layers(root)
@@ -435,6 +561,8 @@ def parse_safe_fragment(fragment: str, target_id: str, output_mode: str) -> ET.E
 
 
 def apply_patch(raw_target: str | Path, patch_path: str | Path, *, dry_run: bool = False) -> dict[str, Any]:
+    if target_output_mode(raw_target) == "raster-layered":
+        return RASTER.apply_patch(raw_target, patch_path, dry_run=dry_run)
     svg_path, project_dir, config = resolve_project(raw_target)
     patch_file = Path(patch_path).expanduser().resolve()
     patch = read_json(patch_file, required=True)
@@ -562,6 +690,13 @@ def apply_patch(raw_target: str | Path, patch_path: str | Path, *, dry_run: bool
     if dry_run:
         return result
 
+    FEATURES.create_snapshot(
+        project_dir,
+        before,
+        reason=str(patch.get("instruction") or "Before scoped vector patch"),
+        changed_layers=changed,
+    )
+
     # Serialize without pretty-printing so whitespace in untouched semantic
     # layers remains byte-for-byte stable. Reparse the exact payload before
     # replacing the project file: serializer side effects must not escape the
@@ -636,7 +771,165 @@ def apply_patch(raw_target: str | Path, patch_path: str | Path, *, dry_run: bool
     return result
 
 
-def create_project(output: str | Path, *, title: str, layers: int, width: int, height: int) -> dict[str, Any]:
+def update_vector_layer_settings(
+    raw_target: str | Path,
+    layer_id: str,
+    *,
+    opacity: float | None = None,
+    blend_mode: str | None = None,
+    visible: bool | None = None,
+    locked: bool | None = None,
+    label_zh: str | None = None,
+    label_en: str | None = None,
+    depends_on: list[str] | None = None,
+    move: str | None = None,
+) -> dict[str, Any]:
+    svg_path, project_dir, config = resolve_project(raw_target)
+    root = parse_svg(svg_path)
+    layers = top_layers(root)
+    position = next((index for index, layer in enumerate(layers) if layer.get("id") == layer_id), None)
+    if position is None:
+        raise LayeredRedrawError(f"Unknown vector layer: {layer_id}")
+    if opacity is not None and (isinstance(opacity, bool) or not 0 <= float(opacity) <= 1):
+        raise LayeredRedrawError("opacity must be between 0 and 1")
+    if blend_mode is not None and blend_mode not in RASTER.SUPPORTED_BLEND_MODES:
+        raise LayeredRedrawError("Unsupported blend_mode: " + blend_mode)
+    if move not in {None, "up", "down", "top", "bottom"}:
+        raise LayeredRedrawError("move must be up, down, top, or bottom")
+    before = build_manifest(svg_path, config)
+    layer = layers[position]
+    original = svg_path.read_bytes()
+    if opacity is not None:
+        layer.set("opacity", f"{float(opacity):g}")
+    if blend_mode is not None:
+        layer.set("data-blend-mode", blend_mode)
+        style_parts = [part for part in layer.get("style", "").split(";") if part and not part.strip().startswith("mix-blend-mode:")]
+        style_parts.append(f"mix-blend-mode:{blend_mode}")
+        layer.set("style", ";".join(style_parts))
+    if visible is not None:
+        if visible:
+            layer.attrib.pop("display", None)
+        else:
+            layer.set("display", "none")
+    if locked is not None:
+        layer.set("data-locked", "true" if locked else "false")
+    if label_zh is not None:
+        layer.set("data-label-zh", label_zh.strip())
+    if label_en is not None:
+        layer.set("data-label-en", label_en.strip())
+        layer.set(inkscape_attr("label"), label_en.strip())
+    if depends_on is not None:
+        layer.set("data-depends-on", " ".join(dict.fromkeys(depends_on)))
+    if move:
+        children = list(root)
+        child_position = children.index(layer)
+        semantic_positions = [children.index(item) for item in layers]
+        if move == "up":
+            destination_layer = min(position + 1, len(layers) - 1)
+        elif move == "down":
+            destination_layer = max(position - 1, 0)
+        elif move == "top":
+            destination_layer = len(layers) - 1
+        else:
+            destination_layer = 0
+        if destination_layer != position:
+            root.remove(layer)
+            destination_child = semantic_positions[destination_layer]
+            if destination_layer > position:
+                destination_child += 1
+            root.insert(min(destination_child, len(root)), layer)
+
+    validation = validate_tree(root, config)
+    if validation["errors"]:
+        raise LayeredRedrawError("Layer settings are invalid: " + "; ".join(validation["errors"]))
+    candidate_payload = serialize_svg(root, pretty=False)
+    if candidate_payload == original:
+        raise LayeredRedrawError("Layer settings produced no changes")
+    FEATURES.create_snapshot(
+        project_dir,
+        before,
+        reason=f"Before layer settings update: {layer_id}",
+        changed_layers=[layer_id],
+    )
+    try:
+        svg_path.write_bytes(candidate_payload)
+        after = build_manifest(svg_path, config)
+        write_json(project_dir / "manifest.json", after)
+    except Exception:
+        svg_path.write_bytes(original)
+        raise
+    before_states = {item["id"]: item.get("state_sha256") for item in before["layers"]}
+    after_states = {item["id"]: item.get("state_sha256") for item in after["layers"]}
+    changed = sorted(layer for layer in before_states if before_states[layer] != after_states.get(layer))
+    return {
+        "ok": True,
+        "before_revision": before["revision"],
+        "after_revision": after["revision"],
+        "changed_layers": changed,
+        "svg": str(svg_path),
+    }
+
+
+def update_layer_settings(raw_target: str | Path, layer_id: str, **settings: Any) -> dict[str, Any]:
+    if target_output_mode(raw_target) == "raster-layered":
+        return RASTER.update_layer_settings(raw_target, layer_id, **settings)
+    settings.pop("layer_type", None)
+    settings.pop("editable_source", None)
+    return update_vector_layer_settings(raw_target, layer_id, **settings)
+
+
+def quality_report(raw_target: str | Path) -> dict[str, Any]:
+    if target_output_mode(raw_target) == "raster-layered":
+        return RASTER.quality_report(raw_target)
+    svg_path, project_dir, config = resolve_project(raw_target)
+    validation = validate_project(project_dir)
+    manifest = build_manifest(svg_path, config)
+    checks = {
+        "contract": validation["ok"],
+        "layer_count_preferred": 8 <= manifest["layer_count"] <= 12,
+        "style_recipe_installed": not config.get("style") or (project_dir / "style-recipe.json").is_file(),
+        "stable_layer_ids": all(LAYER_ID_RE.fullmatch(str(layer.get("id"))) for layer in manifest["layers"]),
+        "all_layers_editable": all(layer.get("object_count", 0) > 0 for layer in manifest["layers"]),
+    }
+    score = max(0, 100 - len(validation["errors"]) * 20 - len(validation["warnings"]) * 4)
+    return {
+        "ok": validation["ok"],
+        "project": str(project_dir),
+        "revision": manifest["revision"],
+        "score": score,
+        "checks": checks,
+        "errors": validation["errors"],
+        "warnings": validation["warnings"],
+        "layers": manifest["layers"],
+    }
+
+
+def create_project(
+    output: str | Path,
+    *,
+    title: str,
+    layers: int,
+    width: int,
+    height: int,
+    mode: str = "vector-strict",
+    style: str | None = None,
+    pixel_scale: int = 4,
+    palette_size: int = 32,
+) -> dict[str, Any]:
+    if mode == "raster-layered":
+        return RASTER.create_project(
+            output,
+            title=title,
+            layers=layers,
+            width=width,
+            height=height,
+            style=style,
+            pixel_scale=pixel_scale,
+            palette_size=palette_size,
+        )
+    if mode != "vector-strict":
+        raise LayeredRedrawError(f"Unsupported new-project mode: {mode}")
+    style = FEATURES.normalize_style_id(style) if isinstance(style, str) else None
     if not 5 <= layers <= 20:
         raise LayeredRedrawError("New projects require 5–20 layers")
     project_dir = Path(output).expanduser().resolve()
@@ -666,6 +959,10 @@ def create_project(output: str | Path, *, title: str, layers: int, width: int, h
             {
                 "id": f"layer-{name}",
                 "data-layer": "true",
+                "data-layer-type": "vector",
+                "data-blend-mode": "normal",
+                "data-depends-on": "",
+                "opacity": "1",
                 "data-placeholder": "true",
                 inkscape_attr("groupmode"): "layer",
                 inkscape_attr("label"): name.replace("-", " ").title(),
@@ -675,12 +972,16 @@ def create_project(output: str | Path, *, title: str, layers: int, width: int, h
     write_json(
         project_dir / "project.json",
         {
-            "schema_version": "1.0",
+            "schema_version": "1.1",
             "title": title,
             "canonical_svg": "artwork.svg",
             "output_mode": "vector-strict",
             "target_layers": layers,
-            "style": None,
+            "style": style,
+            "style_recipe": "style-recipe.json" if style else None,
+            "workflow_mode": "guided",
+            "design_plan": "design-plan.json",
+            "layer_model": "hybrid-semantic",
             "procedural_seed": 1,
         },
     )
@@ -689,7 +990,62 @@ def create_project(output: str | Path, *, title: str, layers: int, width: int, h
         {"schema_version": "1.0", "status": "draft", "title": title},
     )
     (project_dir / "patches").mkdir(exist_ok=True)
-    return {"project": str(project_dir), "svg": str(project_dir / "artwork.svg"), "layers": layers}
+    (project_dir / "history" / "revisions").mkdir(parents=True, exist_ok=True)
+    (project_dir / "masks").mkdir(exist_ok=True)
+    (project_dir / "directions" / "candidates").mkdir(parents=True, exist_ok=True)
+    (project_dir / "proofs" / "sets").mkdir(parents=True, exist_ok=True)
+    (project_dir / "references").mkdir(exist_ok=True)
+    FEATURES.install_style_recipe(project_dir, style)
+    design_plan = FEATURES.initialize_design_plan(project_dir, style=style, workflow_mode="guided")
+    return {
+        "project": str(project_dir),
+        "svg": str(project_dir / "artwork.svg"),
+        "layers": layers,
+        "design_preset": design_plan["selected_preset"],
+    }
+
+
+def project_manifest(raw_target: str | Path) -> tuple[Path, dict[str, Any]]:
+    if target_output_mode(raw_target) == "raster-layered":
+        project_dir, _, _, _ = RASTER.resolve_project(raw_target)
+        return project_dir, RASTER.build_manifest(project_dir)
+    svg_path, project_dir, config = resolve_project(raw_target)
+    return project_dir, build_manifest(svg_path, config)
+
+
+def create_manual_snapshot(raw_target: str | Path, reason: str) -> dict[str, Any]:
+    project_dir, manifest = project_manifest(raw_target)
+    return FEATURES.create_snapshot(project_dir, manifest, reason=reason, force=True)
+
+
+def history_diff(raw_target: str | Path, snapshot_id: str) -> dict[str, Any]:
+    project_dir, manifest = project_manifest(raw_target)
+    return FEATURES.diff_snapshot(project_dir, manifest, snapshot_id)
+
+
+def undo_to_snapshot(raw_target: str | Path, snapshot_id: str) -> dict[str, Any]:
+    project_dir, current = project_manifest(raw_target)
+    FEATURES.create_snapshot(
+        project_dir,
+        current,
+        reason=f"Automatic safety snapshot before restoring {snapshot_id}",
+        force=True,
+    )
+    restored = FEATURES.restore_snapshot(project_dir, snapshot_id)
+    if target_output_mode(project_dir) == "raster-layered":
+        validation = RASTER.validate_project(project_dir)
+        if validation["errors"]:
+            raise LayeredRedrawError("Restored raster snapshot is invalid: " + "; ".join(validation["errors"]))
+        composed = RASTER.compose_project(project_dir)
+        restored["after_revision"] = composed["revision"]
+        restored["artwork"] = composed["artwork"]
+    else:
+        validation = validate_project(project_dir, write_manifest_file=True)
+        if validation["errors"]:
+            raise LayeredRedrawError("Restored vector snapshot is invalid: " + "; ".join(validation["errors"]))
+        restored["after_revision"] = validation["revision"]
+        restored["svg"] = validation["svg"]
+    return restored
 
 
 def plugin_root_from_script() -> Path:
@@ -697,10 +1053,52 @@ def plugin_root_from_script() -> Path:
 
 
 def serve_editor(raw_target: str | Path, *, host: str, port: int, open_browser: bool) -> None:
-    svg_path, project_dir, config = resolve_project(raw_target)
+    mode = target_output_mode(raw_target)
+    raster_layer_paths: dict[str, Path] = {}
+    if mode == "raster-layered":
+        project_dir, config, _, _ = RASTER.resolve_project(raw_target)
+        source_name = str(config.get("canonical_composite", "artwork.png"))
+        raster_layer_paths = RASTER.layer_paths(project_dir)
+
+        def artwork_payload() -> bytes:
+            return RASTER.viewer_svg(project_dir)
+
+        def current_manifest() -> dict[str, Any]:
+            return RASTER.build_manifest(project_dir)
+
+        def current_config() -> dict[str, Any]:
+            return RASTER.resolve_project(project_dir)[1]
+
+        def current_canvas() -> tuple[int, int]:
+            _, fresh_config, _, fresh_index = RASTER.resolve_project(project_dir)
+            return RASTER._canvas(fresh_config, fresh_index)
+
+    else:
+        svg_path, project_dir, config = resolve_project(raw_target)
+        source_name = svg_path.name
+
+        def artwork_payload() -> bytes:
+            return svg_path.read_bytes()
+
+        def current_manifest() -> dict[str, Any]:
+            return build_manifest(svg_path, current_config())
+
+        def current_config() -> dict[str, Any]:
+            return resolve_project(project_dir)[2]
+
+        def current_canvas() -> tuple[int, int]:
+            root = parse_svg(svg_path)
+            values = [float(value) for value in root.get("viewBox", "0 0 1200 800").replace(",", " ").split()]
+            return max(1, round(values[2])), max(1, round(values[3]))
+
     editor_dir = Path(__file__).resolve().parents[1] / "assets" / "editor"
     if not (editor_dir / "index.html").is_file():
         raise LayeredRedrawError(f"Editor assets are missing: {editor_dir}")
+
+    def refresh_manifest() -> dict[str, Any]:
+        manifest = current_manifest()
+        write_json(project_dir / "manifest.json", manifest)
+        return manifest
 
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -717,25 +1115,351 @@ def serve_editor(raw_target: str | Path, *, host: str, port: int, open_browser: 
             self.end_headers()
             self.wfile.write(payload)
 
+        def _send_json(self, value: Any, status: int = 200) -> None:
+            payload = json.dumps(value, ensure_ascii=False).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def _read_json_body(self, *, limit: int = 70_000_000) -> dict[str, Any]:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError as exc:
+                raise LayeredRedrawError("Invalid Content-Length") from exc
+            if length <= 0 or length > limit:
+                raise LayeredRedrawError("Request body is empty or exceeds the local editor limit")
+            try:
+                value = json.loads(self.rfile.read(length).decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise LayeredRedrawError(f"Invalid JSON request: {exc}") from exc
+            if not isinstance(value, dict):
+                raise LayeredRedrawError("Request JSON root must be an object")
+            return value
+
         def do_GET(self) -> None:
-            path = urlparse(self.path).path
+            parsed = urlparse(self.path)
+            path = parsed.path
             if path == "/api/artwork":
-                self._send_bytes(svg_path.read_bytes(), "image/svg+xml; charset=utf-8")
+                self._send_bytes(artwork_payload(), "image/svg+xml; charset=utf-8")
                 return
             if path == "/api/project":
-                manifest = build_manifest(svg_path, config)
+                manifest = current_manifest()
+                history = FEATURES.list_history(project_dir)
+                fresh_config = current_config()
                 payload = json.dumps(
                     {
                         "project_dir": str(project_dir),
-                        "source_name": svg_path.name,
-                        "config": config,
+                        "source_name": source_name,
+                        "config": fresh_config,
                         "manifest": manifest,
+                        "design_plan": FEATURES.load_design_plan(project_dir),
+                        "design_presets": FEATURES.list_design_presets(project_dir),
+                        "design_proofs": PROOFS.load_design_proofs(project_dir),
+                        "reference_intelligence": REFERENCES.public_state(project_dir),
+                        "history": {
+                            "count": history["count"],
+                            "snapshots": history["snapshots"][-12:],
+                        },
                     },
                     ensure_ascii=False,
                 ).encode("utf-8")
                 self._send_bytes(payload, "application/json; charset=utf-8")
                 return
+            if path == "/api/history":
+                self._send_json(FEATURES.list_history(project_dir))
+                return
+            if path.startswith("/api/history/") and path.endswith("/preview"):
+                snapshot_id = unquote(path.removeprefix("/api/history/").removesuffix("/preview").strip("/"))
+                preview = FEATURES.snapshot_preview(project_dir, snapshot_id)
+                if preview is None:
+                    self.send_error(404, "Snapshot preview not found")
+                    return
+                self._send_bytes(*preview)
+                return
+            if path == "/api/quality":
+                self._send_json(quality_report(project_dir))
+                return
+            if path == "/api/design-quality":
+                self._send_json(FEATURES.design_quality_report(project_dir))
+                return
+            if path == "/api/design":
+                self._send_json({"ok": True, "design_plan": FEATURES.load_design_plan(project_dir)})
+                return
+            if path == "/api/presets":
+                presets = FEATURES.list_design_presets(project_dir)
+                self._send_json({"ok": True, "count": len(presets), "presets": presets})
+                return
+            if path == "/api/proofs":
+                self._send_json({"ok": True, "proofs": PROOFS.load_design_proofs(project_dir)})
+                return
+            if path == "/api/references":
+                self._send_json({"ok": True, "reference_intelligence": REFERENCES.public_state(project_dir)})
+                return
+            if path.startswith("/api/references/"):
+                parts = [unquote(item) for item in path.split("/") if item]
+                if len(parts) != 4:
+                    self.send_error(404, "Reference artifact not found")
+                    return
+                run_values = parse_qs(parsed.query).get("run", [])
+                run_id = run_values[0] if run_values else None
+                try:
+                    payload, content_type = REFERENCES.reference_artifact(
+                        project_dir,
+                        parts[2],
+                        parts[3],
+                        run_id=run_id,
+                    )
+                except REFERENCES.ReferenceIntelligenceError as exc:
+                    self._send_json({"ok": False, "error": str(exc)}, status=404)
+                    return
+                self._send_bytes(payload, content_type)
+                return
+            if path.startswith("/api/proofs/") and path.endswith("/preview"):
+                parts = [unquote(item) for item in path.split("/") if item]
+                if len(parts) != 5:
+                    self.send_error(404, "Proof preview not found")
+                    return
+                payload, content_type = PROOFS.design_proof_preview(project_dir, parts[2], parts[3])
+                self._send_bytes(payload, content_type)
+                return
+            if path == "/api/styles":
+                self._send_json({"recipes": FEATURES.list_style_recipes()})
+                return
+            if mode == "raster-layered" and path.startswith("/api/layer/"):
+                layer_id = path.removeprefix("/api/layer/")
+                layer_path = raster_layer_paths.get(layer_id)
+                if layer_path is None or not layer_path.is_file():
+                    self.send_error(404, "Raster layer not found")
+                    return
+                self._send_bytes(layer_path.read_bytes(), "image/png")
+                return
             super().do_GET()
+
+        def do_POST(self) -> None:
+            path = urlparse(self.path).path
+            try:
+                body = self._read_json_body()
+                if path == "/api/references/add":
+                    data_url = body.get("data_url")
+                    if not isinstance(data_url, str) or not data_url.startswith("data:image/") or ";base64," not in data_url:
+                        raise LayeredRedrawError("Reference upload requires an image data_url")
+                    try:
+                        payload = base64.b64decode(data_url.split(",", 1)[1], validate=True)
+                    except (ValueError, binascii.Error) as exc:
+                        raise LayeredRedrawError("Reference data_url is not valid base64") from exc
+                    result = REFERENCES.register_reference_bytes(
+                        project_dir,
+                        payload,
+                        filename=str(body.get("filename", "reference-image")),
+                        role=str(body.get("role", "primary-rgb")),
+                        source_id=body.get("source_id") if isinstance(body.get("source_id"), str) else None,
+                        label=body.get("label") if isinstance(body.get("label"), str) else None,
+                        make_active=bool(body.get("make_active", True)),
+                    )
+                    self._send_json(result)
+                    return
+                if path == "/api/references/active":
+                    source_id = body.get("source_id")
+                    if not isinstance(source_id, str):
+                        raise LayeredRedrawError("Selecting a reference requires source_id")
+                    self._send_json(REFERENCES.set_active_reference(project_dir, source_id))
+                    return
+                if path == "/api/depth/estimate":
+                    self._send_json(REFERENCES.estimate_depth(
+                        project_dir,
+                        body.get("source_id") if isinstance(body.get("source_id"), str) else None,
+                        model_id=str(body.get("model", REFERENCES.DEFAULT_MODEL_ID)),
+                        device=str(body.get("device", "auto")),
+                        offline=bool(body.get("offline", False)),
+                        zone_count=body.get("zone_count", 5),
+                        low_percentile=body.get("low_percentile", 2.0),
+                        high_percentile=body.get("high_percentile", 98.0),
+                    ))
+                    return
+                if path == "/api/depth/register":
+                    data_url = body.get("data_url")
+                    if not isinstance(data_url, str) or not data_url.startswith("data:image/") or ";base64," not in data_url:
+                        raise LayeredRedrawError("Depth upload requires an image data_url")
+                    try:
+                        payload = base64.b64decode(data_url.split(",", 1)[1], validate=True)
+                    except (ValueError, binascii.Error) as exc:
+                        raise LayeredRedrawError("Depth data_url is not valid base64") from exc
+                    self._send_json(REFERENCES.register_depth_bytes(
+                        project_dir,
+                        payload,
+                        filename=str(body.get("filename", "depth-map.png")),
+                        source_id=body.get("source_id") if isinstance(body.get("source_id"), str) else None,
+                        raw_near=str(body.get("raw_near", "high")),
+                        zone_count=body.get("zone_count", 5),
+                        low_percentile=body.get("low_percentile", 0.0),
+                        high_percentile=body.get("high_percentile", 100.0),
+                    ))
+                    return
+                if path == "/api/planning-request":
+                    self._send_json(REFERENCES.create_planning_request(
+                        project_dir,
+                        str(body.get("prompt", "")),
+                        mode=str(body.get("mode", "faithful")),
+                        layer_budget=body.get("layer_budget", 10),
+                        source_id=body.get("source_id") if isinstance(body.get("source_id"), str) else None,
+                        depth_run_id=body.get("depth_run_id") if isinstance(body.get("depth_run_id"), str) else None,
+                        separate=body.get("separate"),
+                        merge_groups=body.get("merge_groups"),
+                        overlays=body.get("overlays"),
+                        depth_flattening=body.get("depth_flattening", 0.0),
+                        depth_exaggeration=body.get("depth_exaggeration", 0.0),
+                    ))
+                    return
+                if path == "/api/layer-plan/resolve":
+                    semantic_regions = body.get("semantic_regions")
+                    if not isinstance(semantic_regions, dict):
+                        raise LayeredRedrawError("Layer-plan resolution requires semantic_regions")
+                    self._send_json(REFERENCES.resolve_layer_plan(
+                        project_dir,
+                        semantic_regions,
+                        raw_request=body.get("planning_request") if isinstance(body.get("planning_request"), dict) else None,
+                    ))
+                    return
+                if path == "/api/mask":
+                    data_url = body.get("data_url")
+                    if not isinstance(data_url, str) or not data_url.startswith("data:image/png;base64,"):
+                        raise LayeredRedrawError("Mask request requires a PNG data_url")
+                    try:
+                        payload = base64.b64decode(data_url.split(",", 1)[1], validate=True)
+                    except (ValueError, binascii.Error) as exc:
+                        raise LayeredRedrawError("Mask data_url is not valid base64") from exc
+                    result = FEATURES.save_selection_mask(
+                        project_dir,
+                        payload,
+                        canvas=current_canvas(),
+                        selection_mode=str(body.get("selection_mode", "brush")),
+                    )
+                    self._send_json({"ok": True, "mask": result})
+                    return
+                if path == "/api/layer-settings":
+                    layer_id = body.pop("layer_id", None)
+                    if not isinstance(layer_id, str):
+                        raise LayeredRedrawError("layer-settings requires layer_id")
+                    allowed = {
+                        "opacity",
+                        "blend_mode",
+                        "visible",
+                        "locked",
+                        "label_zh",
+                        "label_en",
+                        "layer_type",
+                        "editable_source",
+                        "depends_on",
+                        "move",
+                    }
+                    unknown = sorted(set(body) - allowed)
+                    if unknown:
+                        raise LayeredRedrawError("Unknown layer settings: " + ", ".join(unknown))
+                    result = update_layer_settings(project_dir, layer_id, **body)
+                    self._send_json(result)
+                    return
+                if path == "/api/design/preset":
+                    preset_id = body.get("preset_id")
+                    if not isinstance(preset_id, str):
+                        raise LayeredRedrawError("design preset request requires preset_id")
+                    controls = body.get("controls")
+                    if controls is not None and not isinstance(controls, dict):
+                        raise LayeredRedrawError("design preset controls must be an object")
+                    result = FEATURES.apply_design_preset(
+                        project_dir,
+                        preset_id,
+                        controls=controls,
+                        workflow_mode=str(body.get("workflow_mode", "guided")),
+                        snapshot_manifest=current_manifest(),
+                    )
+                    result["manifest"] = refresh_manifest()
+                    self._send_json(result)
+                    return
+                if path == "/api/design":
+                    result = FEATURES.update_design_plan(
+                        project_dir,
+                        body,
+                        snapshot_manifest=current_manifest(),
+                    )
+                    result["manifest"] = refresh_manifest()
+                    self._send_json(result)
+                    return
+                if path == "/api/presets/save":
+                    preset_id = body.get("preset_id")
+                    name_zh = body.get("name_zh")
+                    name_en = body.get("name_en")
+                    if not all(isinstance(value, str) for value in (preset_id, name_zh, name_en)):
+                        raise LayeredRedrawError("Saving a preset requires preset_id, name_zh, and name_en")
+                    exposed = body.get("exposed_controls")
+                    if exposed is not None and not isinstance(exposed, list):
+                        raise LayeredRedrawError("exposed_controls must be an array")
+                    result = FEATURES.save_user_design_preset(
+                        project_dir,
+                        preset_id=preset_id,
+                        name_zh=name_zh,
+                        name_en=name_en,
+                        exposed_controls=exposed,
+                    )
+                    self._send_json(result)
+                    return
+                if path == "/api/proofs/create":
+                    result = PROOFS.create_design_proofs(
+                        project_dir,
+                        stage=str(body.get("stage", "full")),
+                        spread=body.get("spread", 0.65),
+                        base_revision=current_manifest().get("revision"),
+                    )
+                    self._send_json(result)
+                    return
+                if path == "/api/proofs/select":
+                    variant_id = body.get("variant_id")
+                    if not isinstance(variant_id, str):
+                        raise LayeredRedrawError("proof selection requires variant_id")
+                    result = PROOFS.select_design_proof(
+                        project_dir,
+                        variant_id,
+                        set_id=body.get("set_id") if isinstance(body.get("set_id"), str) else None,
+                    )
+                    self._send_json(result)
+                    return
+                if path == "/api/proofs/lock":
+                    locked = body.get("locked", True)
+                    if not isinstance(locked, bool):
+                        raise LayeredRedrawError("proof lock request requires a boolean locked value")
+                    result = PROOFS.set_design_proof_lock(
+                        project_dir,
+                        locked=locked,
+                        set_id=body.get("set_id") if isinstance(body.get("set_id"), str) else None,
+                    )
+                    self._send_json(result)
+                    return
+                if path == "/api/proofs/promote":
+                    result = PROOFS.promote_design_proof(
+                        project_dir,
+                        set_id=body.get("set_id") if isinstance(body.get("set_id"), str) else None,
+                        snapshot_manifest=current_manifest(),
+                    )
+                    result["manifest"] = refresh_manifest()
+                    self._send_json(result)
+                    return
+                if path == "/api/undo":
+                    snapshot_id = body.get("snapshot_id")
+                    if not isinstance(snapshot_id, str):
+                        raise LayeredRedrawError("undo requires snapshot_id")
+                    self._send_json(undo_to_snapshot(project_dir, snapshot_id))
+                    return
+                self.send_error(404, "Unknown local editor action")
+            except (
+                LayeredRedrawError,
+                RASTER.RasterLayeredError,
+                FEATURES.ProjectFeatureError,
+                PROOFS.DesignProofError,
+                REFERENCES.ReferenceIntelligenceError,
+            ) as exc:
+                self._send_json({"ok": False, "error": str(exc)}, status=400)
 
     server = ThreadingHTTPServer((host, port), Handler)
     url = f"http://{host}:{server.server_port}/"
@@ -766,24 +1490,219 @@ def build_parser() -> argparse.ArgumentParser:
     new_parser.add_argument("output")
     new_parser.add_argument("--title", default="Untitled Layered Redraw")
     new_parser.add_argument("--layers", type=int, default=10)
-    new_parser.add_argument("--width", type=int, default=1200)
-    new_parser.add_argument("--height", type=int, default=800)
+    new_parser.add_argument("--width", type=int)
+    new_parser.add_argument("--height", type=int)
+    new_parser.add_argument(
+        "--mode",
+        choices=("vector-strict", "raster-layered"),
+        default="vector-strict",
+        help="Create an editable SVG project or a registered PNG layer stack",
+    )
+    new_parser.add_argument(
+        "--style",
+        help="Style recipe slug; pixel recipes enable hard-alpha palette validation and nearest-neighbour previews",
+    )
+    new_parser.add_argument("--pixel-scale", type=int, default=4, help="Nearest-neighbour preview scale")
+    new_parser.add_argument("--palette-size", type=int, default=32, help="Pixel-art project color limit")
 
-    validate_parser = subparsers.add_parser("validate", help="Validate SVG and layer contracts")
+    validate_parser = subparsers.add_parser("validate", help="Validate vector or raster project contracts")
     validate_parser.add_argument("target")
     validate_parser.add_argument("--write-manifest", action="store_true")
 
     manifest_parser = subparsers.add_parser("manifest", help="Rebuild manifest.json")
     manifest_parser.add_argument("target")
 
-    split_parser = subparsers.add_parser("split", help="Export each top-level layer as SVG")
+    split_parser = subparsers.add_parser("split", help="Export SVG layers or report an existing PNG stack")
     split_parser.add_argument("target")
     split_parser.add_argument("--output-dir")
+
+    compose_parser = subparsers.add_parser("compose", help="Composite a raster-layered PNG stack")
+    compose_parser.add_argument("target")
 
     patch_parser = subparsers.add_parser("apply-patch", help="Apply a scoped structured patch")
     patch_parser.add_argument("target")
     patch_parser.add_argument("patch")
     patch_parser.add_argument("--dry-run", action="store_true")
+
+    quality_parser = subparsers.add_parser("quality", help="Run artistic-layer quality gates")
+    quality_parser.add_argument("target")
+
+    styles_parser = subparsers.add_parser("styles", help="List bundled machine-readable style recipes")
+    styles_parser.add_argument("style", nargs="?")
+
+    presets_parser = subparsers.add_parser("presets", help="List built-in and project design presets")
+    presets_parser.add_argument("preset", nargs="?")
+    presets_parser.add_argument("--project", help="Include user presets saved inside a project")
+
+    design_parser = subparsers.add_parser("design", help="Show the resolved design plan")
+    design_parser.add_argument("target")
+
+    design_check_parser = subparsers.add_parser("design-check", help="Validate composition and style intent")
+    design_check_parser.add_argument("target")
+
+    apply_preset_parser = subparsers.add_parser("apply-preset", help="Apply a guided design preset")
+    apply_preset_parser.add_argument("target")
+    apply_preset_parser.add_argument("preset")
+    apply_preset_parser.add_argument("--mode", choices=("guided", "expert"), default="guided")
+    apply_preset_parser.add_argument(
+        "--control",
+        action="append",
+        default=[],
+        help="Guided control in name=0..1 form; repeat as needed",
+    )
+
+    save_preset_parser = subparsers.add_parser("save-preset", help="Save the expert design plan as a user preset")
+    save_preset_parser.add_argument("target")
+    save_preset_parser.add_argument("preset_id")
+    save_preset_parser.add_argument("--name-zh", required=True)
+    save_preset_parser.add_argument("--name-en", required=True)
+    save_preset_parser.add_argument(
+        "--expose",
+        nargs="*",
+        choices=sorted(FEATURES.GUIDED_CONTROL_KEYS),
+        help="Guided controls exposed by the saved preset",
+    )
+
+    snapshot_parser = subparsers.add_parser("snapshot", help="Create a recoverable project revision")
+    snapshot_parser.add_argument("target")
+    snapshot_parser.add_argument("--reason", default="Manual snapshot")
+
+    history_parser = subparsers.add_parser("history", help="List recoverable project revisions")
+    history_parser.add_argument("target")
+
+    diff_parser = subparsers.add_parser("diff", help="Compare the current project with a history revision")
+    diff_parser.add_argument("target")
+    diff_parser.add_argument("snapshot")
+
+    undo_parser = subparsers.add_parser("undo", help="Restore a history revision after taking a safety snapshot")
+    undo_parser.add_argument("target")
+    undo_parser.add_argument("snapshot")
+
+    settings_parser = subparsers.add_parser("layer-settings", help="Apply non-destructive layer composition controls")
+    settings_parser.add_argument("target")
+    settings_parser.add_argument("layer_id")
+    settings_parser.add_argument("--opacity", type=float)
+    settings_parser.add_argument("--blend-mode", choices=sorted(RASTER.SUPPORTED_BLEND_MODES))
+    visibility_group = settings_parser.add_mutually_exclusive_group()
+    visibility_group.add_argument("--visible", action="store_true")
+    visibility_group.add_argument("--hidden", action="store_true")
+    lock_group = settings_parser.add_mutually_exclusive_group()
+    lock_group.add_argument("--locked", action="store_true")
+    lock_group.add_argument("--unlocked", action="store_true")
+    settings_parser.add_argument("--label-zh")
+    settings_parser.add_argument("--label-en")
+    settings_parser.add_argument("--layer-type", choices=sorted(RASTER.SUPPORTED_LAYER_TYPES))
+    settings_parser.add_argument("--editable-source")
+    settings_parser.add_argument("--depends-on", nargs="*")
+    settings_parser.add_argument("--move", choices=("up", "down", "top", "bottom"))
+
+    export_ora_parser = subparsers.add_parser("export-ora", help="Export a raster project to OpenRaster")
+    export_ora_parser.add_argument("target")
+    export_ora_parser.add_argument("--output")
+
+    import_ora_parser = subparsers.add_parser("import-ora", help="Create or update a project from OpenRaster")
+    import_ora_parser.add_argument("ora")
+    import_ora_parser.add_argument("output")
+
+    direction_parser = subparsers.add_parser("direction-board", help="Build a 2–6 candidate style contact sheet")
+    direction_parser.add_argument("target")
+    direction_parser.add_argument(
+        "--candidate",
+        action="append",
+        required=True,
+        help="Candidate in label=path form; repeat 2–6 times",
+    )
+    direction_parser.add_argument("--selected")
+
+    proofs_parser = subparsers.add_parser("proofs", help="Show parameterized A/B/C design-proof sets")
+    proofs_parser.add_argument("target")
+    proofs_parser.add_argument("--set", dest="set_id", help="Return one proof set by id")
+
+    proof_create_parser = subparsers.add_parser("proof-create", help="Generate three parameterized design proofs")
+    proof_create_parser.add_argument("target")
+    proof_create_parser.add_argument(
+        "--stage",
+        choices=("structure", "colour-material", "color-material", "full"),
+        default="full",
+    )
+    proof_create_parser.add_argument("--spread", type=float, default=0.65, help="Variant separation from 0.1 to 1.0")
+
+    proof_select_parser = subparsers.add_parser("proof-select", help="Select proof A, B, or C")
+    proof_select_parser.add_argument("target")
+    proof_select_parser.add_argument("variant", choices=("A", "B", "C", "a", "b", "c"))
+    proof_select_parser.add_argument("--set", dest="set_id")
+
+    proof_lock_parser = subparsers.add_parser("proof-lock", help="Lock or unlock the selected proof direction")
+    proof_lock_parser.add_argument("target")
+    proof_lock_parser.add_argument("--set", dest="set_id")
+    proof_lock_parser.add_argument("--unlock", action="store_true")
+
+    proof_promote_parser = subparsers.add_parser("proof-promote", help="Promote a locked proof into design-plan.json")
+    proof_promote_parser.add_argument("target")
+    proof_promote_parser.add_argument("--set", dest="set_id")
+
+    proof_register_parser = subparsers.add_parser("proof-register", help="Attach a rendered PNG preview to a proof")
+    proof_register_parser.add_argument("target")
+    proof_register_parser.add_argument("variant", choices=("A", "B", "C", "a", "b", "c"))
+    proof_register_parser.add_argument("source")
+    proof_register_parser.add_argument("--set", dest="set_id")
+
+    references_parser = subparsers.add_parser("references", help="Show RGB, depth, and layer-planning state")
+    references_parser.add_argument("target")
+
+    reference_add_parser = subparsers.add_parser("reference-add", help="Register an RGB or visual reference")
+    reference_add_parser.add_argument("target")
+    reference_add_parser.add_argument("image")
+    reference_add_parser.add_argument("--role", choices=sorted(REFERENCES.REFERENCE_ROLES), default="primary-rgb")
+    reference_add_parser.add_argument("--id", dest="source_id")
+    reference_add_parser.add_argument("--label")
+    reference_add_parser.add_argument("--inactive", action="store_true")
+
+    reference_active_parser = subparsers.add_parser("reference-active", help="Choose the active scene RGB reference")
+    reference_active_parser.add_argument("target")
+    reference_active_parser.add_argument("source_id")
+
+    depth_estimate_parser = subparsers.add_parser("depth-estimate", help="Estimate relative depth for a scene RGB")
+    depth_estimate_parser.add_argument("target")
+    depth_estimate_parser.add_argument("--source", dest="source_id")
+    depth_estimate_parser.add_argument("--model", default=REFERENCES.DEFAULT_MODEL_ID)
+    depth_estimate_parser.add_argument("--device", default="auto")
+    depth_estimate_parser.add_argument("--offline", action="store_true")
+    depth_estimate_parser.add_argument("--zones", type=int, default=5)
+    depth_estimate_parser.add_argument("--low-percentile", type=float, default=2.0)
+    depth_estimate_parser.add_argument("--high-percentile", type=float, default=98.0)
+
+    depth_register_parser = subparsers.add_parser("depth-register", help="Pair an existing single-channel depth map")
+    depth_register_parser.add_argument("target")
+    depth_register_parser.add_argument("depth")
+    depth_register_parser.add_argument("--source", dest="source_id")
+    depth_register_parser.add_argument("--raw-near", choices=("high", "low"), required=True)
+    depth_register_parser.add_argument("--zones", type=int, default=5)
+    depth_register_parser.add_argument("--low-percentile", type=float, default=0.0)
+    depth_register_parser.add_argument("--high-percentile", type=float, default=100.0)
+
+    plan_request_parser = subparsers.add_parser("plan-request", help="Create a prompt-directed semantic-layer request")
+    plan_request_parser.add_argument("target")
+    plan_request_parser.add_argument("prompt")
+    plan_request_parser.add_argument("--mode", choices=sorted(REFERENCES.PLAN_MODES), default="faithful")
+    plan_request_parser.add_argument("--layers", type=int, default=10)
+    plan_request_parser.add_argument("--source", dest="source_id")
+    plan_request_parser.add_argument("--depth-run")
+    plan_request_parser.add_argument("--separate", action="append", default=[])
+    plan_request_parser.add_argument(
+        "--merge",
+        action="append",
+        default=[],
+        help="Comma-separated region labels or ids to merge; repeat for another group",
+    )
+    plan_request_parser.add_argument("--overlay", action="append", default=[])
+    plan_request_parser.add_argument("--flatten-depth", type=float, default=0.0)
+    plan_request_parser.add_argument("--exaggerate-depth", type=float, default=0.0)
+
+    plan_resolve_parser = subparsers.add_parser("plan-resolve", help="Resolve validated semantic regions into 5-20 layers")
+    plan_resolve_parser.add_argument("target")
+    plan_resolve_parser.add_argument("regions")
+    plan_resolve_parser.add_argument("--request")
 
     serve_parser = subparsers.add_parser("serve", help="Launch the local selection editor")
     serve_parser.add_argument("target")
@@ -797,27 +1716,263 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "new":
+            style = FEATURES.normalize_style_id(args.style) if isinstance(args.style, str) else None
+            recipe = None
+            if style:
+                try:
+                    recipe = FEATURES.resolve_style_recipe(style)
+                except FEATURES.ProjectFeatureError:
+                    recipe = None
+            pixel_art = args.mode == "raster-layered" and (
+                style == "pixel-art" or isinstance(recipe, dict) and isinstance(recipe.get("pixel_art"), dict)
+            )
+            width = args.width if args.width is not None else (320 if pixel_art else 1200)
+            height = args.height if args.height is not None else (240 if pixel_art else 800)
             result = create_project(
                 args.output,
                 title=args.title,
                 layers=args.layers,
-                width=args.width,
-                height=args.height,
+                width=width,
+                height=height,
+                mode=args.mode,
+                style=style,
+                pixel_scale=args.pixel_scale,
+                palette_size=args.palette_size,
             )
         elif args.command == "validate":
             result = validate_project(args.target, write_manifest_file=args.write_manifest)
             print_result(result)
             return 0 if result["ok"] else 1
         elif args.command == "manifest":
-            svg_path, project_dir, config = resolve_project(args.target)
-            manifest = build_manifest(svg_path, config)
-            output = project_dir / "manifest.json"
-            write_json(output, manifest)
+            if target_output_mode(args.target) == "raster-layered":
+                project_dir, _, _, _ = RASTER.resolve_project(args.target)
+                manifest = RASTER.build_manifest(project_dir)
+                output = project_dir / "manifest.json"
+                write_json(output, manifest)
+            else:
+                svg_path, project_dir, config = resolve_project(args.target)
+                manifest = build_manifest(svg_path, config)
+                output = project_dir / "manifest.json"
+                write_json(output, manifest)
             result = {"manifest": str(output), "revision": manifest["revision"], "layers": manifest["layer_count"]}
         elif args.command == "split":
             result = split_layers(args.target, args.output_dir)
+        elif args.command == "compose":
+            if target_output_mode(args.target) != "raster-layered":
+                raise LayeredRedrawError("compose is available only for raster-layered projects")
+            result = RASTER.compose_project(args.target)
         elif args.command == "apply-patch":
             result = apply_patch(args.target, args.patch, dry_run=args.dry_run)
+        elif args.command == "quality":
+            result = quality_report(args.target)
+        elif args.command == "styles":
+            if args.style:
+                result = FEATURES.resolve_style_recipe(args.style)
+            else:
+                result = {"recipes": FEATURES.list_style_recipes()}
+        elif args.command == "presets":
+            if args.preset:
+                result = FEATURES.resolve_design_preset(args.preset, args.project)
+            else:
+                presets = FEATURES.list_design_presets(args.project)
+                result = {"count": len(presets), "presets": presets}
+        elif args.command == "design":
+            project_dir, _ = project_manifest(args.target)
+            result = FEATURES.load_design_plan(project_dir)
+        elif args.command == "design-check":
+            project_dir, _ = project_manifest(args.target)
+            result = FEATURES.design_quality_report(project_dir)
+        elif args.command == "apply-preset":
+            control_values: dict[str, float] = {}
+            for raw_control in args.control:
+                if "=" not in raw_control:
+                    raise LayeredRedrawError("--control must use name=value form")
+                name, raw_value = raw_control.split("=", 1)
+                try:
+                    control_values[name.strip()] = float(raw_value)
+                except ValueError as exc:
+                    raise LayeredRedrawError(f"Invalid control value: {raw_control}") from exc
+            project_dir, manifest = project_manifest(args.target)
+            result = FEATURES.apply_design_preset(
+                project_dir,
+                args.preset,
+                controls=control_values,
+                workflow_mode=args.mode,
+                snapshot_manifest=manifest,
+            )
+            if target_output_mode(project_dir) == "raster-layered":
+                refreshed_manifest = RASTER.build_manifest(project_dir)
+            else:
+                refreshed_svg, _, refreshed_config = resolve_project(project_dir)
+                refreshed_manifest = build_manifest(refreshed_svg, refreshed_config)
+            write_json(project_dir / "manifest.json", refreshed_manifest)
+            result["manifest"] = refreshed_manifest
+        elif args.command == "save-preset":
+            project_dir, _ = project_manifest(args.target)
+            result = FEATURES.save_user_design_preset(
+                project_dir,
+                preset_id=args.preset_id,
+                name_zh=args.name_zh,
+                name_en=args.name_en,
+                exposed_controls=args.expose,
+            )
+        elif args.command == "snapshot":
+            result = create_manual_snapshot(args.target, args.reason)
+        elif args.command == "history":
+            project_dir, _ = project_manifest(args.target)
+            result = FEATURES.list_history(project_dir)
+        elif args.command == "diff":
+            result = history_diff(args.target, args.snapshot)
+        elif args.command == "undo":
+            result = undo_to_snapshot(args.target, args.snapshot)
+        elif args.command == "layer-settings":
+            visible = True if args.visible else False if args.hidden else None
+            locked = True if args.locked else False if args.unlocked else None
+            settings = {
+                "opacity": args.opacity,
+                "blend_mode": args.blend_mode,
+                "visible": visible,
+                "locked": locked,
+                "label_zh": args.label_zh,
+                "label_en": args.label_en,
+                "layer_type": args.layer_type,
+                "editable_source": args.editable_source,
+                "depends_on": args.depends_on,
+                "move": args.move,
+            }
+            result = update_layer_settings(
+                args.target,
+                args.layer_id,
+                **{key: value for key, value in settings.items() if value is not None},
+            )
+        elif args.command == "export-ora":
+            result = RASTER.export_ora(args.target, args.output)
+        elif args.command == "import-ora":
+            result = RASTER.import_ora(args.ora, args.output)
+        elif args.command == "direction-board":
+            candidates: list[tuple[str, Path]] = []
+            for raw_candidate in args.candidate:
+                if "=" not in raw_candidate:
+                    raise LayeredRedrawError("--candidate must use label=path form")
+                label, raw_path = raw_candidate.split("=", 1)
+                if not label.strip() or not raw_path.strip():
+                    raise LayeredRedrawError("--candidate requires both a label and a path")
+                candidates.append((label.strip(), Path(raw_path.strip())))
+            project_dir, _ = project_manifest(args.target)
+            result = FEATURES.create_direction_board(
+                project_dir, candidates, selected=args.selected
+            )
+        elif args.command == "proofs":
+            project_dir, _ = project_manifest(args.target)
+            result = PROOFS.load_design_proofs(project_dir)
+            if args.set_id:
+                match = next((item for item in result["sets"] if item.get("id") == args.set_id), None)
+                if match is None:
+                    raise LayeredRedrawError(f"Unknown design-proof set: {args.set_id}")
+                result = match
+        elif args.command == "proof-create":
+            project_dir, manifest = project_manifest(args.target)
+            result = PROOFS.create_design_proofs(
+                project_dir,
+                stage=args.stage,
+                spread=args.spread,
+                base_revision=manifest.get("revision"),
+            )
+        elif args.command == "proof-select":
+            project_dir, _ = project_manifest(args.target)
+            result = PROOFS.select_design_proof(project_dir, args.variant, set_id=args.set_id)
+        elif args.command == "proof-lock":
+            project_dir, _ = project_manifest(args.target)
+            result = PROOFS.set_design_proof_lock(project_dir, locked=not args.unlock, set_id=args.set_id)
+        elif args.command == "proof-promote":
+            project_dir, manifest = project_manifest(args.target)
+            result = PROOFS.promote_design_proof(
+                project_dir,
+                set_id=args.set_id,
+                snapshot_manifest=manifest,
+            )
+            if target_output_mode(project_dir) == "raster-layered":
+                refreshed_manifest = RASTER.build_manifest(project_dir)
+            else:
+                refreshed_svg, _, refreshed_config = resolve_project(project_dir)
+                refreshed_manifest = build_manifest(refreshed_svg, refreshed_config)
+            write_json(project_dir / "manifest.json", refreshed_manifest)
+            result["manifest"] = refreshed_manifest
+        elif args.command == "proof-register":
+            project_dir, _ = project_manifest(args.target)
+            result = PROOFS.register_design_proof_preview(
+                project_dir,
+                args.variant,
+                args.source,
+                set_id=args.set_id,
+            )
+        elif args.command == "references":
+            project_dir, _ = project_manifest(args.target)
+            result = REFERENCES.public_state(project_dir)
+        elif args.command == "reference-add":
+            project_dir, _ = project_manifest(args.target)
+            result = REFERENCES.register_reference_file(
+                project_dir,
+                args.image,
+                role=args.role,
+                source_id=args.source_id,
+                label=args.label,
+                make_active=not args.inactive,
+            )
+        elif args.command == "reference-active":
+            project_dir, _ = project_manifest(args.target)
+            result = REFERENCES.set_active_reference(project_dir, args.source_id)
+        elif args.command == "depth-estimate":
+            project_dir, _ = project_manifest(args.target)
+            result = REFERENCES.estimate_depth(
+                project_dir,
+                args.source_id,
+                model_id=args.model,
+                device=args.device,
+                offline=args.offline,
+                zone_count=args.zones,
+                low_percentile=args.low_percentile,
+                high_percentile=args.high_percentile,
+            )
+        elif args.command == "depth-register":
+            project_dir, _ = project_manifest(args.target)
+            result = REFERENCES.register_depth_map(
+                project_dir,
+                args.depth,
+                args.source_id,
+                raw_near=args.raw_near,
+                zone_count=args.zones,
+                low_percentile=args.low_percentile,
+                high_percentile=args.high_percentile,
+            )
+        elif args.command == "plan-request":
+            project_dir, _ = project_manifest(args.target)
+            merge_groups = []
+            for raw_group in args.merge:
+                group = [item.strip() for item in raw_group.split(",") if item.strip()]
+                if len(group) < 2:
+                    raise LayeredRedrawError("--merge needs at least two comma-separated region labels or ids")
+                merge_groups.append(group)
+            result = REFERENCES.create_planning_request(
+                project_dir,
+                args.prompt,
+                mode=args.mode,
+                layer_budget=args.layers,
+                source_id=args.source_id,
+                depth_run_id=args.depth_run,
+                separate=args.separate,
+                merge_groups=merge_groups,
+                overlays=args.overlay,
+                depth_flattening=args.flatten_depth,
+                depth_exaggeration=args.exaggerate_depth,
+            )
+        elif args.command == "plan-resolve":
+            project_dir, _ = project_manifest(args.target)
+            result = REFERENCES.resolve_layer_plan(
+                project_dir,
+                args.regions,
+                raw_request=args.request,
+            )
         elif args.command == "serve":
             serve_editor(args.target, host=args.host, port=args.port, open_browser=args.open)
             return 0
@@ -825,7 +1980,13 @@ def main(argv: list[str] | None = None) -> int:
             raise LayeredRedrawError(f"Unknown command: {args.command}")
         print_result(result)
         return 0
-    except LayeredRedrawError as exc:
+    except (
+        LayeredRedrawError,
+        RASTER.RasterLayeredError,
+        FEATURES.ProjectFeatureError,
+        PROOFS.DesignProofError,
+        REFERENCES.ReferenceIntelligenceError,
+    ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

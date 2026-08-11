@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "kind": "layered-redraw-design-plan",
+  "workflow_mode": "guided",
+  "selected_preset": "gba-warm-story",
+  "preset_source": "built-in",
+  "style": "pixel-art",
+  "artwork_text": false,
+  "controls": {
+    "abstraction": 0.6,
+    "color_intensity": 0.72,
+    "faithfulness": 0.5,
+    "space_flattening": 0.48,
+    "subject_emphasis": 0.72
+  },
+  "parameters": {
+    "composition": {
+      "balance": "narrative-path",
+      "crop_strength": 0.22,
+      "negative_space": 0.24,
+      "asymmetry": 0.54,
+      "subject_scale": 1.16
+    },
+    "space": {
+      "flattening": 0.48,
+      "depth_separation": 0.72,
+      "perspective_strength": 0.62
+    },
+    "form": {
+      "simplification": 0.66,
+      "geometricity": 0.68,
+      "exaggeration": 0.24,
+      "contour_closure": 0.76
+    },
+    "value": {
+      "groups": 5,
+      "contrast": 0.7,
+      "focal_contrast": 0.9
+    },
+    "color": {
+      "intensity": 0.72,
+      "palette_size": 24,
+      "warmth": 0.32,
+      "accent_ratio": 0.1
+    },
+    "edge": {
+      "hardness": 1.0,
+      "hierarchy": 0.7
+    },
+    "material": {
+      "texture": 0.42,
+      "mark_scale": 0.32
+    }
+  },
+  "updated_at": "2026-08-10T23:28:32.950628+00:00"
+}

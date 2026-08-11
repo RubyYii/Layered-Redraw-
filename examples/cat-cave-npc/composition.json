@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "kind": "layered-raster-composition",
+  "source_revision": "837fac5c3ee9",
+  "generated_at": "2026-08-11T12:20:36.050414+00:00",
+  "artwork": "artwork.png",
+  "artwork_sha256": "63a4909d47114c88150ae3dfebf65df0fd938114ed200783b57de5103651f7bd",
+  "preview": "preview.png",
+  "preview_sha256": "bb3bf49c3e0bc3b864fdcaee6eb9744bbf1d202f1ab631c8d551be9a03ecc10e",
+  "preview_scale": 4,
+  "preview_size": [
+    1536,
+    864
+  ],
+  "resampling": "nearest"
+}

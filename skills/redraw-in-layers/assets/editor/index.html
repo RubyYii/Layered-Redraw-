@@ -8,8 +8,9 @@
       content="default-src 'self' data: blob:; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'"
     />
     <meta name="theme-color" content="#f4f0e8" />
+    <link rel="icon" href="data:," />
     <title>Layered Redraw Studio</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=0.6.0" />
   </head>
   <body>
     <div class="app-shell">
@@ -26,8 +27,17 @@
 
         <div class="document-identity" aria-live="polite">
           <span class="document-kicker" data-i18n="currentProject">当前工程</span>
-          <strong id="documentName" data-i18n="noDocument">尚未打开 SVG</strong>
+          <strong id="documentName" data-i18n="noDocument">尚未打开工程</strong>
           <span class="revision-badge" id="revisionBadge">—</span>
+        </div>
+
+        <div class="workflow-switch" role="group" aria-label="工作模式" data-i18n-aria-label="workflowModeLabel">
+          <button class="workflow-button is-active" type="button" data-workflow-mode="guided" aria-pressed="true">
+            <span data-i18n="guidedMode">引导创作</span>
+          </button>
+          <button class="workflow-button" type="button" data-workflow-mode="expert" aria-pressed="false">
+            <span data-i18n="expertMode">艺术指导</span>
+          </button>
         </div>
 
         <nav class="top-actions" aria-label="文件与工程操作" data-i18n-aria-label="fileActionsLabel">
@@ -44,6 +54,12 @@
           </button>
           <button class="button button-quiet" id="validateButton" type="button">
             <span aria-hidden="true">✓</span> <span data-i18n="validateStructure">检查结构</span>
+          </button>
+          <button class="button button-quiet" id="qualityButton" type="button" disabled>
+            <span aria-hidden="true">◎</span> <span data-i18n="qualityReport">质量报告</span>
+          </button>
+          <button class="button button-quiet" id="undoButton" type="button" disabled>
+            <span aria-hidden="true">↶</span> <span data-i18n="undoLast">撤销</span>
           </button>
           <button class="button button-primary" id="topExportButton" type="button" disabled>
             <span data-i18n="exportRequest">导出修改请求</span>
@@ -66,12 +82,64 @@
             <button type="button" id="clearSelectionButton" data-i18n="clearSelection" disabled>清除选择</button>
           </div>
 
-          <div class="layer-list" id="layerList" role="tree" aria-label="SVG 图层列表" data-i18n-aria-label="layerListLabel">
+          <div class="layer-list" id="layerList" role="tree" aria-label="语义图层列表" data-i18n-aria-label="layerListLabel">
             <div class="layer-empty">
               <span aria-hidden="true">◇</span>
-              <p data-i18n="layerEmptyInitial">打开一个分层 SVG 后，图层会出现在这里。</p>
+              <p data-i18n="layerEmptyInitial">打开分层工程后，图层会出现在这里。</p>
             </div>
           </div>
+
+          <section class="layer-controls expert-only" id="layerControls" hidden aria-labelledby="layerControlsTitle">
+            <div class="section-label-row">
+              <h3 id="layerControlsTitle" data-i18n="layerControlsTitle">图层合成</h3>
+              <span id="activeLayerType">—</span>
+            </div>
+            <label class="field-row" for="layerOpacityInput">
+              <span data-i18n="opacityLabel">透明度</span>
+              <output id="layerOpacityValue">100%</output>
+            </label>
+            <input id="layerOpacityInput" type="range" min="0" max="100" value="100" />
+            <label class="field-stack" for="blendModeSelect">
+              <span data-i18n="blendModeLabel">混合模式</span>
+              <select id="blendModeSelect">
+                <option value="normal" data-i18n="blendNormal">正常</option>
+                <option value="multiply" data-i18n="blendMultiply">正片叠底</option>
+                <option value="screen" data-i18n="blendScreen">滤色</option>
+                <option value="overlay" data-i18n="blendOverlay">叠加</option>
+                <option value="darken" data-i18n="blendDarken">变暗</option>
+                <option value="lighten" data-i18n="blendLighten">变亮</option>
+              </select>
+            </label>
+            <div class="field-grid">
+              <label class="field-stack" for="layerTypeSelect">
+                <span data-i18n="layerTypeLabel">图层类型</span>
+                <select id="layerTypeSelect">
+                  <option value="raster" data-i18n="layerTypeRaster">位图</option>
+                  <option value="vector" data-i18n="layerTypeVector">矢量源＋位图渲染</option>
+                  <option value="pixel" data-i18n="layerTypePixel">像素</option>
+                </select>
+              </label>
+              <label class="field-stack" for="editableSourceInput">
+                <span data-i18n="editableSourceLabel">可编辑源文件</span>
+                <input id="editableSourceInput" type="text" placeholder="layers/source.svg" />
+              </label>
+            </div>
+            <div class="field-grid">
+              <label class="field-stack" for="labelZhInput">
+                <span data-i18n="labelZh">中文名称</span>
+                <input id="labelZhInput" type="text" />
+              </label>
+              <label class="field-stack" for="labelEnInput">
+                <span data-i18n="labelEn">英文名称</span>
+                <input id="labelEnInput" type="text" />
+              </label>
+            </div>
+            <div class="layer-order-actions">
+              <button type="button" id="moveLayerDown" data-i18n="moveDown">下移</button>
+              <button type="button" id="moveLayerUp" data-i18n="moveUp">上移</button>
+              <button type="button" id="applyLayerSettings" data-i18n="applySettings">应用设置</button>
+            </div>
+          </section>
 
           <div class="layer-legend" aria-label="图层状态图例" data-i18n-aria-label="layerLegendLabel">
             <span><i class="dot dot-sage"></i><span data-i18n="selectedLegend">已选择</span></span>
@@ -82,7 +150,7 @@
         <section class="canvas-panel" aria-labelledby="canvasTitle">
           <div class="canvas-toolbar">
             <div>
-              <p class="eyebrow">VECTOR CANVAS</p>
+              <p class="eyebrow" id="canvasKicker" data-i18n="canvasKickerVector">VECTOR CANVAS</p>
               <h2 id="canvasTitle" data-i18n="canvasTitle">画布</h2>
             </div>
             <div class="mode-switch" role="group" aria-label="选择方式" data-i18n-aria-label="selectionMethodLabel">
@@ -92,27 +160,36 @@
               <button class="mode-button" type="button" data-mode="bbox">
                 <span aria-hidden="true">⌗</span> <span data-i18n="modeBboxShort">框选</span>
               </button>
+              <button class="mode-button" type="button" data-mode="lasso">
+                <span aria-hidden="true">⌁</span> <span data-i18n="modeLassoShort">套索</span>
+              </button>
+              <button class="mode-button" type="button" data-mode="brush">
+                <span aria-hidden="true">●</span> <span data-i18n="modeBrushShort">画笔</span>
+              </button>
               <button class="mode-button" type="button" data-mode="semantic-text">
                 <span aria-hidden="true">Aa</span> <span data-i18n="modeTextShort">纯文本</span>
               </button>
             </div>
             <div class="canvas-meta">
+              <span class="revision-badge" id="outputModeBadge">—</span>
               <span id="canvasSize">—</span>
               <span class="separator" aria-hidden="true"></span>
               <span id="selectionSummary" data-i18n="selectionNone">未选择</span>
             </div>
           </div>
 
-          <div class="canvas-stage" id="canvasStage" tabindex="0" aria-label="可交互 SVG 画布" data-i18n-aria-label="canvasStageLabel">
+          <div class="canvas-stage" id="canvasStage" tabindex="0" aria-label="可交互分层画布" data-i18n-aria-label="canvasStageLabel">
             <div class="paper-grain" aria-hidden="true"></div>
             <div class="canvas-empty" id="canvasEmpty">
               <span class="empty-glyph" aria-hidden="true">◌</span>
-              <h3 data-i18n="canvasEmptyTitle">从一张可编辑的 SVG 开始</h3>
-              <p data-i18n="canvasEmptyBody">打开本地文件，或载入仓库中的运河示例。</p>
+              <h3 data-i18n="canvasEmptyTitle">从一个可编辑的分层工程开始</h3>
+              <p data-i18n="canvasEmptyBody">打开本地 SVG，或通过本地服务载入矢量／位图工程。</p>
               <label class="button button-primary" for="svgFileInput" data-i18n="chooseSvg">选择 SVG 文件</label>
             </div>
             <div class="artboard" id="artboard" hidden>
               <div class="svg-mount" id="svgMount"></div>
+              <img class="history-preview" id="historyPreview" alt="" hidden />
+              <canvas class="mask-canvas" id="maskCanvas" hidden></canvas>
             </div>
             <div class="selection-overlay" id="selectionOverlay" aria-hidden="true"></div>
             <div class="drag-box" id="dragBox" hidden aria-hidden="true"></div>
@@ -122,6 +199,16 @@
             <span class="status-dot" id="statusDot"></span>
             <span id="canvasHint" data-i18n="waitingForProject">等待载入工程</span>
             <span class="footer-shortcut" data-i18n="shortcuts">Esc 清除 · Ctrl/⌘ + Enter 生成请求</span>
+          </div>
+          <div class="mask-toolbar" id="maskToolbar" hidden>
+            <label for="brushSizeInput"><span data-i18n="brushSize">画笔大小</span> <output id="brushSizeValue">24</output></label>
+            <input id="brushSizeInput" type="range" min="2" max="120" value="24" />
+            <button type="button" id="clearMaskButton" data-i18n="clearMask">清除蒙版</button>
+          </div>
+          <div class="compare-toolbar" id="compareToolbar" hidden>
+            <label for="compareSlider"><span data-i18n="compareOpacity">历史版本透明度</span></label>
+            <input id="compareSlider" type="range" min="0" max="100" value="50" />
+            <button type="button" id="closeCompareButton" data-i18n="closeCompare">关闭对比</button>
           </div>
         </section>
 
@@ -133,6 +220,249 @@
             </div>
             <span class="step-label">PATCH 01</span>
           </div>
+
+          <section class="reference-studio" id="referenceStudio" aria-labelledby="referenceStudioTitle">
+            <div class="section-label-row reference-heading">
+              <div>
+                <p class="micro-kicker" data-i18n="referenceStudioKicker">REFERENCE INTELLIGENCE</p>
+                <h3 id="referenceStudioTitle" data-i18n="referenceStudioTitle">参考图与空间</h3>
+              </div>
+              <span class="mini-badge" id="referenceCount">0 RGB · 0 D</span>
+            </div>
+            <p class="design-intro" data-i18n="referenceStudioIntro">先保存视觉证据，再用深度辅助语义分层；深度区间不会直接变成画面图层。</p>
+
+            <div class="reference-source-actions">
+              <label class="button button-primary reference-upload" for="referenceFileInput">
+                <span aria-hidden="true">＋</span> <span data-i18n="addSceneRgb">添加场景图</span>
+              </label>
+              <input id="referenceFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/tiff" hidden />
+              <label class="button button-quiet reference-upload expert-only" for="depthFileInput">
+                <span aria-hidden="true">D</span> <span data-i18n="addDepthMap">导入深度图</span>
+              </label>
+              <input id="depthFileInput" type="file" accept="image/png,image/tiff" hidden />
+              <label class="field-stack compact-reference-field expert-only" for="referenceRoleSelect">
+                <span data-i18n="referenceRoleLabel">参考用途</span>
+                <select id="referenceRoleSelect">
+                  <option value="primary-rgb" data-i18n="rolePrimaryRgb">主场景</option>
+                  <option value="alternate-view" data-i18n="roleAlternateView">补充视角</option>
+                  <option value="style-reference" data-i18n="roleStyleReference">风格参考</option>
+                  <option value="palette-reference" data-i18n="rolePaletteReference">色彩参考</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="reference-list" id="referenceList" aria-live="polite">
+              <p class="reference-empty" data-i18n="referenceEmpty">还没有参考图。添加原图后，可估计深度或配对 RGB-D。</p>
+            </div>
+
+            <div class="reference-compare" id="referenceCompare" hidden>
+              <figure>
+                <div class="reference-frame"><img id="referenceRgbPreview" alt="" /></div>
+                <figcaption><span data-i18n="sourceRgbLabel">原始 RGB</span><small id="referenceRgbMeta">—</small></figcaption>
+              </figure>
+              <figure>
+                <div class="reference-frame depth-frame"><img id="referenceDepthPreview" alt="" /></div>
+                <figcaption><span data-i18n="relativeDepthLabel">相对深度</span><small data-i18n="depthNearWhite">近白 · 远黑</small></figcaption>
+              </figure>
+            </div>
+
+            <div class="reference-depth-row">
+              <label class="field-stack" for="depthZoneCount">
+                <span data-i18n="depthZonesLabel">空间区间</span>
+                <select id="depthZoneCount">
+                  <option value="3">3</option><option value="4">4</option><option value="5" selected>5</option>
+                  <option value="6">6</option><option value="7">7</option><option value="8">8</option>
+                </select>
+              </label>
+              <button class="button button-quiet" id="estimateDepthButton" type="button" disabled data-i18n="estimateDepth">估计相对深度</button>
+              <span class="depth-backend-status" id="depthBackendStatus" data-status="idle" data-i18n="depthBackendChecking">检查深度后端…</span>
+            </div>
+
+            <details class="reference-advanced expert-only">
+              <summary data-i18n="depthAdvancedTitle">深度与 RGB-D 高级设置</summary>
+              <div class="field-grid compact-fields">
+                <label class="field-stack" for="depthModelInput"><span data-i18n="depthModelLabel">模型</span><input id="depthModelInput" type="text" value="depth-anything/Depth-Anything-V2-Small-hf" /></label>
+                <label class="field-stack" for="depthDeviceSelect"><span data-i18n="depthDeviceLabel">设备</span><select id="depthDeviceSelect"><option value="auto">Auto</option><option value="cpu">CPU</option><option value="cuda">CUDA</option></select></label>
+              </div>
+              <div class="field-grid compact-fields">
+                <label class="field-stack" for="rawNearSelect"><span data-i18n="rawDepthDirectionLabel">导入图近处数值</span><select id="rawNearSelect"><option value="high" data-i18n="rawNearHigh">高值</option><option value="low" data-i18n="rawNearLow">低值</option></select></label>
+                <label class="check-inline"><input id="depthOfflineCheckbox" type="checkbox" /><span data-i18n="offlineModelLabel">只用本地模型缓存</span></label>
+              </div>
+            </details>
+
+            <div class="planning-divider"><span data-i18n="layerPlanningLabel">语义图层规划</span></div>
+            <label class="field-stack" for="planningPromptInput">
+              <span data-i18n="planningPromptLabel">你希望如何理解和拆分画面？</span>
+              <textarea id="planningPromptInput" rows="3" data-i18n-placeholder="planningPromptPlaceholder" placeholder="例如：人物保持独立；远处建筑合并；水面反光作为叠加层。"></textarea>
+            </label>
+            <div class="field-grid compact-fields planning-controls">
+              <label class="field-stack" for="planningModeSelect"><span data-i18n="planningModeLabel">空间解释</span><select id="planningModeSelect"><option value="faithful" data-i18n="planningFaithful">忠实空间</option><option value="art-directed" data-i18n="planningArtDirected">艺术化空间</option></select></label>
+              <label class="field-stack" for="planningLayerBudget"><span data-i18n="layerBudgetLabel">目标图层</span><input id="planningLayerBudget" type="number" min="5" max="20" value="10" /></label>
+            </div>
+            <div class="design-slider-grid planning-depth-controls expert-only">
+              <label class="design-slider"><span data-i18n="planningFlattenDepth">压平空间</span><output id="planningFlattenDepthValue">0%</output><input id="planningFlattenDepth" type="range" min="0" max="100" value="0" /></label>
+              <label class="design-slider"><span data-i18n="planningExaggerateDepth">夸张纵深</span><output id="planningExaggerateDepthValue">0%</output><input id="planningExaggerateDepth" type="range" min="0" max="100" value="0" /></label>
+            </div>
+            <button class="button button-primary design-apply" id="savePlanningRequestButton" type="button" disabled data-i18n="savePlanningRequest">保存图层规划请求</button>
+            <p class="reference-note" id="planningStatus" data-i18n="planningStatusEmpty">等待原图和规划意图。语义识别完成后才会生成正式图层方案。</p>
+          </section>
+
+          <section class="design-studio guided-design" id="guidedDesignPanel" aria-labelledby="guidedDesignTitle">
+            <div class="section-label-row">
+              <div>
+                <p class="micro-kicker" data-i18n="guidedDesignKicker">DESIGN PRESETS</p>
+                <h3 id="guidedDesignTitle" data-i18n="guidedDesignTitle">设计模板</h3>
+              </div>
+              <span class="mini-badge" id="presetCount">0</span>
+            </div>
+            <p class="design-intro" data-i18n="guidedDesignIntro">模板会同时改变构图、比例、空间、造型、明暗和色彩；不会向画面加入文字。</p>
+            <div class="preset-grid" id="presetGrid" aria-live="polite"></div>
+            <div class="guided-controls" id="guidedControls">
+              <label class="design-slider" for="faithfulnessInput">
+                <span data-i18n="faithfulnessLabel">忠于原图</span><output id="faithfulnessValue">65%</output>
+                <input id="faithfulnessInput" data-design-control="faithfulness" type="range" min="0" max="100" value="65" />
+              </label>
+              <label class="design-slider" for="abstractionInput">
+                <span data-i18n="abstractionLabel">抽象程度</span><output id="abstractionValue">45%</output>
+                <input id="abstractionInput" data-design-control="abstraction" type="range" min="0" max="100" value="45" />
+              </label>
+              <label class="design-slider" for="subjectEmphasisInput">
+                <span data-i18n="subjectEmphasisLabel">主体强调</span><output id="subjectEmphasisValue">60%</output>
+                <input id="subjectEmphasisInput" data-design-control="subject_emphasis" type="range" min="0" max="100" value="60" />
+              </label>
+              <label class="design-slider" for="spaceFlatteningInput">
+                <span data-i18n="spaceFlatteningLabel">空间平面化</span><output id="spaceFlatteningValue">35%</output>
+                <input id="spaceFlatteningInput" data-design-control="space_flattening" type="range" min="0" max="100" value="35" />
+              </label>
+              <label class="design-slider" for="colorIntensityInput">
+                <span data-i18n="colorIntensityLabel">色彩强度</span><output id="colorIntensityValue">55%</output>
+                <input id="colorIntensityInput" data-design-control="color_intensity" type="range" min="0" max="100" value="55" />
+              </label>
+            </div>
+            <button class="button button-primary design-apply" id="applyPresetButton" type="button" disabled data-i18n="applyPreset">应用设计模板</button>
+          </section>
+
+          <section class="design-studio expert-design" id="expertDesignPanel" hidden aria-labelledby="expertDesignTitle">
+            <div class="section-label-row">
+              <div>
+                <p class="micro-kicker" data-i18n="expertDesignKicker">VISUAL GRAMMAR</p>
+                <h3 id="expertDesignTitle" data-i18n="expertDesignTitle">完整设计系统</h3>
+              </div>
+              <span class="mini-badge" data-i18n="textFreeBadge">无画面文字</span>
+            </div>
+            <p class="design-intro" data-i18n="expertDesignIntro">直接控制构图和比例；材质只属于最后一组参数。</p>
+
+            <details class="design-group" open>
+              <summary data-i18n="compositionGroup">构图与比例</summary>
+              <label class="field-stack" for="balanceSelect"><span data-i18n="balanceLabel">平衡方式</span>
+                <select id="balanceSelect" data-design-path="composition.balance">
+                  <option value="observed" data-i18n="balanceObserved">保留观察关系</option>
+                  <option value="asymmetric" data-i18n="balanceAsymmetric">不对称平衡</option>
+                  <option value="monumental" data-i18n="balanceMonumental">中心纪念式</option>
+                  <option value="dynamic-diagonal" data-i18n="balanceDiagonal">动态对角线</option>
+                  <option value="layered-calm" data-i18n="balanceLayered">平静层叠</option>
+                  <option value="narrative-path" data-i18n="balanceNarrative">叙事路径</option>
+                </select>
+              </label>
+              <div class="design-slider-grid">
+                <label class="design-slider"><span data-i18n="subjectScaleLabel">主体比例</span><output data-for-path="composition.subject_scale">100%</output><input data-design-path="composition.subject_scale" type="range" min="50" max="200" value="100" /></label>
+                <label class="design-slider"><span data-i18n="cropStrengthLabel">重新裁切</span><output data-for-path="composition.crop_strength">10%</output><input data-design-path="composition.crop_strength" type="range" min="0" max="100" value="10" /></label>
+                <label class="design-slider"><span data-i18n="negativeSpaceLabel">留白比例</span><output data-for-path="composition.negative_space">22%</output><input data-design-path="composition.negative_space" type="range" min="0" max="100" value="22" /></label>
+                <label class="design-slider"><span data-i18n="asymmetryLabel">不对称程度</span><output data-for-path="composition.asymmetry">25%</output><input data-design-path="composition.asymmetry" type="range" min="0" max="100" value="25" /></label>
+              </div>
+            </details>
+
+            <details class="design-group">
+              <summary data-i18n="spaceFormGroup">空间与造型</summary>
+              <div class="design-slider-grid">
+                <label class="design-slider"><span data-i18n="flatteningLabel">透视压平</span><output data-for-path="space.flattening">15%</output><input data-design-path="space.flattening" type="range" min="0" max="100" value="15" /></label>
+                <label class="design-slider"><span data-i18n="depthLabel">景深分离</span><output data-for-path="space.depth_separation">80%</output><input data-design-path="space.depth_separation" type="range" min="0" max="100" value="80" /></label>
+                <label class="design-slider"><span data-i18n="perspectiveLabel">透视强度</span><output data-for-path="space.perspective_strength">85%</output><input data-design-path="space.perspective_strength" type="range" min="0" max="100" value="85" /></label>
+                <label class="design-slider"><span data-i18n="simplificationLabel">形状概括</span><output data-for-path="form.simplification">30%</output><input data-design-path="form.simplification" type="range" min="0" max="100" value="30" /></label>
+                <label class="design-slider"><span data-i18n="geometricityLabel">几何化</span><output data-for-path="form.geometricity">25%</output><input data-design-path="form.geometricity" type="range" min="0" max="100" value="25" /></label>
+                <label class="design-slider"><span data-i18n="exaggerationLabel">比例夸张</span><output data-for-path="form.exaggeration">8%</output><input data-design-path="form.exaggeration" type="range" min="0" max="100" value="8" /></label>
+                <label class="design-slider"><span data-i18n="closureLabel">轮廓闭合</span><output data-for-path="form.contour_closure">45%</output><input data-design-path="form.contour_closure" type="range" min="0" max="100" value="45" /></label>
+              </div>
+            </details>
+
+            <details class="design-group">
+              <summary data-i18n="valueColorGroup">明暗与色彩</summary>
+              <div class="field-grid compact-fields">
+                <label class="field-stack" for="valueGroupsSelect"><span data-i18n="valueGroupsLabel">明度组数</span><select id="valueGroupsSelect" data-design-path="value.groups"><option>2</option><option>3</option><option>4</option><option selected>5</option><option>6</option><option>7</option></select></label>
+                <label class="field-stack" for="paletteSizeInput"><span data-i18n="paletteSizeLabel">色板数量</span><input id="paletteSizeInput" data-design-path="color.palette_size" type="number" min="2" max="64" value="16" /></label>
+              </div>
+              <div class="design-slider-grid">
+                <label class="design-slider"><span data-i18n="contrastLabel">整体反差</span><output data-for-path="value.contrast">50%</output><input data-design-path="value.contrast" type="range" min="0" max="100" value="50" /></label>
+                <label class="design-slider"><span data-i18n="focalContrastLabel">焦点反差</span><output data-for-path="value.focal_contrast">62%</output><input data-design-path="value.focal_contrast" type="range" min="0" max="100" value="62" /></label>
+                <label class="design-slider"><span data-i18n="expertColorIntensityLabel">色彩强度</span><output data-for-path="color.intensity">48%</output><input data-design-path="color.intensity" type="range" min="0" max="100" value="48" /></label>
+                <label class="design-slider"><span data-i18n="warmthLabel">冷暖偏移</span><output data-for-path="color.warmth">0</output><input data-design-path="color.warmth" type="range" min="-100" max="100" value="0" /></label>
+                <label class="design-slider"><span data-i18n="accentRatioLabel">强调色比例</span><output data-for-path="color.accent_ratio">10%</output><input data-design-path="color.accent_ratio" type="range" min="0" max="100" value="10" /></label>
+              </div>
+            </details>
+
+            <details class="design-group">
+              <summary data-i18n="edgeMaterialGroup">边缘与材质</summary>
+              <div class="design-slider-grid">
+                <label class="design-slider"><span data-i18n="edgeHardnessLabel">边缘硬度</span><output data-for-path="edge.hardness">58%</output><input data-design-path="edge.hardness" type="range" min="0" max="100" value="58" /></label>
+                <label class="design-slider"><span data-i18n="edgeHierarchyLabel">边缘层级</span><output data-for-path="edge.hierarchy">65%</output><input data-design-path="edge.hierarchy" type="range" min="0" max="100" value="65" /></label>
+                <label class="design-slider"><span data-i18n="textureLabel">材质强度</span><output data-for-path="material.texture">18%</output><input data-design-path="material.texture" type="range" min="0" max="100" value="18" /></label>
+                <label class="design-slider"><span data-i18n="markScaleLabel">笔触尺度</span><output data-for-path="material.mark_scale">42%</output><input data-design-path="material.mark_scale" type="range" min="0" max="100" value="42" /></label>
+              </div>
+            </details>
+
+            <button class="button button-primary design-apply" id="saveDesignButton" type="button" disabled data-i18n="saveExpertDesign">保存专家设计</button>
+            <details class="preset-save-card">
+              <summary data-i18n="saveAsPreset">保存为普通模式模板</summary>
+              <div class="field-grid">
+                <label class="field-stack"><span data-i18n="presetNameZh">中文名称</span><input id="presetNameZh" type="text" /></label>
+                <label class="field-stack"><span data-i18n="presetNameEn">英文名称</span><input id="presetNameEn" type="text" /></label>
+              </div>
+              <label class="field-stack"><span data-i18n="presetIdLabel">模板 ID</span><input id="presetIdInput" type="text" placeholder="my-design-preset" /></label>
+              <fieldset class="exposed-controls">
+                <legend data-i18n="exposedControlsLabel">普通模式开放参数</legend>
+                <label><input type="checkbox" value="faithfulness" checked /> <span data-i18n="faithfulnessLabel">忠于原图</span></label>
+                <label><input type="checkbox" value="abstraction" checked /> <span data-i18n="abstractionLabel">抽象程度</span></label>
+                <label><input type="checkbox" value="subject_emphasis" checked /> <span data-i18n="subjectEmphasisLabel">主体强调</span></label>
+                <label><input type="checkbox" value="space_flattening" checked /> <span data-i18n="spaceFlatteningLabel">空间平面化</span></label>
+                <label><input type="checkbox" value="color_intensity" checked /> <span data-i18n="colorIntensityLabel">色彩强度</span></label>
+              </fieldset>
+              <button class="button button-quiet design-apply" id="savePresetButton" type="button" disabled data-i18n="createPreset">创建模板</button>
+            </details>
+          </section>
+
+          <section class="proof-studio" id="proofStudio" aria-labelledby="proofStudioTitle">
+            <div class="section-label-row proof-heading">
+              <div>
+                <p class="micro-kicker" data-i18n="proofStudioKicker">PARAMETER PROOFS</p>
+                <h3 id="proofStudioTitle" data-i18n="proofStudioTitle">参数设计稿</h3>
+              </div>
+              <span class="mini-badge" id="proofStatusBadge">0 / 3</span>
+            </div>
+            <p class="design-intro" data-i18n="proofStudioIntro">生成 A/B/C 三个低细节方向；先比较构图与色彩，再锁定一个方向进入正式分层绘制。</p>
+            <div class="proof-controls">
+              <label class="field-stack" for="proofStageSelect">
+                <span data-i18n="proofStageLabel">设计阶段</span>
+                <select id="proofStageSelect">
+                  <option value="structure" data-i18n="proofStageStructure">结构稿</option>
+                  <option value="colour-material" data-i18n="proofStageColour">色彩与材质稿</option>
+                  <option value="full" data-i18n="proofStageFull" selected>完整方向稿</option>
+                </select>
+              </label>
+              <label class="design-slider proof-spread proof-expert-only" for="proofSpreadInput">
+                <span data-i18n="proofSpreadLabel">方案差异</span><output id="proofSpreadValue">65%</output>
+                <input id="proofSpreadInput" type="range" min="10" max="100" value="65" />
+              </label>
+              <button class="button button-primary" id="generateProofsButton" type="button" disabled data-i18n="generateProofs">生成 A/B/C</button>
+            </div>
+            <div class="proof-grid" id="proofGrid" aria-live="polite">
+              <p class="proof-empty" data-i18n="proofEmpty">尚未生成设计稿。当前设计参数会作为三套方案的共同起点。</p>
+            </div>
+            <div class="proof-actions">
+              <button class="button button-quiet" id="proofLockButton" type="button" disabled data-i18n="lockProof">锁定方向</button>
+              <button class="button button-primary" id="proofPromoteButton" type="button" disabled data-i18n="promoteProof">晋升至正式绘制</button>
+            </div>
+            <p class="proof-note" data-i18n="proofSchematicNote">示意稿用于定方向；真实低精度预览可写回同一方案，晋升本身不会自动重画图层。</p>
+          </section>
 
           <section class="context-card" aria-labelledby="contextTitle">
             <div class="section-label-row">
@@ -169,6 +499,14 @@
                 <small data-i18n="protectUnselectedHint">在补丁中把其余图层列为不可改动。</small>
               </span>
             </label>
+            <label class="check-row">
+              <input id="linkedLayersCheckbox" type="checkbox" checked />
+              <span class="check-control" aria-hidden="true"></span>
+              <span>
+                <strong data-i18n="includeLinkedLayers">包含关联图层</strong>
+                <small data-i18n="includeLinkedLayersHint">把主体的光影、投影和依赖层一并纳入修改范围。</small>
+              </span>
+            </label>
           </section>
 
           <div class="request-actions">
@@ -190,12 +528,22 @@
             <h3 data-i18n="validationTitle">结构检查</h3>
             <ul id="validationResults"></ul>
           </section>
+
+          <section class="history-card" id="historyCard" aria-labelledby="historyTitle">
+            <div class="section-label-row">
+              <h3 id="historyTitle" data-i18n="historyTitle">版本历史</h3>
+              <span id="historyCount">0</span>
+            </div>
+            <div class="history-list" id="historyList">
+              <p data-i18n="historyEmpty">应用修改后，可恢复版本会显示在这里。</p>
+            </div>
+          </section>
         </aside>
       </main>
 
       <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     </div>
 
-    <script src="app.js" defer></script>
+    <script src="app.js?v=0.6.0" defer></script>
   </body>
 </html>

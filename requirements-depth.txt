@@ -1,0 +1,5 @@
+Pillow>=10.0
+numpy>=1.26
+torch>=2.2
+transformers>=4.45,<6
+safetensors>=0.4
