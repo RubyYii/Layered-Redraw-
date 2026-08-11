@@ -676,6 +676,21 @@ def quality_report(raw_target: str | Path) -> dict[str, Any]:
 
 
 def _atomic_save_png(image: Any, destination: Path) -> None:
+    # PNG compression is not byte-for-byte stable across every Pillow/zlib
+    # platform combination.  Derived previews are current when their decoded
+    # RGBA pixels are current, so keep an existing equivalent file instead of
+    # rewriting it with a platform-specific encoding.  This also keeps the
+    # composition hashes and generated_at value stable across Windows/Linux.
+    if destination.is_file():
+        try:
+            with _require_pillow().open(destination) as existing:
+                if existing.size == image.size and existing.convert("RGBA").tobytes() == image.convert(
+                    "RGBA"
+                ).tobytes():
+                    return
+        except OSError:
+            # A corrupt or unreadable destination is replaced below.
+            pass
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         mode="wb", suffix=".png", prefix="layered-raster-", dir=destination.parent, delete=False

@@ -659,6 +659,25 @@ class LayeredRedrawTests(unittest.TestCase):
             self.assertEqual(before, after)
 
     @unittest.skipUnless(Image is not None, "Pillow is required for raster fixture checks")
+    def test_atomic_png_save_preserves_equivalent_cross_platform_encoding(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            destination = Path(temp_dir) / "derived.png"
+            image = Image.new("RGBA", (12, 8), (24, 48, 72, 255))
+            image.save(destination, format="PNG", compress_level=0)
+            original_bytes = destination.read_bytes()
+
+            TOOLS.RASTER._atomic_save_png(image, destination)
+
+            self.assertEqual(destination.read_bytes(), original_bytes)
+
+            changed = image.copy()
+            changed.putpixel((0, 0), (25, 48, 72, 255))
+            TOOLS.RASTER._atomic_save_png(changed, destination)
+            self.assertNotEqual(destination.read_bytes(), original_bytes)
+            with Image.open(destination) as reopened:
+                self.assertEqual(reopened.convert("RGBA").getpixel((0, 0)), (25, 48, 72, 255))
+
+    @unittest.skipUnless(Image is not None, "Pillow is required for raster fixture checks")
     def test_public_npc_fixture_is_current_and_text_policy_is_truthful(self) -> None:
         source = ROOT / "examples" / "cat-cave-npc"
         with tempfile.TemporaryDirectory() as temp_dir:
