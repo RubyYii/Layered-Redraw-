@@ -44,4 +44,4 @@ Use `export-ora` for manual editing in Krita or another OpenRaster editor. The e
 
 ## Quality gate
 
-Run `quality` before delivery. Resolve errors and inspect warnings for duplicate rendered pixels, near-white semi-transparent halos, upper layers covering almost the full canvas, stale composites, missing recipes, unexpected layer counts, and pixel-contract violations. A numerical score is a summary, not permission to ignore visual inspection.
+Run `quality` before delivery. Resolve errors and inspect warnings for duplicate rendered pixels, near-white semi-transparent halos, upper layers covering almost the full canvas, stale composites, missing recipes, unexpected layer counts, and pixel-contract violations. Treat the numerical result as an engineering-contract score. It is not an artistic assessment and cannot replace human inspection of the composite and individual layers.

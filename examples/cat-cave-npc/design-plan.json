@@ -5,7 +5,15 @@
   "selected_preset": "gba-warm-story",
   "preset_source": "built-in",
   "style": "pixel-art",
-  "artwork_text": false,
+  "artwork_text": true,
+  "text_policy": {
+    "mode": "allow-declared-layers",
+    "allowed_layers": [
+      "layer-nameplate-text",
+      "layer-dialogue-text"
+    ],
+    "reason": "Explicit user request for in-world NPC interface text"
+  },
   "controls": {
     "abstraction": 0.6,
     "color_intensity": 0.72,

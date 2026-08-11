@@ -14,6 +14,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+from xml.etree import ElementTree as ET
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -24,6 +25,11 @@ except ImportError:  # pragma: no cover - optional raster extras
 
 
 STYLE_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+TEXT_LAYER_HINT_RE = re.compile(
+    r"(?:^|[-_\s/])(text|caption|title|logo|glyph|lettering)(?:$|[-_\s/])|"
+    r"文字|文本|标题|台词",
+    re.IGNORECASE,
+)
 HISTORY_KIND = "layered-redraw-history"
 SNAPSHOT_KIND = "layered-redraw-snapshot"
 DESIGN_PLAN_KIND = "layered-redraw-design-plan"
@@ -101,7 +107,11 @@ def sha256_file(path: Path) -> str:
 
 
 def design_plan_sha256(project_dir: str | Path, config: dict[str, Any]) -> str | None:
-    """Return the active design-plan digest without allowing project escapes."""
+    """Return a cross-platform semantic digest of the active design plan.
+
+    Hashing parsed JSON avoids false stale-artifact warnings when Git checks the
+    same file out with different newline conventions on Windows and Linux.
+    """
 
     relative = config.get("design_plan")
     if not isinstance(relative, str) or not relative.strip():
@@ -112,7 +122,11 @@ def design_plan_sha256(project_dir: str | Path, config: dict[str, Any]) -> str |
         candidate.relative_to(project)
     except ValueError as exc:
         raise ProjectFeatureError("design_plan must stay inside the project directory") from exc
-    return sha256_file(candidate) if candidate.is_file() else None
+    if not candidate.is_file():
+        return None
+    plan = read_json(candidate, required=True)
+    canonical = json.dumps(plan, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return sha256_bytes(canonical)
 
 
 def normalize_style_id(raw: str) -> str:
@@ -410,6 +424,11 @@ def build_design_plan(
         "preset_source": preset.get("source", "built-in"),
         "style": preset.get("style"),
         "artwork_text": False,
+        "text_policy": {
+            "mode": "forbid",
+            "allowed_layers": [],
+            "reason": "Default Layered Redraw artwork contract",
+        },
         "controls": resolved_controls,
         "parameters": parameters,
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -444,19 +463,33 @@ def initialize_design_plan(
     return plan
 
 
-def load_design_plan(project_dir: str | Path) -> dict[str, Any]:
+def validate_design_plan(plan: dict[str, Any], project_dir: str | Path) -> dict[str, Any]:
+    """Validate one design plan against the presets available to a project."""
     project = Path(project_dir).expanduser().resolve()
-    plan = read_json(project / "design-plan.json")
-    if not plan:
-        config = read_json(project / "project.json", required=True)
-        preset = resolve_design_preset(_default_preset_for_style(config.get("style")), project)
-        return build_design_plan(preset, workflow_mode=str(config.get("workflow_mode", "guided")))
     if plan.get("kind") != DESIGN_PLAN_KIND:
         raise ProjectFeatureError("design-plan.json does not match the Layered Redraw design contract")
     if plan.get("workflow_mode") not in WORKFLOW_MODES:
         raise ProjectFeatureError("design-plan.json workflow_mode must be guided or expert")
-    if plan.get("artwork_text") is not False:
-        raise ProjectFeatureError("v0.6 design plans must keep artwork_text disabled")
+    if not isinstance(plan.get("artwork_text"), bool):
+        raise ProjectFeatureError("design-plan.json artwork_text must be a boolean")
+    text_policy = plan.get("text_policy")
+    if text_policy is None and plan["artwork_text"] is False:
+        text_policy = {
+            "mode": "forbid",
+            "allowed_layers": [],
+            "reason": "Legacy text-free design plan",
+        }
+        plan["text_policy"] = text_policy
+    if not isinstance(text_policy, dict):
+        raise ProjectFeatureError("design-plan.json text_policy must be an object")
+    expected_mode = "allow-declared-layers" if plan["artwork_text"] else "forbid"
+    if text_policy.get("mode") != expected_mode:
+        raise ProjectFeatureError(f"design-plan.json text_policy.mode must be {expected_mode!r}")
+    allowed_layers = text_policy.get("allowed_layers", [])
+    if not isinstance(allowed_layers, list) or not all(isinstance(value, str) for value in allowed_layers):
+        raise ProjectFeatureError("design-plan.json text_policy.allowed_layers must be an array of layer IDs")
+    if plan["artwork_text"] and not allowed_layers:
+        raise ProjectFeatureError("Artwork text exceptions must name at least one allowed layer")
     plan["parameters"] = validate_design_parameters(plan.get("parameters"))
     controls = plan.get("controls")
     if not isinstance(controls, dict) or set(controls) != GUIDED_CONTROL_KEYS:
@@ -466,6 +499,16 @@ def load_design_plan(project_dir: str | Path) -> dict[str, Any]:
         controls,
     )
     return plan
+
+
+def load_design_plan(project_dir: str | Path) -> dict[str, Any]:
+    project = Path(project_dir).expanduser().resolve()
+    plan = read_json(project / "design-plan.json")
+    if not plan:
+        config = read_json(project / "project.json", required=True)
+        preset = resolve_design_preset(_default_preset_for_style(config.get("style")), project)
+        return build_design_plan(preset, workflow_mode=str(config.get("workflow_mode", "guided")))
+    return validate_design_plan(plan, project)
 
 
 def apply_design_preset(
@@ -544,7 +587,10 @@ def update_design_plan(
     )
     if snapshot_manifest and content_changed:
         create_snapshot(project, snapshot_manifest, reason="Before expert design update", force=True)
-    plan["artwork_text"] = False
+    plan.setdefault(
+        "text_policy",
+        {"mode": "forbid", "allowed_layers": [], "reason": "Default Layered Redraw artwork contract"},
+    )
     plan["updated_at"] = datetime.now(timezone.utc).isoformat()
     write_json(project / "design-plan.json", plan)
     config = read_json(project / "project.json", required=True)
@@ -600,6 +646,65 @@ def save_user_design_preset(
     return {"ok": True, "preset": {**preset, "source": "user"}, "file": str(path)}
 
 
+def _asset_text_evidence(project: Path, config: dict[str, Any]) -> dict[str, Any]:
+    """Inspect declared raster layers or vector nodes without pretending to run OCR."""
+
+    detected: list[str] = []
+    output_mode = str(config.get("output_mode", "vector-strict"))
+    if output_mode == "raster-layered":
+        relative = str(config.get("layer_index", "layers/index.json"))
+        index = read_json(project / relative)
+        for entry in index.get("layers", []) if isinstance(index.get("layers"), list) else []:
+            if not isinstance(entry, dict):
+                continue
+            layer_id = str(entry.get("id", ""))
+            searchable = " / ".join(
+                str(entry.get(key, ""))
+                for key in ("id", "label", "label_zh", "label_en", "content_type", "semantic_path")
+            )
+            if TEXT_LAYER_HINT_RE.search(searchable):
+                detected.append(layer_id or searchable)
+        return {
+            "scope": "declared-raster-layer-metadata",
+            "declared_text_layers": sorted(set(detected)),
+            "vector_text_nodes": [],
+            "pixel_ocr_performed": False,
+            "limitation": "Text baked into unnamed raster pixels is not detected; visual or OCR review is still required.",
+        }
+
+    svg_path = project / str(config.get("canonical_svg", "artwork.svg"))
+    if svg_path.is_file():
+        try:
+            root = ET.parse(svg_path).getroot()
+            for position, node in enumerate(root.iter(), start=1):
+                if str(node.tag).rsplit("}", 1)[-1] != "text":
+                    continue
+                style = str(node.get("style", "")).replace(" ", "").lower()
+                if node.get("display") == "none" or node.get("visibility") == "hidden" or "display:none" in style:
+                    continue
+                try:
+                    if float(node.get("opacity", "1")) <= 0:
+                        continue
+                except ValueError:
+                    pass
+                detected.append(node.get("id") or f"text-node-{position}")
+        except (OSError, ET.ParseError) as exc:
+            return {
+                "scope": "vector-node-scan",
+                "declared_text_layers": [],
+                "vector_text_nodes": [],
+                "pixel_ocr_performed": False,
+                "error": f"Unable to inspect SVG text nodes: {exc}",
+            }
+    return {
+        "scope": "vector-node-scan",
+        "declared_text_layers": [],
+        "vector_text_nodes": sorted(set(detected)),
+        "pixel_ocr_performed": False,
+        "limitation": "Outlined glyph paths are not OCR-scanned; visual review is still required.",
+    }
+
+
 def design_quality_report(project_dir: str | Path) -> dict[str, Any]:
     project = Path(project_dir).expanduser().resolve()
     errors: list[str] = []
@@ -615,10 +720,9 @@ def design_quality_report(project_dir: str | Path) -> dict[str, Any]:
     style_profile_complete = (
         isinstance(profile, dict)
         and STYLE_DESIGN_PROFILE_KEYS.issubset(profile)
-        and profile.get("forbid_artwork_text") is True
     )
-    checks = {
-        "text_free_artwork": plan.get("artwork_text") is False,
+    schema_checks = {
+        "text_policy_declared": isinstance(plan.get("text_policy"), dict),
         "composition_defined": all(key in parameters["composition"] for key in DESIGN_PARAMETER_KEYS["composition"]),
         "proportion_defined": isinstance(parameters["composition"].get("subject_scale"), (int, float)),
         "space_defined": all(key in parameters["space"] for key in DESIGN_PARAMETER_KEYS["space"]),
@@ -626,7 +730,6 @@ def design_quality_report(project_dir: str | Path) -> dict[str, Any]:
         "value_defined": all(key in parameters["value"] for key in DESIGN_PARAMETER_KEYS["value"]),
         "color_defined": all(key in parameters["color"] for key in DESIGN_PARAMETER_KEYS["color"]),
         "edge_and_material_defined": bool(parameters["edge"] and parameters["material"]),
-        "style_is_full_design_system": style_profile_complete,
     }
     if not style_profile_complete:
         warnings.append("The active style recipe lacks a complete composition-to-rhythm design profile.")
@@ -641,17 +744,60 @@ def design_quality_report(project_dir: str | Path) -> dict[str, Any]:
         parameters["form"]["simplification"],
         parameters["form"]["exaggeration"],
     )
-    checks["not_surface_only"] = structural_energy >= 0.25
-    if not checks["not_surface_only"] and parameters["material"]["texture"] > 0.45:
+    plan_declares_structural_change = structural_energy >= 0.25
+    if not plan_declares_structural_change and parameters["material"]["texture"] > 0.45:
         warnings.append("The plan changes surface texture more than composition, space, or form; style may collapse into a filter.")
-    readiness = round(sum(bool(value) for value in checks.values()) / len(checks) * 100)
+
+    text_evidence = _asset_text_evidence(project, config)
+    detected_text = set(text_evidence.get("declared_text_layers", [])) | set(
+        text_evidence.get("vector_text_nodes", [])
+    )
+    text_policy = plan.get("text_policy", {})
+    allowed_text = set(text_policy.get("allowed_layers", [])) if isinstance(text_policy, dict) else set()
+    text_allowed = plan.get("artwork_text") is True
+    unexpected_text = sorted(detected_text - allowed_text if text_allowed else detected_text)
+    text_policy_consistent = not unexpected_text
+    if unexpected_text:
+        errors.append(
+            "Declared asset text conflicts with the design text policy: " + ", ".join(unexpected_text)
+        )
+    style_forbids_text = isinstance(profile, dict) and profile.get("forbid_artwork_text") is True
+    style_text_policy_consistent = not (text_allowed and style_forbids_text)
+    if not style_text_policy_consistent:
+        errors.append("The active style recipe forbids artwork text while the design plan allows it.")
+
+    engineering_checks = {
+        "style_profile_schema_complete": style_profile_complete,
+        "text_policy_consistent_with_declared_assets": text_policy_consistent,
+        "style_text_policy_consistent": style_text_policy_consistent,
+        "plan_declares_structural_change": plan_declares_structural_change,
+    }
+    plan_schema_completeness = round(
+        sum(bool(value) for value in schema_checks.values()) / len(schema_checks) * 100
+    )
     return {
         "ok": not errors,
         "project": str(project),
         "workflow_mode": plan["workflow_mode"],
         "selected_preset": plan["selected_preset"],
-        "readiness": readiness,
-        "checks": checks,
+        "assessment_scope": "plan-schema-and-declared-asset-contracts-only",
+        "plan_schema_completeness": plan_schema_completeness,
+        "schema_checks": schema_checks,
+        "engineering_contract": {
+            "passed": all(engineering_checks.values()),
+            "checks": engineering_checks,
+        },
+        "asset_text_evidence": {
+            **text_evidence,
+            "policy_allows_text": text_allowed,
+            "allowed_layers": sorted(allowed_text),
+            "unexpected_text": unexpected_text,
+        },
+        "visual_quality": {
+            "status": "not-assessed",
+            "human_confirmed": False,
+            "reason": "Schema and metadata checks do not establish composition, style execution, or artistic quality.",
+        },
         "errors": errors,
         "warnings": warnings,
         "parameters": parameters,

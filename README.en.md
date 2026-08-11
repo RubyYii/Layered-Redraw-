@@ -4,6 +4,8 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
+> **Status: incubation prototype.** This repository is not an integrated or released VULCA SDK capability. Upstreamable residuals are split into small reviewed Effect Packs that reuse canonical SDK contracts; see [`docs/vulca-migration.md`](docs/vulca-migration.md). Code is [Apache-2.0](LICENSE), with asset notes in [PROVENANCE.md](PROVENANCE.md).
+
 ![Layered Redraw — from photographs to editable layered artwork](assets/readme/hero.en.svg)
 
 Layered Redraw is a local-first Codex plugin and semantic-layer project format for turning references into intentionally redrawn, editable artwork. It favors 8–12 stable layers and treats localized revision as a patch rather than a full regeneration.
@@ -15,9 +17,9 @@ It has two independent output modes:
 
 Pixel art is a first-class `raster-layered` style preset. It uses a logical pixel canvas, one limited shared palette, binary alpha, and nearest-neighbour preview scaling instead of applying a pixelation filter to ordinary artwork.
 
-v0.6 adds a References & Space workflow. Register multiple RGB inputs, pair supplied depth or optionally estimate relative depth with a Depth Anything V2 backend, then resolve source RGB + depth + prompt into 5–20 semantic layers. Artistic parameters never rewrite raw depth; the prompt controls semantic grouping, independent edit ownership, and spatial interpretation. Guided Creation keeps a small safe surface while Art Direction exposes model, RGB-D orientation, and depth flattening/exaggeration. Artwork text remains disabled.
+v0.6 adds a References & Space workflow. Register multiple RGB inputs, pair supplied depth or optionally estimate relative depth with a Depth Anything V2 backend, then resolve source RGB + depth + prompt into 5–20 semantic layers. Artistic parameters never rewrite raw depth; the prompt controls semantic grouping, independent edit ownership, and spatial interpretation. Guided Creation keeps a small safe surface while Art Direction exposes model, RGB-D orientation, and depth flattening/exaggeration. Artwork text is forbidden by default; an intentional game-UI exception must declare its allowed text layers in the design contract.
 
-Before production, the project can generate parameterized A/B/C proofs. Every direction keeps a complete plan, deltas, a low-detail schematic, and a render request for a scene-specific preview. One direction must be selected and locked before it can become the basis for the final 8–12 layers.
+Before production, the project can generate parameterized A/B/C proofs. The built-in output is a parameter contract, deltas, a low-detail schematic, and an external render request. It becomes image-effect evidence only after scene-specific renders are registered. Selection and promotion can guide the final 8–12 layers, but do not establish artistic quality on their own.
 
 The goal is not another brush picker. A style now changes crop, scale, negative space, depth, shape grammar, and value grouping before colour and surface treatment.
 
@@ -92,7 +94,7 @@ Open the local editor, select layers or frame a region, export `edit-request.jso
 - Lasso and brush masks stored as full-canvas binary PNGs and combined with semantic layer scope.
 - Layer controls for opacity, visibility, locks, order, bilingual labels, and six deterministic blend modes.
 - Hybrid layer metadata: every layer keeps a registered PNG render and may declare raster, pixel, or vector source with an editable SVG.
-- Ten composition-to-rhythm style systems, 2–6 candidate direction boards, layer dependencies, and separate layer-quality and design-readiness reports.
+- Ten composition-to-rhythm style parameter contracts, 2–6 candidate direction boards, layer dependencies, and separate engineering quality, plan-schema completeness, and human visual-confirmation states.
 - OpenRaster export/import for continuing in Krita and syncing manual work back into the project.
 
 The editor now saves composition settings, masks, and history restores directly. Codex still interprets artistic language: give it the exported request with `$redraw-in-layers` to create a scoped SVG patch or PNG replacement and verify unchanged layer hashes.
@@ -103,7 +105,7 @@ The editor now saves composition settings, masks, and history restores directly.
 
 ![Ten-layer contact sheet](examples/cat-cave-npc/assets/layer-contact-sheet.png)
 
-[`examples/cat-cave-npc`](examples/cat-cave-npc) is a public project that can be inspected, edited, and recomposed directly: 384×216 pixels, a 32-colour budget, and ten semantic layers for the cave, foreground rocks, cave opening, treasure chest, loose treasure, cat NPC, nameplate, and dialogue UI. It includes transparent PNG layers, binary masks, per-layer prompts, design contracts, quality reports, and an editable Krita [`NPC-Cave-Scene-02.ora`](examples/cat-cave-npc/NPC-Cave-Scene-02.ora). The private source photograph is intentionally excluded.
+[`examples/cat-cave-npc`](examples/cat-cave-npc) is an accepted-master decomposition and delivery fixture that can be inspected, edited, and recomposed directly: 384×216 pixels, a 32-colour budget, and ten semantic layers for the cave, foreground rocks, cave opening, treasure chest, loose treasure, cat NPC, nameplate, and dialogue UI. It proves PNG/mask/ORA round-trip and engineering contracts; it is not an end-to-end source-to-effect demo. The private source photograph is intentionally excluded.
 
 ## Try the editor
 

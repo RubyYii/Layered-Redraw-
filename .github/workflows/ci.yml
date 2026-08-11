@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-tests:
+    name: Contracts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install raster test dependency
+        run: python -m pip install --disable-pip-version-check -r requirements-raster.txt
+
+      - name: Run unit and localhost-security tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
+      - name: Compile Python entry points
+        run: >-
+          python -m py_compile
+          skills/redraw-in-layers/scripts/layered_redraw.py
+          skills/redraw-in-layers/scripts/design_proofs.py
+          skills/redraw-in-layers/scripts/project_features.py
+          skills/redraw-in-layers/scripts/raster_project.py
+          skills/redraw-in-layers/scripts/reference_intelligence.py
+
+      - name: Check editor JavaScript
+        run: node --check skills/redraw-in-layers/assets/editor/app.js
+
+      - name: Verify plugin manifest and license
+        run: >-
+          python -c "import json, pathlib;
+          json.loads(pathlib.Path('.codex-plugin/plugin.json').read_text(encoding='utf-8'));
+          assert pathlib.Path('LICENSE').is_file();
+          assert pathlib.Path('PROVENANCE.md').is_file()"
+
+      - name: Rebuild and validate the public fixture
+        run: |
+          python skills/redraw-in-layers/scripts/layered_redraw.py compose examples/cat-cave-npc
+          python skills/redraw-in-layers/scripts/layered_redraw.py validate examples/cat-cave-npc
+          python skills/redraw-in-layers/scripts/layered_redraw.py quality examples/cat-cave-npc
+          python skills/redraw-in-layers/scripts/layered_redraw.py design-check examples/cat-cave-npc
+
+      - name: Require committed generated artifacts to be current
+        run: git diff --exit-code -- examples/cat-cave-npc
+

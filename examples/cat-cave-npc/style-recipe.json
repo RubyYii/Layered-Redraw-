@@ -25,7 +25,7 @@
     "edge_system": "binary hard edges and cluster-aware curves",
     "lighting": "designed value ramps rather than downsampled photographic light",
     "rhythm": "repeat cluster sizes and dither patterns consistently across layers",
-    "forbid_artwork_text": true
+    "forbid_artwork_text": false
   },
   "preferred_layer_types": [
     "pixel"

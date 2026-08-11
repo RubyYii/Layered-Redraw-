@@ -1,8 +1,8 @@
 # 狸花*保单：洞穴 NPC 多图层示例
 
-这是一个公开、可复现的 `raster-layered` 像素画工程。原始私人照片未包含在仓库中；示例从审定后的 384×216、32 色像素母版开始，拆分为 10 个语义图层。
+这是一个公开、可复现的 `raster-layered` accepted-master 拆层与交付 fixture。原始私人照片未包含在仓库中；示例从审定后的 384×216、32 色像素母版开始，拆分为 10 个语义图层。它不用于证明照片到像素画的端到端效果。
 
-This is a public, reproducible `raster-layered` pixel-art project. The private source photograph is intentionally excluded. The example starts from the accepted 384×216, 32-colour pixel master and exposes ten semantic layers.
+This is a public, reproducible `raster-layered` accepted-master decomposition and delivery fixture. The private source photograph is intentionally excluded. It starts from the accepted 384×216, 32-colour pixel master and exposes ten semantic layers; it does not claim to reproduce the source-to-pixel-art effect.
 
 ![Final preview](preview.png)
 
@@ -34,4 +34,4 @@ python skills/redraw-in-layers/scripts/layered_redraw.py validate examples/cat-c
 python skills/redraw-in-layers/scripts/layered_redraw.py quality examples/cat-cave-npc
 ```
 
-The default composite is pixel-identical to the accepted master. The included project passes the pixel-art contract with ten layers, 32 colours, binary alpha, and no validation warnings.
+The default composite is pixel-identical to the accepted master. A clean checkout rebuilds this fixture idempotently and passes the engineering contract with ten layers, 32 colours, binary alpha, and no validation warnings. `design-check` reports plan-schema completeness and declared text-policy consistency only; visual quality remains `not-assessed` with `human_confirmed=false`.
