@@ -16,6 +16,8 @@
   "design_plan": "design-plan.json",
   "design_preset": "gba-warm-story",
   "design_plan_sha256": "db1ba78f1beb3211535205bb41a9fb523f4390e17508b8cb46cb58c860d14604",
+  "object_specs": null,
+  "object_specs_sha256": null,
   "layer_model": "semantic",
   "pixel_art": {
     "palette_size": 32,

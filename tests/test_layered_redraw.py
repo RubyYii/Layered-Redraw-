@@ -1300,7 +1300,10 @@ class LayeredRedrawTests(unittest.TestCase):
             self.assertEqual(document["kind"], TOOLS.PHYSICAL.DOCUMENT_KIND)
             self.assertEqual(document["layout"]["coordinate_unit"], "svg-unit")
             self.assertEqual(document["objects"], [])
-            self.assertEqual(result["object_specs"], str(project / "object-specs.json"))
+            self.assertTrue(
+                Path(result["object_specs"]).samefile(project / "object-specs.json"),
+                result["object_specs"],
+            )
             self.assertIsNotNone(manifest["object_specs_sha256"])
 
     def test_physical_measurements_stay_independent_from_visual_transform_and_export(self) -> None:
