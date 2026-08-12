@@ -1,6 +1,6 @@
 ---
 name: redraw-in-layers
-description: Interview the user about visual intent, analyze one or more RGB or RGB-D references, optionally estimate relative depth, and create or revise artwork with 5–20 stable semantic layers (normally 8–12). Supports prompt-directed semantic layer planning, editable SVG, generated raster, layered pixel art, parameterized A/B/C proofs, hybrid sources, masks, recoverable revisions, OpenRaster, and scoped edits. Use for photo-derived drawing, multi-reference or depth-aware planning, multi-layer generation, pixel art, posters, sketches, painterly images, art direction, local layer controls, or non-destructive revision.
+description: Interview the user about visual intent, analyze RGB or RGB-D references, and create or revise artwork with 5–20 stable semantic layers (normally 8–12). Supports editable SVG, generated raster, layered pixel art, depth-aware planning, A/B/C proofs, masks, revisions, OpenRaster, scoped edits, and physical object specifications that keep real measurements, apparel sizes, sheet scale, placement, and angles separate from visual transforms. Use for photo-derived drawing, multi-layer art, product or apparel design handoff, measured layout, art direction, and non-destructive revision.
 ---
 
 # Redraw In Layers
@@ -52,6 +52,18 @@ Read `references/reference-intelligence.md` whenever the user supplies multiple 
 7. Default to `vector-strict`: paths, shapes, gradients, masks, patterns, and SVG filters only. Keep words out unless the accepted design plan declares explicit text-layer exceptions. Use embedded or linked raster texture only when the user explicitly selects hybrid mode.
 8. Package the result according to `references/output-contract.md` and run validation before delivery.
 
+## Add physical object specifications
+
+Read `references/physical-specifications.md` whenever the user asks for real dimensions, apparel sizes, centimetres or inches, object angles, drawing scale, or a technical design handoff.
+
+1. Keep physical measurements in `object-specs.json`; never infer them from visual SVG/PNG scale.
+2. Give each measured object a stable `object-*` ID and bind it to its owning semantic `layer-*`. Link nested SVG IDs when one vector layer contains several independently specified objects.
+3. Record the declared size system for labels such as `XL`, then add numeric garment measurements where available.
+4. Separate physical measurements, output-sheet size/drawing scale, and visual placement/rotation/scale.
+5. Record measurement source, verification state, and confidence. Treat monocular depth as relative and mark uncalibrated photo-derived dimensions as estimates.
+6. Use `spec-set` and `spec-layout`; each mutation creates a recoverable snapshot and changes the project revision.
+7. Run `spec-export` to create a separate editable SVG/CSV technical sheet. This sheet may contain labels without enabling artwork text in the canonical illustration.
+
 ## Create raster-layered artwork
 
 Read `references/raster-contract.md` before generating any layer files.
@@ -88,6 +100,7 @@ Read `references/raster-contract.md` before generating any layer files.
 - Reject style directions that change only brushes, grain, or texture while leaving the photographic composition untouched.
 - Do not draw titles, captions, labels, or other artwork text unless the accepted design plan explicitly allows their stable layer IDs.
 - Keep registered RGB and canonical depth artifacts immutable. Prompt-directed depth changes belong in `directed-depth.json`, not in `depth-16.png`.
+- Never overwrite real measurements when moving, rotating, scaling, stylizing, or changing the sheet scale of an object.
 - Use depth bands only for diagnosis and spatial reasoning; group final layers by semantics and edit intent.
 - In vector mode, prefer deliberate paths over noisy auto-traced geometry.
 - In raster mode, reject empty alpha layers, flattened composites, and mismatched canvas sizes.
@@ -113,6 +126,10 @@ python scripts/layered_redraw.py history <project>
 python scripts/layered_redraw.py diff <project> <snapshot-id>
 python scripts/layered_redraw.py undo <project> <snapshot-id>
 python scripts/layered_redraw.py layer-settings <project> <layer-id> --opacity 0.7 --blend-mode screen
+python scripts/layered_redraw.py spec-layout <project> --output-width 210 --output-height 297 --output-unit mm --drawing-scale 1:10
+python scripts/layered_redraw.py spec-set <project> layer-primary-subject object-belt --category belt --measurement length=100cm --rotation-deg -12
+python scripts/layered_redraw.py specs <project>
+python scripts/layered_redraw.py spec-export <project>
 python scripts/layered_redraw.py export-ora <raster-project>
 python scripts/layered_redraw.py import-ora <file.ora> <project>
 python scripts/layered_redraw.py styles
@@ -145,6 +162,7 @@ Use `assets/editor/` for multi-reference registration, RGB/depth comparison, RGB
 - Read `references/design-modes.md` before choosing or changing the workflow mode or presets.
 - Read `references/design-proofs.md` before creating, comparing, registering, locking, or promoting parameterized proofs.
 - Read `references/reference-intelligence.md` before multi-reference, RGB-D, depth-estimation, or prompt-directed semantic-layer planning.
+- Read `references/physical-specifications.md` before adding real measurements, apparel sizes, output-sheet scale, placement coordinates, or angles.
 - Read `references/layer-contract.md` before planning or restructuring layers.
 - Read `references/edit-contract.md` before any localized edit.
 - Read `references/raster-contract.md` for raster-layered generation, compositing, or editing.

@@ -79,7 +79,7 @@ Codex 会先确认画面情绪、构图取舍、风格、颜色、主体和细�
 
 启动本地编辑器，选中图层或框选区域，导出 `edit-request.json`，然后再次交给 `$redraw-in-layers`。补丁只允许修改命中的图层。
 
-## v0.6 已包含
+## 当前版本已包含
 
 - `$redraw-in-layers`：引导式照片重绘、多图层生图与局部修改 Codex Skill。
 - 参考智能：多 RGB 角色注册、RGB-D 配对、可选单目相对深度估计、16 位深度证据、3–8 区间预览，以及提示词驱动的 5–20 图层规划。
@@ -100,6 +100,8 @@ Codex 会先确认画面情绪、构图取舍、风格、颜色、主体和细�
 - 混合图层基础：每层保留注册 PNG，同时可声明 `raster`、`pixel` 或带 SVG `editable_source` 的 `vector` 来源。
 - 10 个从构图到节奏的风格参数合同、2–6 个方向小样联系表、依赖图层关系，以及彼此分离的工程质量、计划结构完整度和人工视觉确认状态。
 - OpenRaster `.ora` 导出与回读，方便在 Krita 等软件中继续手绘，再同步回 Layered Redraw。
+- 真实规格模式：以 `object-specs.json` 把厘米／英寸测量、XL 等尺码体系、数据来源、核验状态、置信度、位置、旋转、三轴姿态和画面缩放绑定到对象与语义图层，同时与版面实际尺寸和 1:10 等绘图比例保持分离。
+- 规格交付：编辑器可直接录入上述数据；`spec-export` 生成独立、可编辑的 SVG 规格表与 UTF-8 CSV，不把标注文字写进正式画作。
 
 当前编辑器可以直接保存图层合成设置、蒙版和历史恢复；艺术语言仍由 Codex 解释。将导出的请求与工程交给 Codex，并调用 `$redraw-in-layers`，即可生成受约束的 SVG 补丁或 PNG 图层替换，并验证其他图层保持不变。
 
@@ -133,7 +135,8 @@ python skills/redraw-in-layers/scripts/layered_redraw.py serve examples/canal-ev
 4. 选择视觉模板或专家参数；再生成、选择、锁定并晋升 A/B/C 参数设计稿。
 5. 从左侧选择语义图层，或用图层点击、框选、套索、画笔和纯文本限定修改范围。
 6. 调整透明度、混合模式、顺序和双语名称；用历史区比较或恢复版本。
-7. 描述变化并下载 `edit-request.json`，再交给 Codex 与 `$redraw-in-layers`。
+7. 需要真实产品数据时切换到“艺术指导”，展开左侧“真实规格”：填写对象尺寸、尺码体系、角度、视觉缩放、版面宽高与绘图比例，并导出 SVG／CSV 规格表。
+8. 描述变化并下载 `edit-request.json`，再交给 Codex 与 `$redraw-in-layers`。
 
 ## 安装并调用 Skill
 
@@ -180,6 +183,14 @@ New-Item -ItemType Junction -Path $skillTarget -Target (Resolve-Path ".\skills\r
 让我分别控制裁切、主体比例、留白、透视压平、形状概括、明暗组、色板、边缘和材质，再开始细化绘制。
 ```
 
+带真实尺寸的设计交付：
+
+```text
+使用 $redraw-in-layers 为服装搭配图建立真实规格。
+腰带长度 100 cm；衬衫尺码为 XL（Brand CN 2026），肩宽 48 cm、胸围 116 cm、衣长 74 cm、袖长 62 cm；裙子记录腰围、臀围和裙长。
+真实尺寸不得随画面缩放或旋转改变；同时记录版面实际尺寸、绘图比例、测量来源和核验状态，并导出 SVG／CSV 规格表。
+```
+
 原图＋提示词＋深度控制图层：
 
 ```text
@@ -210,6 +221,7 @@ vector-project/                 raster-project/
 ├─ project.json                 ├─ project.json
 ├─ creative-brief.json          ├─ creative-brief.json
 ├─ design-plan.json             ├─ design-plan.json
+├─ object-specs.json            ├─ object-specs.json
 ├─ planning-request.json        ├─ planning-request.json
 ├─ layer-plan.json              ├─ layer-plan.json
 ├─ references/                  ├─ references/
@@ -218,6 +230,7 @@ vector-project/                 raster-project/
 ├─ presets/user/                ├─ presets/user/
 ├─ proofs/sets/                 ├─ proofs/sets/
 ├─ history/ 与 masks/           ├─ history/ 与 masks/
+├─ specifications/              ├─ specifications/
 ├─ directions/                  ├─ directions/
 ├─ layers/*.svg                 ├─ composition.json
 └─ patches/                     ├─ layers/index.json + *.png
@@ -284,6 +297,14 @@ python skills/redraw-in-layers/scripts/layered_redraw.py undo output/my-project 
 
 # 非破坏性图层合成设置
 python skills/redraw-in-layers/scripts/layered_redraw.py layer-settings output/my-project layer-lighting --opacity 0.7 --blend-mode screen
+
+# 版面实际尺寸、绘图比例和对象真实规格
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-layout output/my-project --output-width 210 --output-height 297 --output-unit mm --drawing-scale 1:10
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-set output/my-project layer-primary-subject object-belt --name-zh "腰带" --name-en "Belt" --category belt --measurement length=100cm --measurement width=3.5cm --rotation-deg -12 --scale-percent 72
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-set output/my-project layer-primary-subject object-shirt --name-zh "衬衫" --name-en "Shirt" --category shirt --size-label XL --size-system "Brand CN 2026" --measurement shoulder-width=48cm --measurement chest-circumference=116cm --measurement garment-length=74cm --measurement sleeve-length=62cm
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-set output/my-project layer-primary-subject object-skirt --name-zh "裙子" --name-en "Skirt" --category skirt --size-label XL --size-system "Brand CN 2026" --measurement waist-circumference=82cm --measurement hip-circumference=106cm --measurement skirt-length=78cm
+python skills/redraw-in-layers/scripts/layered_redraw.py specs output/my-project
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-export output/my-project
 
 # 查看风格配方并制作方向小样板
 python skills/redraw-in-layers/scripts/layered_redraw.py styles

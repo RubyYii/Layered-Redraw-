@@ -830,6 +830,7 @@ def _source_paths(project_dir: Path) -> list[Path]:
         "project.json",
         "creative-brief.json",
         "design-plan.json",
+        "object-specs.json",
         "manifest.json",
         "style-recipe.json",
         "palette.json",
@@ -858,7 +859,7 @@ def _source_paths(project_dir: Path) -> list[Path]:
     else:
         add(config.get("canonical_svg", "artwork.svg"))
 
-    for folder_name in ("masks", "directions", "presets", "proofs", "references"):
+    for folder_name in ("masks", "directions", "presets", "proofs", "references", "specifications"):
         folder = project_dir / folder_name
         if folder.is_dir():
             for path in folder.rglob("*"):

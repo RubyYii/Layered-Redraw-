@@ -75,7 +75,7 @@ Codex confirms mood, composition, style, palette, subject priority, and detail l
 
 Open the local editor, select layers or frame a region, export `edit-request.json`, and give it back to `$redraw-in-layers`. The patch is allowed to touch only the selected layers.
 
-## What v0.6 includes
+## What the current build includes
 
 - `$redraw-in-layers`, a Codex skill for guided vector drawing, layered image generation, and localized revision.
 - Reference intelligence for role-aware multi-RGB input, RGB-D pairing, optional monocular relative-depth estimation, immutable 16-bit depth evidence, 3–8 diagnostic bands, and prompt-directed 5–20-layer planning.
@@ -96,6 +96,8 @@ Open the local editor, select layers or frame a region, export `edit-request.jso
 - Hybrid layer metadata: every layer keeps a registered PNG render and may declare raster, pixel, or vector source with an editable SVG.
 - Ten composition-to-rhythm style parameter contracts, 2–6 candidate direction boards, layer dependencies, and separate engineering quality, plan-schema completeness, and human visual-confirmation states.
 - OpenRaster export/import for continuing in Krita and syncing manual work back into the project.
+- Physical Specification mode: `object-specs.json` binds centimetre/inch measurements, declared size systems such as XL, provenance, verification, confidence, position, rotation, three-axis pose, and visual scale to stable objects and semantic layers while keeping them separate from output-sheet size and drawing scale.
+- Specification handoff: the editor can enter these values directly, while `spec-export` produces a separate editable SVG sheet and UTF-8 CSV without adding labels to the canonical artwork.
 
 The editor now saves composition settings, masks, and history restores directly. Codex still interprets artistic language: give it the exported request with `$redraw-in-layers` to create a scoped SVG patch or PNG replacement and verify unchanged layer hashes.
 
@@ -129,7 +131,8 @@ In the editor:
 4. Choose a visual system or expert parameters, then generate, select, lock, and promote an A/B/C proof.
 5. Select semantic layers or constrain an edit with layer click, frame, lasso, brush, or text-described scope.
 6. Adjust opacity, blend, order, and bilingual labels; compare or restore history.
-7. Describe the change, download `edit-request.json`, and give it to Codex with `$redraw-in-layers`.
+7. For measured product work, switch to Art Direction and open Physical Specification in the left panel. Enter object dimensions, size system, angle, visual scale, output size, and drawing scale, then export SVG/CSV sheets.
+8. Describe the change, download `edit-request.json`, and give it to Codex with `$redraw-in-layers`.
 
 ## Invoke the skill
 
@@ -176,6 +179,14 @@ Use $redraw-in-layers in Art Direction mode for this photo.
 Let me control crop, subject proportion, negative space, spatial flattening, shape simplification, value groups, palette, edges, and material before detailed drawing.
 ```
 
+For a measured design handoff:
+
+```text
+Use $redraw-in-layers to add physical specifications to this apparel layout.
+The belt is 100 cm long. The shirt is XL in Brand CN 2026, with 48 cm shoulder width, 116 cm chest circumference, 74 cm garment length, and 62 cm sleeve length. Record waist, hip, and length for the skirt.
+Real measurements must not change when visual objects are scaled or rotated. Record output-sheet size, drawing scale, measurement source, and verification, then export editable SVG and CSV specification sheets.
+```
+
 For RGB + prompt + depth-controlled layer planning:
 
 ```text
@@ -206,6 +217,7 @@ vector-project/                 raster-project/
 ├─ project.json                 ├─ project.json
 ├─ creative-brief.json          ├─ creative-brief.json
 ├─ design-plan.json             ├─ design-plan.json
+├─ object-specs.json            ├─ object-specs.json
 ├─ planning-request.json        ├─ planning-request.json
 ├─ layer-plan.json              ├─ layer-plan.json
 ├─ references/                  ├─ references/
@@ -214,6 +226,7 @@ vector-project/                 raster-project/
 ├─ presets/user/                ├─ presets/user/
 ├─ proofs/sets/                 ├─ proofs/sets/
 ├─ history/ and masks/          ├─ history/ and masks/
+├─ specifications/              ├─ specifications/
 ├─ directions/                  ├─ directions/
 ├─ layers/*.svg                 ├─ composition.json
 └─ patches/                     ├─ layers/index.json + *.png
@@ -280,6 +293,14 @@ python skills/redraw-in-layers/scripts/layered_redraw.py undo output/my-project 
 
 # Non-destructive composition settings
 python skills/redraw-in-layers/scripts/layered_redraw.py layer-settings output/my-project layer-lighting --opacity 0.7 --blend-mode screen
+
+# Physical output size, drawing scale, and real object specifications
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-layout output/my-project --output-width 210 --output-height 297 --output-unit mm --drawing-scale 1:10
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-set output/my-project layer-primary-subject object-belt --name-zh "腰带" --name-en "Belt" --category belt --measurement length=100cm --measurement width=3.5cm --rotation-deg -12 --scale-percent 72
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-set output/my-project layer-primary-subject object-shirt --name-zh "衬衫" --name-en "Shirt" --category shirt --size-label XL --size-system "Brand CN 2026" --measurement shoulder-width=48cm --measurement chest-circumference=116cm --measurement garment-length=74cm --measurement sleeve-length=62cm
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-set output/my-project layer-primary-subject object-skirt --name-zh "裙子" --name-en "Skirt" --category skirt --size-label XL --size-system "Brand CN 2026" --measurement waist-circumference=82cm --measurement hip-circumference=106cm --measurement skirt-length=78cm
+python skills/redraw-in-layers/scripts/layered_redraw.py specs output/my-project
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-export output/my-project
 
 # Style recipes and direction proofs
 python skills/redraw-in-layers/scripts/layered_redraw.py styles

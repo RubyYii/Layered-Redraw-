@@ -1120,6 +1120,98 @@ class LayeredRedrawTests(unittest.TestCase):
         with self.assertRaises(TOOLS.LayeredRedrawError):
             TOOLS.serve_editor(self.sample, host="0.0.0.0", port=0, open_browser=False)
 
+    def test_local_editor_can_save_and_export_physical_specifications(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "project"
+            shutil.copytree(self.sample, project)
+            ready = threading.Event()
+            state: dict[str, object] = {}
+
+            def editor_ready(server: object, url: str) -> None:
+                state["server"] = server
+                state["url"] = url
+                ready.set()
+
+            thread = threading.Thread(
+                target=TOOLS.serve_editor,
+                kwargs={
+                    "raw_target": project,
+                    "host": "127.0.0.1",
+                    "port": 0,
+                    "open_browser": False,
+                    "_ready_callback": editor_ready,
+                },
+                daemon=True,
+            )
+            thread.start()
+            self.assertTrue(ready.wait(5), "local editor did not start")
+            server = state["server"]
+            port = server.server_port  # type: ignore[attr-defined]
+            origin = f"http://127.0.0.1:{port}"
+
+            try:
+                connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                connection.request("GET", "/api/session")
+                response = connection.getresponse()
+                session = json.loads(response.read().decode("utf-8"))
+                token = session["token"]
+                connection.close()
+                headers = {
+                    "Content-Type": "application/json",
+                    "Origin": origin,
+                    TOOLS.EDITOR_SESSION_HEADER: token,
+                }
+                payload = {
+                    "object_id": "object-belt",
+                    "layer_id": "layer-canal",
+                    "changes": {
+                        "name_zh": "腰带",
+                        "name_en": "Belt",
+                        "category": "belt",
+                        "measurement_source": "user-provided",
+                        "verification": "declared",
+                        "confidence": 1.0,
+                        "measurements": {
+                            "length": {"value": 100, "unit": "cm"},
+                            "width": {"value": 3.5, "unit": "cm"},
+                        },
+                        "placement": {
+                            "coordinate_unit": "svg-unit",
+                            "x": 420,
+                            "y": 310,
+                            "rotation_deg": -12,
+                            "scale_percent": 72,
+                        },
+                    },
+                }
+                save = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                save.request("POST", "/api/specs/object", body=json.dumps(payload), headers=headers)
+                save_response = save.getresponse()
+                save_result = json.loads(save_response.read().decode("utf-8"))
+                self.assertEqual(save_response.status, 200, save_result)
+                self.assertTrue(save_result["ok"])
+                save.close()
+
+                inspect = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                inspect.request("GET", "/api/specs")
+                inspect_response = inspect.getresponse()
+                specifications = json.loads(inspect_response.read().decode("utf-8"))
+                self.assertEqual(inspect_response.status, 200)
+                self.assertEqual(specifications["document"]["objects"][0]["measurements"]["length"]["value"], 100)
+                inspect.close()
+
+                export = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                export.request("POST", "/api/specs/export", body="{}", headers=headers)
+                export_response = export.getresponse()
+                export_result = json.loads(export_response.read().decode("utf-8"))
+                self.assertEqual(export_response.status, 200, export_result)
+                self.assertTrue(Path(export_result["svg"]).is_file())
+                self.assertTrue(Path(export_result["csv"]).is_file())
+                export.close()
+            finally:
+                server.shutdown()  # type: ignore[attr-defined]
+                thread.join(timeout=5)
+
     @unittest.skipUnless(Image is not None, "Pillow is required for OpenRaster tests")
     def test_openraster_export_and_import_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1187,6 +1279,128 @@ class LayeredRedrawTests(unittest.TestCase):
             self.assertEqual(result["selected"], "direction-2")
             board = json.loads((project / "directions" / "index.json").read_text(encoding="utf-8"))
             self.assertEqual(len(board["candidates"]), 3)
+
+    def test_new_projects_include_an_empty_physical_specification_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "measured-project"
+            result = TOOLS.create_project(
+                project,
+                title="Measured Project",
+                layers=8,
+                width=1200,
+                height=800,
+                mode="vector-strict",
+            )
+            config = json.loads((project / "project.json").read_text(encoding="utf-8"))
+            document = json.loads((project / "object-specs.json").read_text(encoding="utf-8"))
+            svg_path, _, resolved = TOOLS.resolve_project(project)
+            manifest = TOOLS.build_manifest(svg_path, resolved)
+            self.assertEqual(config["schema_version"], "1.2")
+            self.assertEqual(config["object_specs"], "object-specs.json")
+            self.assertEqual(document["kind"], TOOLS.PHYSICAL.DOCUMENT_KIND)
+            self.assertEqual(document["layout"]["coordinate_unit"], "svg-unit")
+            self.assertEqual(document["objects"], [])
+            self.assertEqual(result["object_specs"], str(project / "object-specs.json"))
+            self.assertIsNotNone(manifest["object_specs_sha256"])
+
+    def test_physical_measurements_stay_independent_from_visual_transform_and_export(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = Path(temp_dir) / "project"
+            shutil.copytree(self.sample, project)
+            _, before = TOOLS.project_manifest(project)
+            first = TOOLS.update_object_specification(
+                project,
+                object_id="object-belt",
+                layer_id="layer-canal",
+                changes={
+                    "name_zh": "腰带",
+                    "name_en": "Belt",
+                    "category": "belt",
+                    "measurement_source": "user-provided",
+                    "verification": "declared",
+                    "confidence": 1.0,
+                    "measurements": {
+                        "length": {"value": 100.0, "unit": "cm"},
+                        "width": {"value": 3.5, "unit": "cm", "tolerance": 0.1},
+                    },
+                    "placement": {
+                        "x": 420.0,
+                        "y": 310.0,
+                        "coordinate_unit": "svg-unit",
+                        "rotation_deg": -12.0,
+                        "scale_percent": 72.0,
+                        "orientation": "front",
+                    },
+                },
+            )
+            self.assertNotEqual(before["revision"], first["manifest"]["revision"])
+            self.assertIsNotNone(first["manifest"]["object_specs_sha256"])
+            self.assertTrue((project / first["snapshot"]["archive"]).is_file())
+
+            second = TOOLS.update_object_specification(
+                project,
+                object_id="object-belt",
+                layer_id="layer-canal",
+                changes={"placement": {"rotation_deg": 25.0, "scale_percent": 44.0}},
+            )
+            document = TOOLS.PHYSICAL.load_document(project)
+            belt = document["objects"][0]
+            self.assertEqual(belt["measurements"]["length"], {"value": 100.0, "unit": "cm"})
+            self.assertEqual(belt["placement"]["rotation_deg"], 25.0)
+            self.assertEqual(belt["placement"]["scale_percent"], 44.0)
+            self.assertNotEqual(first["manifest"]["revision"], second["manifest"]["revision"])
+
+            layout = TOOLS.update_specification_layout(
+                project,
+                output_width=210,
+                output_height=297,
+                output_unit="mm",
+                drawing_scale="1:10",
+            )
+            self.assertEqual(layout["layout"]["output_size"], {"width": 210.0, "height": 297.0, "unit": "mm"})
+            self.assertEqual(layout["layout"]["drawing_scale"]["denominator"], 10.0)
+            self.assertEqual(TOOLS.PHYSICAL.load_document(project)["objects"][0]["measurements"]["length"]["value"], 100.0)
+
+            exported = TOOLS.PHYSICAL.export_specifications(project)
+            csv_path = Path(exported["csv"])
+            svg_path = Path(exported["svg"])
+            self.assertTrue(csv_path.is_file())
+            self.assertTrue(svg_path.is_file())
+            self.assertIn("length: 100 cm", csv_path.read_text(encoding="utf-8-sig"))
+            self.assertIn("Physical Object Specification", svg_path.read_text(encoding="utf-8"))
+            report = TOOLS.validate_project(project)
+            self.assertTrue(report["ok"], report["errors"])
+            self.assertEqual(report["warnings"], [])
+
+    def test_apparel_size_requires_a_system_and_reports_missing_numeric_measurements(self) -> None:
+        document = TOOLS.PHYSICAL.initial_document(coordinate_unit="px")
+        garment = TOOLS.PHYSICAL._default_object(
+            object_id="object-shirt",
+            layer_id="layer-primary-subject",
+            coordinate_unit="px",
+        )
+        garment.update(
+            {
+                "name_en": "Shirt",
+                "category": "shirt",
+                "declared_size": {"label": "XL", "system": "", "scope": "garment"},
+            }
+        )
+        document["objects"].append(garment)
+        invalid = TOOLS.PHYSICAL.validate_document(
+            document,
+            known_layer_ids={"layer-primary-subject"},
+        )
+        self.assertFalse(invalid["ok"])
+        self.assertTrue(any("not universal" in item for item in invalid["errors"]))
+
+        garment["declared_size"]["system"] = "Brand CN 2026"
+        valid = TOOLS.PHYSICAL.validate_document(
+            document,
+            known_layer_ids={"layer-primary-subject"},
+        )
+        self.assertTrue(valid["ok"], valid["errors"])
+        self.assertTrue(any("no numeric garment measurements" in item for item in valid["warnings"]))
 
 
 if __name__ == "__main__":

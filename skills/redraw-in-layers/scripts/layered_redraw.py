@@ -36,6 +36,7 @@ import raster_project as RASTER  # noqa: E402  (local sibling module)
 import project_features as FEATURES  # noqa: E402  (local sibling module)
 import design_proofs as PROOFS  # noqa: E402  (local sibling module)
 import reference_intelligence as REFERENCES  # noqa: E402  (local sibling module)
+import physical_specs as PHYSICAL  # noqa: E402  (local sibling module)
 
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -257,14 +258,22 @@ def build_manifest_from_root(
             }
         )
     design_plan_digest = config.get("_design_plan_sha256")
+    object_specs_digest = config.get("_object_specs_sha256")
     revision = revision_for_bytes(payload)
-    if isinstance(design_plan_digest, str) and design_plan_digest:
+    if (
+        isinstance(design_plan_digest, str)
+        and design_plan_digest
+        or isinstance(object_specs_digest, str)
+        and object_specs_digest
+    ):
         revision_payload = {
             "artwork_sha256": hashlib.sha256(payload).hexdigest(),
             "design_plan_sha256": design_plan_digest,
             "workflow_mode": config.get("workflow_mode"),
             "design_preset": config.get("design_preset"),
         }
+        if isinstance(object_specs_digest, str) and object_specs_digest:
+            revision_payload["object_specs_sha256"] = object_specs_digest
         revision = hashlib.sha256(
             json.dumps(revision_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()[:12]
@@ -282,6 +291,8 @@ def build_manifest_from_root(
         "design_plan": config.get("design_plan"),
         "design_preset": config.get("design_preset"),
         "design_plan_sha256": design_plan_digest,
+        "object_specs": config.get("object_specs"),
+        "object_specs_sha256": object_specs_digest,
         "layer_model": config.get("layer_model", "semantic-vector"),
         "layer_count": len(layers),
         "layers": layers,
@@ -293,6 +304,7 @@ def build_manifest(svg_path: Path, config: dict[str, Any] | None = None) -> dict
     root = parse_svg(svg_path)
     manifest_config = dict(config or {})
     manifest_config["_design_plan_sha256"] = FEATURES.design_plan_sha256(svg_path.parent, manifest_config)
+    manifest_config["_object_specs_sha256"] = PHYSICAL.document_sha256(svg_path.parent, manifest_config)
     return build_manifest_from_root(root, payload=payload, config=manifest_config)
 
 
@@ -447,6 +459,20 @@ def validate_project(raw_target: str | Path, *, write_manifest_file: bool = Fals
         recipe_path = project_dir / str(config.get("style_recipe"))
         if not recipe_path.is_file():
             report["warnings"].append("The project style recipe file is missing.")
+    if config.get("object_specs") or (project_dir / "object-specs.json").exists():
+        try:
+            specifications = PHYSICAL.load_document(project_dir)
+            known_layers = {layer.get("id") for layer in top_layers(root) if layer.get("id")}
+            known_nodes = {node.get("id") for node in root.iter() if node.get("id")}
+            spec_report = PHYSICAL.validate_document(
+                specifications,
+                known_layer_ids=known_layers,
+                known_object_node_ids=known_nodes,
+            )
+            report["errors"].extend(f"Invalid object specifications: {item}" for item in spec_report["errors"])
+            report["warnings"].extend(f"Object specifications: {item}" for item in spec_report["warnings"])
+        except PHYSICAL.PhysicalSpecError as exc:
+            report["errors"].append(f"Invalid object specifications: {exc}")
     manifest = build_manifest(svg_path, config)
     manifest_path = project_dir / "manifest.json"
     previous = read_json(manifest_path)
@@ -1003,7 +1029,7 @@ def create_project(
     write_json(
         project_dir / "project.json",
         {
-            "schema_version": "1.1",
+            "schema_version": "1.2",
             "title": title,
             "canonical_svg": "artwork.svg",
             "output_mode": "vector-strict",
@@ -1012,6 +1038,7 @@ def create_project(
             "style_recipe": "style-recipe.json" if style else None,
             "workflow_mode": "guided",
             "design_plan": "design-plan.json",
+            "object_specs": "object-specs.json",
             "layer_model": "hybrid-semantic",
             "procedural_seed": 1,
         },
@@ -1028,11 +1055,13 @@ def create_project(
     (project_dir / "references").mkdir(exist_ok=True)
     FEATURES.install_style_recipe(project_dir, style)
     design_plan = FEATURES.initialize_design_plan(project_dir, style=style, workflow_mode="guided")
+    PHYSICAL.initialize_document(project_dir, coordinate_unit="svg-unit")
     return {
         "project": str(project_dir),
         "svg": str(project_dir / "artwork.svg"),
         "layers": layers,
         "design_preset": design_plan["selected_preset"],
+        "object_specs": str(project_dir / "object-specs.json"),
     }
 
 
@@ -1042,6 +1071,85 @@ def project_manifest(raw_target: str | Path) -> tuple[Path, dict[str, Any]]:
         return project_dir, RASTER.build_manifest(project_dir)
     svg_path, project_dir, config = resolve_project(raw_target)
     return project_dir, build_manifest(svg_path, config)
+
+
+def specification_context(
+    raw_target: str | Path,
+) -> tuple[Path, dict[str, Any], set[str], set[str]]:
+    project_dir, manifest = project_manifest(raw_target)
+    layer_ids = {
+        str(item.get("id"))
+        for item in manifest.get("layers", [])
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    object_node_ids: set[str] = set()
+    if target_output_mode(project_dir) != "raster-layered":
+        svg_path, _, _ = resolve_project(project_dir)
+        root = parse_svg(svg_path)
+        object_node_ids = {str(node.get("id")) for node in root.iter() if node.get("id")}
+    return project_dir, manifest, layer_ids, object_node_ids
+
+
+def refresh_project_manifest(project_dir: Path) -> dict[str, Any]:
+    _, manifest = project_manifest(project_dir)
+    write_json(project_dir / "manifest.json", manifest)
+    return manifest
+
+
+def update_object_specification(
+    raw_target: str | Path,
+    *,
+    object_id: str,
+    layer_id: str,
+    changes: dict[str, Any],
+) -> dict[str, Any]:
+    project_dir, manifest, layer_ids, object_node_ids = specification_context(raw_target)
+    snapshot = FEATURES.create_snapshot(
+        project_dir,
+        manifest,
+        reason=f"Before physical specification update: {object_id}",
+        changed_layers=[layer_id],
+        force=True,
+    )
+    result = PHYSICAL.upsert_object(
+        project_dir,
+        object_id=object_id,
+        layer_id=layer_id,
+        changes=changes,
+        known_layer_ids=layer_ids,
+        known_object_node_ids=object_node_ids,
+    )
+    result["snapshot"] = snapshot
+    result["manifest"] = refresh_project_manifest(project_dir)
+    return result
+
+
+def update_specification_layout(raw_target: str | Path, **changes: Any) -> dict[str, Any]:
+    project_dir, manifest, _, _ = specification_context(raw_target)
+    snapshot = FEATURES.create_snapshot(
+        project_dir,
+        manifest,
+        reason="Before physical specification layout update",
+        force=True,
+    )
+    result = PHYSICAL.configure_layout(project_dir, **changes)
+    result["snapshot"] = snapshot
+    result["manifest"] = refresh_project_manifest(project_dir)
+    return result
+
+
+def delete_object_specification(raw_target: str | Path, object_id: str) -> dict[str, Any]:
+    project_dir, manifest, _, _ = specification_context(raw_target)
+    snapshot = FEATURES.create_snapshot(
+        project_dir,
+        manifest,
+        reason=f"Before physical specification removal: {object_id}",
+        force=True,
+    )
+    result = PHYSICAL.remove_object(project_dir, object_id)
+    result["snapshot"] = snapshot
+    result["manifest"] = refresh_project_manifest(project_dir)
+    return result
 
 
 def create_manual_snapshot(raw_target: str | Path, reason: str) -> dict[str, Any]:
@@ -1247,6 +1355,11 @@ def serve_editor(
                 manifest = current_manifest()
                 history = FEATURES.list_history(project_dir)
                 fresh_config = current_config()
+                layer_ids = {
+                    str(item.get("id"))
+                    for item in manifest.get("layers", [])
+                    if isinstance(item, dict) and isinstance(item.get("id"), str)
+                }
                 payload = json.dumps(
                     {
                         "project_dir": str(project_dir),
@@ -1257,6 +1370,10 @@ def serve_editor(
                         "design_presets": FEATURES.list_design_presets(project_dir),
                         "design_proofs": PROOFS.load_design_proofs(project_dir),
                         "reference_intelligence": REFERENCES.public_state(project_dir),
+                        "physical_specifications": PHYSICAL.public_state(
+                            project_dir,
+                            known_layer_ids=layer_ids,
+                        ),
                         "history": {
                             "count": history["count"],
                             "snapshots": history["snapshots"][-12:],
@@ -1295,6 +1412,15 @@ def serve_editor(
                 return
             if path == "/api/references":
                 self._send_json({"ok": True, "reference_intelligence": REFERENCES.public_state(project_dir)})
+                return
+            if path == "/api/specs":
+                manifest = current_manifest()
+                layer_ids = {
+                    str(item.get("id"))
+                    for item in manifest.get("layers", [])
+                    if isinstance(item, dict) and isinstance(item.get("id"), str)
+                }
+                self._send_json(PHYSICAL.public_state(project_dir, known_layer_ids=layer_ids))
                 return
             if path.startswith("/api/references/"):
                 parts = [unquote(item) for item in path.split("/") if item]
@@ -1341,6 +1467,60 @@ def serve_editor(
             try:
                 self._authorize_mutation()
                 body = self._read_json_body()
+                if path == "/api/specs/object":
+                    object_id = body.get("object_id")
+                    layer_id = body.get("layer_id")
+                    changes = body.get("changes")
+                    if not isinstance(object_id, str) or not isinstance(layer_id, str):
+                        raise LayeredRedrawError("Physical specification requires object_id and layer_id")
+                    if not isinstance(changes, dict):
+                        raise LayeredRedrawError("Physical specification changes must be an object")
+                    allowed = {
+                        "name_zh",
+                        "name_en",
+                        "category",
+                        "measurement_source",
+                        "verification",
+                        "confidence",
+                        "measurements",
+                        "remove_measurements",
+                        "declared_size",
+                        "placement",
+                        "notes",
+                        "object_node_ids",
+                    }
+                    unknown = sorted(set(changes) - allowed)
+                    if unknown:
+                        raise LayeredRedrawError("Unknown physical specification fields: " + ", ".join(unknown))
+                    self._send_json(update_object_specification(
+                        project_dir,
+                        object_id=object_id,
+                        layer_id=layer_id,
+                        changes=changes,
+                    ))
+                    return
+                if path == "/api/specs/layout":
+                    allowed = {
+                        "coordinate_unit",
+                        "output_width",
+                        "output_height",
+                        "output_unit",
+                        "drawing_scale",
+                    }
+                    unknown = sorted(set(body) - allowed)
+                    if unknown:
+                        raise LayeredRedrawError("Unknown specification layout fields: " + ", ".join(unknown))
+                    self._send_json(update_specification_layout(project_dir, **body))
+                    return
+                if path == "/api/specs/remove":
+                    object_id = body.get("object_id")
+                    if not isinstance(object_id, str):
+                        raise LayeredRedrawError("Physical specification removal requires object_id")
+                    self._send_json(delete_object_specification(project_dir, object_id))
+                    return
+                if path == "/api/specs/export":
+                    self._send_json(PHYSICAL.export_specifications(project_dir))
+                    return
                 if path == "/api/references/add":
                     data_url = body.get("data_url")
                     if not isinstance(data_url, str) or not data_url.startswith("data:image/") or ";base64," not in data_url:
@@ -1559,6 +1739,7 @@ def serve_editor(
                 FEATURES.ProjectFeatureError,
                 PROOFS.DesignProofError,
                 REFERENCES.ReferenceIntelligenceError,
+                PHYSICAL.PhysicalSpecError,
             ) as exc:
                 self._send_json({"ok": False, "error": str(exc)}, status=400)
 
@@ -1705,6 +1886,67 @@ def build_parser() -> argparse.ArgumentParser:
     settings_parser.add_argument("--editable-source")
     settings_parser.add_argument("--depends-on", nargs="*")
     settings_parser.add_argument("--move", choices=("up", "down", "top", "bottom"))
+
+    specs_parser = subparsers.add_parser("specs", help="Show real-world object measurements and visual transforms")
+    specs_parser.add_argument("target")
+
+    spec_set_parser = subparsers.add_parser("spec-set", help="Create or update a physical object specification")
+    spec_set_parser.add_argument("target")
+    spec_set_parser.add_argument("layer_id")
+    spec_set_parser.add_argument("object_id")
+    spec_set_parser.add_argument("--name-zh")
+    spec_set_parser.add_argument("--name-en")
+    spec_set_parser.add_argument("--category")
+    spec_set_parser.add_argument(
+        "--measurement",
+        action="append",
+        default=[],
+        help="Physical measurement such as length=100cm or width=35mm±1; repeat as needed",
+    )
+    spec_set_parser.add_argument("--remove-measurement", action="append", default=[])
+    spec_set_parser.add_argument("--size-label", help="Declared size label, for example XL")
+    spec_set_parser.add_argument("--size-system", help="Brand, region, or standard that defines the size label")
+    spec_set_parser.add_argument("--size-scope", choices=sorted(PHYSICAL.SIZE_SCOPES), default="garment")
+    spec_set_parser.add_argument("--clear-size", action="store_true")
+    spec_set_parser.add_argument(
+        "--measurement-source",
+        choices=sorted(PHYSICAL.MEASUREMENT_SOURCES),
+    )
+    spec_set_parser.add_argument("--verification", choices=sorted(PHYSICAL.VERIFICATION_STATES))
+    spec_set_parser.add_argument("--confidence", type=float)
+    spec_set_parser.add_argument("--object-node", action="append", dest="object_nodes")
+    spec_set_parser.add_argument("--x", type=float)
+    spec_set_parser.add_argument("--y", type=float)
+    spec_set_parser.add_argument("--coordinate-unit", choices=sorted(PHYSICAL.COORDINATE_UNITS))
+    spec_set_parser.add_argument("--rotation-deg", type=float)
+    spec_set_parser.add_argument("--scale-percent", type=float)
+    spec_set_parser.add_argument("--orientation")
+    spec_set_parser.add_argument("--yaw-deg", type=float)
+    spec_set_parser.add_argument("--pitch-deg", type=float)
+    spec_set_parser.add_argument("--roll-deg", type=float)
+    spec_set_parser.add_argument(
+        "--perspective-quad",
+        help="Eight comma-separated canvas coordinates: x1,y1,x2,y2,x3,y3,x4,y4",
+    )
+    spec_set_parser.add_argument("--clear-perspective", action="store_true")
+    spec_set_parser.add_argument("--notes")
+    spec_set_parser.add_argument("--clear-notes", action="store_true")
+
+    spec_layout_parser = subparsers.add_parser("spec-layout", help="Set output size and drawing scale independently")
+    spec_layout_parser.add_argument("target")
+    spec_layout_parser.add_argument("--coordinate-unit", choices=sorted(PHYSICAL.COORDINATE_UNITS))
+    spec_layout_parser.add_argument("--output-width", type=float)
+    spec_layout_parser.add_argument("--output-height", type=float)
+    spec_layout_parser.add_argument("--output-unit", choices=sorted(PHYSICAL.PHYSICAL_UNITS))
+    spec_layout_parser.add_argument("--drawing-scale", help="not-to-scale or a ratio such as 1:10")
+
+    spec_remove_parser = subparsers.add_parser("spec-remove", help="Remove a physical object specification")
+    spec_remove_parser.add_argument("target")
+    spec_remove_parser.add_argument("object_id")
+
+    spec_export_parser = subparsers.add_parser("spec-export", help="Export editable SVG and CSV specification sheets")
+    spec_export_parser.add_argument("target")
+    spec_export_parser.add_argument("--output-dir")
 
     export_ora_parser = subparsers.add_parser("export-ora", help="Export a raster project to OpenRaster")
     export_ora_parser.add_argument("target")
@@ -1955,6 +2197,123 @@ def main(argv: list[str] | None = None) -> int:
                 args.layer_id,
                 **{key: value for key, value in settings.items() if value is not None},
             )
+        elif args.command == "specs":
+            project_dir, _, layer_ids, _ = specification_context(args.target)
+            result = PHYSICAL.public_state(project_dir, known_layer_ids=layer_ids)
+        elif args.command == "spec-set":
+            measurements: dict[str, Any] = {}
+            for raw_measurement in args.measurement:
+                name, measurement = PHYSICAL.parse_measurement(raw_measurement)
+                measurements[name] = measurement
+            remove_measurements = []
+            for name in args.remove_measurement:
+                normalized = str(name).strip().lower()
+                if not PHYSICAL.FIELD_ID_RE.fullmatch(normalized):
+                    raise LayeredRedrawError(f"Invalid measurement field: {name}")
+                remove_measurements.append(normalized)
+            if args.clear_size and (args.size_label or args.size_system):
+                raise LayeredRedrawError("--clear-size cannot be combined with --size-label or --size-system")
+            if bool(args.size_label) != bool(args.size_system):
+                raise LayeredRedrawError("A declared size requires both --size-label and --size-system")
+            if args.clear_perspective and args.perspective_quad:
+                raise LayeredRedrawError("--clear-perspective cannot be combined with --perspective-quad")
+            if args.clear_notes and args.notes is not None:
+                raise LayeredRedrawError("--clear-notes cannot be combined with --notes")
+            changes: dict[str, Any] = {}
+            for key, value in {
+                "name_zh": args.name_zh,
+                "name_en": args.name_en,
+                "category": args.category,
+                "measurement_source": args.measurement_source,
+                "verification": args.verification,
+                "confidence": args.confidence,
+            }.items():
+                if value is not None:
+                    changes[key] = value
+            if measurements:
+                changes["measurements"] = measurements
+            if remove_measurements:
+                changes["remove_measurements"] = remove_measurements
+            if args.clear_size:
+                changes["declared_size"] = None
+            elif args.size_label and args.size_system:
+                changes["declared_size"] = {
+                    "label": args.size_label,
+                    "system": args.size_system,
+                    "scope": args.size_scope,
+                }
+            if args.object_nodes is not None:
+                changes["object_node_ids"] = args.object_nodes
+            if args.clear_notes:
+                changes["notes"] = None
+            elif args.notes is not None:
+                changes["notes"] = args.notes
+            placement = {
+                key: value
+                for key, value in {
+                    "x": args.x,
+                    "y": args.y,
+                    "coordinate_unit": args.coordinate_unit,
+                    "rotation_deg": args.rotation_deg,
+                    "scale_percent": args.scale_percent,
+                    "orientation": args.orientation,
+                }.items()
+                if value is not None
+            }
+            pose = {
+                key: value
+                for key, value in {
+                    "yaw_deg": args.yaw_deg,
+                    "pitch_deg": args.pitch_deg,
+                    "roll_deg": args.roll_deg,
+                }.items()
+                if value is not None
+            }
+            if pose:
+                placement["pose"] = pose
+            if args.clear_perspective:
+                placement["perspective_quad"] = None
+            elif args.perspective_quad:
+                try:
+                    perspective_quad = [float(value.strip()) for value in args.perspective_quad.split(",")]
+                except ValueError as exc:
+                    raise LayeredRedrawError("--perspective-quad must contain eight numbers") from exc
+                if len(perspective_quad) != 8:
+                    raise LayeredRedrawError("--perspective-quad must contain eight numbers")
+                placement["perspective_quad"] = perspective_quad
+            if placement:
+                changes["placement"] = placement
+            result = update_object_specification(
+                args.target,
+                object_id=args.object_id,
+                layer_id=args.layer_id,
+                changes=changes,
+            )
+        elif args.command == "spec-layout":
+            if not any(
+                value is not None
+                for value in (
+                    args.coordinate_unit,
+                    args.output_width,
+                    args.output_height,
+                    args.output_unit,
+                    args.drawing_scale,
+                )
+            ):
+                raise LayeredRedrawError("spec-layout requires at least one layout option")
+            result = update_specification_layout(
+                args.target,
+                coordinate_unit=args.coordinate_unit,
+                output_width=args.output_width,
+                output_height=args.output_height,
+                output_unit=args.output_unit,
+                drawing_scale=args.drawing_scale,
+            )
+        elif args.command == "spec-remove":
+            result = delete_object_specification(args.target, args.object_id)
+        elif args.command == "spec-export":
+            project_dir, _, _, _ = specification_context(args.target)
+            result = PHYSICAL.export_specifications(project_dir, args.output_dir)
         elif args.command == "export-ora":
             result = RASTER.export_ora(args.target, args.output)
         elif args.command == "import-ora":
@@ -2096,6 +2455,7 @@ def main(argv: list[str] | None = None) -> int:
         FEATURES.ProjectFeatureError,
         PROOFS.DesignProofError,
         REFERENCES.ReferenceIntelligenceError,
+        PHYSICAL.PhysicalSpecError,
     ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

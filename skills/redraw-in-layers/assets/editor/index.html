@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#f4f0e8" />
     <link rel="icon" href="data:," />
     <title>Layered Redraw Studio</title>
-    <link rel="stylesheet" href="styles.css?v=0.6.0" />
+    <link rel="stylesheet" href="styles.css?v=0.7.1" />
   </head>
   <body>
     <div class="app-shell">
@@ -140,6 +140,119 @@
               <button type="button" id="applyLayerSettings" data-i18n="applySettings">应用设置</button>
             </div>
           </section>
+
+          <details class="object-spec-controls expert-only" id="physicalSpecControls" hidden>
+            <summary>
+              <span data-i18n="physicalSpecTitle">真实规格</span>
+              <small id="physicalSpecStatus">—</small>
+            </summary>
+            <p class="spec-intro" data-i18n="physicalSpecIntro">真实尺寸独立于画面缩放、位置和角度。</p>
+            <details class="spec-advanced spec-layout-control">
+              <summary data-i18n="specLayoutTitle">版面尺寸与比例</summary>
+              <div class="field-grid spec-grid-three">
+                <label class="field-stack" for="specOutputWidthInput"><span data-i18n="specOutputWidth">输出宽</span><input id="specOutputWidthInput" type="number" min="0.01" step="any" /></label>
+                <label class="field-stack" for="specOutputHeightInput"><span data-i18n="specOutputHeight">输出高</span><input id="specOutputHeightInput" type="number" min="0.01" step="any" /></label>
+                <label class="field-stack" for="specOutputUnitSelect">
+                  <span data-i18n="specOutputUnit">单位</span>
+                  <select id="specOutputUnitSelect"><option value="mm">mm</option><option value="cm">cm</option><option value="in">in</option></select>
+                </label>
+              </div>
+              <div class="field-grid">
+                <label class="field-stack" for="specDrawingScaleInput"><span data-i18n="specDrawingScale">绘图比例</span><input id="specDrawingScaleInput" type="text" placeholder="1:10" /></label>
+                <button type="button" id="saveSpecLayout" class="spec-inline-save" data-i18n="specLayoutSave">保存版面</button>
+              </div>
+            </details>
+            <div class="spec-object-picker">
+              <label class="field-stack" for="specObjectSelect">
+                <span data-i18n="specObjectPicker">当前规格对象</span>
+                <select id="specObjectSelect"></select>
+              </label>
+              <button type="button" id="newPhysicalSpec" data-i18n="specNewObject">新建对象</button>
+            </div>
+            <div class="field-grid spec-full-grid">
+              <label class="field-stack" for="specObjectIdInput">
+                <span data-i18n="specObjectId">对象 ID</span>
+                <input id="specObjectIdInput" type="text" placeholder="object-belt" />
+              </label>
+              <label class="field-stack" for="specCategoryInput">
+                <span data-i18n="specCategory">品类</span>
+                <input id="specCategoryInput" type="text" placeholder="belt" />
+              </label>
+            </div>
+            <div class="field-grid spec-full-grid">
+              <label class="field-stack" for="specNameZhInput">
+                <span data-i18n="labelZh">中文名称</span>
+                <input id="specNameZhInput" type="text" />
+              </label>
+              <label class="field-stack" for="specNameEnInput">
+                <span data-i18n="labelEn">英文名称</span>
+                <input id="specNameEnInput" type="text" />
+              </label>
+            </div>
+            <div class="field-grid spec-size-grid">
+              <label class="field-stack" for="specSizeLabelInput">
+                <span data-i18n="specSizeLabel">标称尺码</span>
+                <input id="specSizeLabelInput" type="text" placeholder="XL" />
+              </label>
+              <label class="field-stack" for="specSizeSystemInput">
+                <span data-i18n="specSizeSystem">尺码体系</span>
+                <input id="specSizeSystemInput" type="text" placeholder="Brand / CN / EU" />
+              </label>
+            </div>
+            <label class="field-stack" for="specMeasurementsInput">
+              <span data-i18n="specMeasurements">真实测量值</span>
+              <textarea id="specMeasurementsInput" rows="4" data-i18n-placeholder="specMeasurementsPlaceholder" placeholder="length=100cm&#10;width=3.5cm"></textarea>
+            </label>
+            <div class="field-grid spec-full-grid">
+              <label class="field-stack" for="specSourceSelect">
+                <span data-i18n="specSource">数据来源</span>
+                <select id="specSourceSelect">
+                  <option value="user-provided" data-i18n="specSourceUser">用户提供</option>
+                  <option value="calibrated-reference" data-i18n="specSourceCalibrated">标定参照</option>
+                  <option value="size-chart" data-i18n="specSourceChart">尺码表</option>
+                  <option value="rgbd">RGB-D</option>
+                  <option value="monocular-estimate" data-i18n="specSourceDepth">单目估算</option>
+                  <option value="visual-estimate" data-i18n="specSourceVisual">视觉估算</option>
+                </select>
+              </label>
+              <label class="field-stack" for="specVerificationSelect">
+                <span data-i18n="specVerification">核验状态</span>
+                <select id="specVerificationSelect">
+                  <option value="declared" data-i18n="specDeclared">已声明</option>
+                  <option value="verified" data-i18n="specVerified">已核验</option>
+                  <option value="estimated" data-i18n="specEstimated">估算</option>
+                  <option value="unknown" data-i18n="specUnknown">未知</option>
+                </select>
+              </label>
+            </div>
+            <label class="field-stack" for="specConfidenceInput">
+              <span data-i18n="specConfidence">置信度（0–1）</span>
+              <input id="specConfidenceInput" type="number" min="0" max="1" step="0.05" />
+            </label>
+            <div class="field-grid spec-grid-four">
+              <label class="field-stack" for="specXInput"><span>X</span><input id="specXInput" type="number" step="any" /></label>
+              <label class="field-stack" for="specYInput"><span>Y</span><input id="specYInput" type="number" step="any" /></label>
+              <label class="field-stack" for="specRotationInput"><span data-i18n="specRotation">旋转 °</span><input id="specRotationInput" type="number" step="any" /></label>
+              <label class="field-stack" for="specScaleInput"><span data-i18n="specVisualScale">画面缩放 %</span><input id="specScaleInput" type="number" min="0.01" step="any" /></label>
+            </div>
+            <details class="spec-advanced">
+              <summary data-i18n="specAdvanced">姿态与备注</summary>
+              <div class="field-grid spec-grid-three">
+                <label class="field-stack" for="specYawInput"><span>Yaw °</span><input id="specYawInput" type="number" step="any" /></label>
+                <label class="field-stack" for="specPitchInput"><span>Pitch °</span><input id="specPitchInput" type="number" step="any" /></label>
+                <label class="field-stack" for="specRollInput"><span>Roll °</span><input id="specRollInput" type="number" step="any" /></label>
+              </div>
+              <label class="field-stack" for="specNotesInput">
+                <span data-i18n="specNotes">备注</span>
+                <textarea id="specNotesInput" rows="2"></textarea>
+              </label>
+            </details>
+            <div class="spec-action-row">
+              <button type="button" id="removePhysicalSpec" data-i18n="specRemove">删除</button>
+              <button type="button" id="exportPhysicalSpecs" data-i18n="specExport">导出规格表</button>
+              <button type="button" id="savePhysicalSpec" class="button-primary" data-i18n="specSave">保存规格</button>
+            </div>
+          </details>
 
           <div class="layer-legend" aria-label="图层状态图例" data-i18n-aria-label="layerLegendLabel">
             <span><i class="dot dot-sage"></i><span data-i18n="selectedLegend">已选择</span></span>
@@ -544,6 +657,6 @@
       <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     </div>
 
-    <script src="app.js?v=0.6.0" defer></script>
+    <script src="app.js?v=0.7.1" defer></script>
   </body>
 </html>

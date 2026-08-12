@@ -35,6 +35,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 import project_features as FEATURES  # noqa: E402
+import physical_specs as PHYSICAL  # noqa: E402
 
 
 LAYER_ID_RE = re.compile(r"^layer-[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -312,6 +313,7 @@ def build_manifest(raw_target: str | Path) -> dict[str, Any]:
     entries = _layer_entries(index)
     layers = [_manifest_layer(project_dir, entry, position) for position, entry in enumerate(entries, 1)]
     design_plan_digest = FEATURES.design_plan_sha256(project_dir, config)
+    object_specs_digest = PHYSICAL.document_sha256(project_dir, config)
     revision_payload = {
         "schema_version": config.get("schema_version", "1.0"),
         "title": config.get("title"),
@@ -341,6 +343,8 @@ def build_manifest(raw_target: str | Path) -> dict[str, Any]:
             for item in layers
         ],
     }
+    if isinstance(object_specs_digest, str) and object_specs_digest:
+        revision_payload["object_specs_sha256"] = object_specs_digest
     revision = hashlib.sha256(
         json.dumps(revision_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()[:12]
@@ -358,6 +362,8 @@ def build_manifest(raw_target: str | Path) -> dict[str, Any]:
         "design_plan": config.get("design_plan"),
         "design_preset": config.get("design_preset"),
         "design_plan_sha256": design_plan_digest,
+        "object_specs": config.get("object_specs"),
+        "object_specs_sha256": object_specs_digest,
         "layer_model": config.get("layer_model", "semantic-raster"),
         "pixel_art": config.get("pixel_art") if _is_pixel_art(config) else None,
         "layer_count": len(layers),
@@ -583,6 +589,18 @@ def validate_project(raw_target: str | Path, *, write_manifest_file: bool = Fals
 
     if any(visit_dependency(layer_id) for layer_id in dependency_graph):
         errors.append("Layer depends_on relationships contain a cycle.")
+
+    if config.get("object_specs") or (project_dir / "object-specs.json").exists():
+        try:
+            specifications = PHYSICAL.load_document(project_dir)
+            spec_report = PHYSICAL.validate_document(
+                specifications,
+                known_layer_ids=known_layer_ids,
+            )
+            errors.extend(f"Invalid object specifications: {item}" for item in spec_report["errors"])
+            warnings.extend(f"Object specifications: {item}" for item in spec_report["warnings"])
+        except PHYSICAL.PhysicalSpecError as exc:
+            errors.append(f"Invalid object specifications: {exc}")
 
     manifest = build_manifest(project_dir)
     manifest_path = project_dir / "manifest.json"
@@ -1135,7 +1153,7 @@ def create_project(
         )
 
     config = {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "title": title,
         "output_mode": "raster-layered",
         "canvas": {"width": width, "height": height, "color_space": "sRGB"},
@@ -1147,6 +1165,7 @@ def create_project(
         "style_recipe": "style-recipe.json" if style else None,
         "workflow_mode": "guided",
         "design_plan": "design-plan.json",
+        "object_specs": "object-specs.json",
         "layer_model": "hybrid-semantic",
         "procedural_seed": 1,
     }
@@ -1168,6 +1187,7 @@ def create_project(
     _write_json(project_dir / "layers" / "index.json", index)
     FEATURES.install_style_recipe(project_dir, style)
     design_plan = FEATURES.initialize_design_plan(project_dir, style=style, workflow_mode="guided")
+    PHYSICAL.initialize_document(project_dir, coordinate_unit="px")
     _write_json(
         project_dir / "creative-brief.json",
         {
@@ -1186,6 +1206,7 @@ def create_project(
         "canvas": {"width": width, "height": height},
         "style": style,
         "design_preset": design_plan["selected_preset"],
+        "object_specs": str(project_dir / "object-specs.json"),
         "pixel_art": config.get("pixel_art"),
     }
 

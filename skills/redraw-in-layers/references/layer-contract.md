@@ -34,6 +34,7 @@ Use 5–20 non-empty semantic layers. Prefer 8–12. Vector projects express the
 - Record opacity, blend mode, visibility, lock state, bilingual labels, and dependency relationships as revision-bearing layer state.
 - Keep `depends_on` acyclic. Use it for edit relationships, not merely because two layers overlap.
 - When `layer-plan.json` exists, preserve its stable IDs and region ownership unless the user explicitly approves restructuring.
+- When `object-specs.json` exists, preserve each stable `object-*` binding to its owning semantic layer; moving or scaling artwork must not modify real measurements.
 - Do not create one layer per depth band. Combine semantic class, occlusion, treatment, depth, edit priority, and prompt intent.
 - Keep raw normalized depth separate from art-directed layer depth; both may be recorded on the plan, but only the latter controls stylized stacking.
 

@@ -589,6 +589,102 @@ const TRANSLATIONS = {
   },
 };
 
+Object.assign(TRANSLATIONS.zh, {
+  specConfidence: "置信度（0–1）",
+  specSizePairRequired: "标称尺码必须同时填写尺码标签和尺码体系。",
+  specLayoutTitle: "版面尺寸与比例",
+  specOutputWidth: "输出宽",
+  specOutputHeight: "输出高",
+  specOutputUnit: "单位",
+  specDrawingScale: "绘图比例",
+  specLayoutSave: "保存版面",
+  specLayoutSaved: "版面尺寸与绘图比例已保存。",
+  specLayoutRequired: "请同时填写输出宽、高和单位。",
+  physicalSpecTitle: "真实规格",
+  physicalSpecIntro: "真实尺寸独立于画面缩放、位置和角度；估算值不能冒充生产测量。",
+  specObjectPicker: "当前规格对象",
+  specNewObject: "新建对象",
+  specNewObjectOption: "（尚未保存的新对象）",
+  specObjectId: "对象 ID",
+  specCategory: "品类",
+  specSizeLabel: "标称尺码",
+  specSizeSystem: "尺码体系",
+  specMeasurements: "真实测量值",
+  specMeasurementsPlaceholder: "每行一项，例如：\nlength=100cm\nwidth=3.5cm",
+  specSource: "数据来源",
+  specSourceUser: "用户提供",
+  specSourceCalibrated: "标定参照",
+  specSourceChart: "尺码表",
+  specSourceDepth: "单目估算",
+  specSourceVisual: "视觉估算",
+  specVerification: "核验状态",
+  specDeclared: "已声明",
+  specVerified: "已核验",
+  specEstimated: "估算",
+  specUnknown: "未知",
+  specRotation: "旋转 °",
+  specVisualScale: "画面缩放 %",
+  specAdvanced: "姿态与备注",
+  specNotes: "备注",
+  specRemove: "删除",
+  specExport: "导出规格表",
+  specSave: "保存规格",
+  specStatusNew: "新对象",
+  specStatusCount: "{count} 项测量",
+  specSaved: "真实规格已保存，并创建了可恢复版本。",
+  specRemoved: "对象规格已删除。",
+  specExported: "已导出可编辑 SVG 与 CSV 规格表。",
+  specMeasurementInvalid: "测量值格式错误：{value}",
+});
+
+Object.assign(TRANSLATIONS.en, {
+  specConfidence: "Confidence (0–1)",
+  specSizePairRequired: "A declared size requires both a label and a size system.",
+  specLayoutTitle: "Output size and scale",
+  specOutputWidth: "Output width",
+  specOutputHeight: "Output height",
+  specOutputUnit: "Unit",
+  specDrawingScale: "Drawing scale",
+  specLayoutSave: "Save layout",
+  specLayoutSaved: "Output size and drawing scale saved.",
+  specLayoutRequired: "Output width, height, and unit are required together.",
+  physicalSpecTitle: "Physical specification",
+  physicalSpecIntro: "Real dimensions stay independent from visual scale, position, and angle; estimates are never production measurements.",
+  specObjectPicker: "Current specification object",
+  specNewObject: "New object",
+  specNewObjectOption: "(unsaved new object)",
+  specObjectId: "Object ID",
+  specCategory: "Category",
+  specSizeLabel: "Declared size",
+  specSizeSystem: "Size system",
+  specMeasurements: "Real measurements",
+  specMeasurementsPlaceholder: "One per line, for example:\nlength=100cm\nwidth=3.5cm",
+  specSource: "Data source",
+  specSourceUser: "User provided",
+  specSourceCalibrated: "Calibrated reference",
+  specSourceChart: "Size chart",
+  specSourceDepth: "Monocular estimate",
+  specSourceVisual: "Visual estimate",
+  specVerification: "Verification",
+  specDeclared: "Declared",
+  specVerified: "Verified",
+  specEstimated: "Estimated",
+  specUnknown: "Unknown",
+  specRotation: "Rotation °",
+  specVisualScale: "Visual scale %",
+  specAdvanced: "Pose and notes",
+  specNotes: "Notes",
+  specRemove: "Remove",
+  specExport: "Export sheet",
+  specSave: "Save specification",
+  specStatusNew: "New object",
+  specStatusCount: "{count} measurements",
+  specSaved: "Physical specification saved with a recoverable revision.",
+  specRemoved: "Object specification removed.",
+  specExported: "Editable SVG and CSV specification sheets exported.",
+  specMeasurementInvalid: "Invalid measurement: {value}",
+});
+
 function initialLocale() {
   const queryLocale = new URLSearchParams(window.location.search).get("lang");
   if (queryLocale === "zh" || queryLocale === "en") return queryLocale;
@@ -647,6 +743,36 @@ const elements = {
   loadDemoButton: document.querySelector("#loadDemoButton"),
   localeButtons: Array.from(document.querySelectorAll("[data-locale]")),
   outputModeBadge: document.querySelector("#outputModeBadge"),
+  physicalSpecControls: document.querySelector("#physicalSpecControls"),
+  physicalSpecStatus: document.querySelector("#physicalSpecStatus"),
+  specObjectSelect: document.querySelector("#specObjectSelect"),
+  newPhysicalSpec: document.querySelector("#newPhysicalSpec"),
+  specObjectIdInput: document.querySelector("#specObjectIdInput"),
+  specCategoryInput: document.querySelector("#specCategoryInput"),
+  specConfidenceInput: document.querySelector("#specConfidenceInput"),
+  specNameZhInput: document.querySelector("#specNameZhInput"),
+  specNameEnInput: document.querySelector("#specNameEnInput"),
+  specSizeLabelInput: document.querySelector("#specSizeLabelInput"),
+  specSizeSystemInput: document.querySelector("#specSizeSystemInput"),
+  specMeasurementsInput: document.querySelector("#specMeasurementsInput"),
+  specSourceSelect: document.querySelector("#specSourceSelect"),
+  specVerificationSelect: document.querySelector("#specVerificationSelect"),
+  specXInput: document.querySelector("#specXInput"),
+  specYInput: document.querySelector("#specYInput"),
+  specRotationInput: document.querySelector("#specRotationInput"),
+  specScaleInput: document.querySelector("#specScaleInput"),
+  specYawInput: document.querySelector("#specYawInput"),
+  specPitchInput: document.querySelector("#specPitchInput"),
+  specRollInput: document.querySelector("#specRollInput"),
+  specNotesInput: document.querySelector("#specNotesInput"),
+  specOutputWidthInput: document.querySelector("#specOutputWidthInput"),
+  specOutputHeightInput: document.querySelector("#specOutputHeightInput"),
+  specOutputUnitSelect: document.querySelector("#specOutputUnitSelect"),
+  specDrawingScaleInput: document.querySelector("#specDrawingScaleInput"),
+  saveSpecLayout: document.querySelector("#saveSpecLayout"),
+  savePhysicalSpec: document.querySelector("#savePhysicalSpec"),
+  removePhysicalSpec: document.querySelector("#removePhysicalSpec"),
+  exportPhysicalSpecs: document.querySelector("#exportPhysicalSpecs"),
   maskCanvas: document.querySelector("#maskCanvas"),
   maskToolbar: document.querySelector("#maskToolbar"),
   moveLayerDown: document.querySelector("#moveLayerDown"),
@@ -729,6 +855,7 @@ const state = {
   maskMeta: null,
   maskPointer: null,
   projectMeta: null,
+  physicalSpecifications: null,
   referenceBusy: false,
   referenceIntelligence: null,
   request: null,
@@ -736,6 +863,8 @@ const state = {
   sessionHeader: "X-Layered-Redraw-Token",
   sessionToken: null,
   selectedIds: new Set(),
+  selectedPhysicalObjectId: null,
+  newPhysicalSpecLayerId: null,
   selectedPresetId: null,
   selectedObjectIds: new Set(),
   sourceName: null,
@@ -1594,6 +1723,8 @@ async function loadSvgText(text, sourceName, projectMeta = null) {
   state.layers = discoverLayers(svg);
   state.selectedIds.clear();
   state.selectedObjectIds.clear();
+  state.selectedPhysicalObjectId = null;
+  state.newPhysicalSpecLayerId = null;
   state.bbox = null;
   state.request = null;
   state.projectMeta = projectMeta;
@@ -1603,6 +1734,7 @@ async function loadSvgText(text, sourceName, projectMeta = null) {
   state.designPresets = Array.isArray(projectMeta?.design_presets) ? projectMeta.design_presets : [];
   state.designProofs = projectMeta?.design_proofs || null;
   state.referenceIntelligence = projectMeta?.reference_intelligence || null;
+  state.physicalSpecifications = projectMeta?.physical_specifications?.document || null;
   state.workflowMode = state.designPlan?.workflow_mode === "expert" ? "expert" : "guided";
   state.selectedPresetId = state.designPlan?.selected_preset || null;
   state.maskDirty = false;
@@ -1701,10 +1833,127 @@ function renderLayers() {
   elements.layerList.replaceChildren(fragment);
 }
 
+function physicalObjects() {
+  const objects = state.physicalSpecifications?.objects;
+  return Array.isArray(objects) ? objects : [];
+}
+
+function physicalObjectsForLayer(layer) {
+  if (!layer) return [];
+  return physicalObjects().filter((item) => item?.layer_id === layer.id);
+}
+
+function physicalSpecForLayer(layer) {
+  if (!layer || state.newPhysicalSpecLayerId === layer.id) return null;
+  const linkedObjectIds = state.selectedObjectIds;
+  const layerObjects = physicalObjectsForLayer(layer);
+  const explicitlySelected = layerObjects.find((item) => item?.id === state.selectedPhysicalObjectId);
+  if (explicitlySelected) return explicitlySelected;
+  return layerObjects.find((item) => {
+    const nodeIds = Array.isArray(item.object_node_ids) ? item.object_node_ids : [];
+    return nodeIds.some((id) => linkedObjectIds.has(id));
+  }) || layerObjects[0] || null;
+}
+
+function defaultPhysicalObjectId(layer) {
+  const base = `object-${layer.id.replace(/^layer-/, "")}`;
+  const used = new Set(physicalObjects().map((item) => item?.id).filter(Boolean));
+  if (!used.has(base)) return base;
+  let suffix = 2;
+  while (used.has(`${base}-${suffix}`)) suffix += 1;
+  return `${base}-${suffix}`;
+}
+
+function renderPhysicalObjectPicker(layer, specification) {
+  const fragment = document.createDocumentFragment();
+  if (!specification) {
+    const newOption = document.createElement("option");
+    newOption.value = "";
+    newOption.textContent = t("specNewObjectOption");
+    fragment.append(newOption);
+  }
+  physicalObjectsForLayer(layer).forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.id;
+    const label = state.locale === "en"
+      ? item.name_en || item.name_zh || item.id
+      : item.name_zh || item.name_en || item.id;
+    option.textContent = `${label} · ${item.id}`;
+    fragment.append(option);
+  });
+  elements.specObjectSelect.replaceChildren(fragment);
+  elements.specObjectSelect.value = specification?.id || "";
+  state.selectedPhysicalObjectId = specification?.id || null;
+}
+
+function measurementLines(specification) {
+  const measurements = specification?.measurements;
+  if (!measurements || typeof measurements !== "object") return "";
+  return Object.entries(measurements)
+    .sort(([first], [second]) => first.localeCompare(second))
+    .map(([name, item]) => {
+      const tolerance = Number.isFinite(Number(item?.tolerance)) ? `±${Number(item.tolerance)}` : "";
+      return `${name}=${Number(item?.value)}${item?.unit || ""}${tolerance}`;
+    })
+    .join("\n");
+}
+
+function renderPhysicalSpecControls() {
+  const selected = [...state.selectedIds].map(layerById).filter(Boolean);
+  const layer = selected.length === 1 ? selected[0] : null;
+  elements.physicalSpecControls.hidden = !layer;
+  if (!layer) return;
+  const specification = physicalSpecForLayer(layer);
+  renderPhysicalObjectPicker(layer, specification);
+  const placement = specification?.placement || {};
+  const pose = placement.pose || {};
+  const declaredSize = specification?.declared_size || {};
+  const layout = state.physicalSpecifications?.layout || {};
+  const outputSize = layout.output_size || {};
+  const drawingScale = layout.drawing_scale || { mode: "not-to-scale" };
+  elements.specOutputWidthInput.value = outputSize.width ?? "";
+  elements.specOutputHeightInput.value = outputSize.height ?? "";
+  elements.specOutputUnitSelect.value = outputSize.unit || "mm";
+  elements.specDrawingScaleInput.value = drawingScale.mode === "ratio"
+    ? `${drawingScale.numerator}:${drawingScale.denominator}`
+    : "not-to-scale";
+  elements.specObjectIdInput.value = specification?.id || defaultPhysicalObjectId(layer);
+  elements.specObjectIdInput.readOnly = Boolean(specification);
+  elements.specCategoryInput.value = specification?.category || "generic-object";
+  elements.specNameZhInput.value = specification?.name_zh || layer.labelZh || "";
+  elements.specNameEnInput.value = specification?.name_en || layer.labelEn || layer.label || "";
+  elements.specSizeLabelInput.value = declaredSize.label || "";
+  elements.specSizeSystemInput.value = declaredSize.system || "";
+  elements.specMeasurementsInput.value = measurementLines(specification);
+  elements.specSourceSelect.value = specification?.measurement_source || "user-provided";
+  elements.specVerificationSelect.value = specification?.verification || "declared";
+  elements.specConfidenceInput.value = String(specification?.confidence ?? 1);
+  elements.specXInput.value = String(placement.x ?? 0);
+  elements.specYInput.value = String(placement.y ?? 0);
+  elements.specRotationInput.value = String(placement.rotation_deg ?? 0);
+  elements.specScaleInput.value = String(placement.scale_percent ?? 100);
+  elements.specYawInput.value = pose.yaw_deg ?? "";
+  elements.specPitchInput.value = pose.pitch_deg ?? "";
+  elements.specRollInput.value = pose.roll_deg ?? "";
+  elements.specNotesInput.value = specification?.notes || "";
+  const count = specification && specification.measurements
+    ? Object.keys(specification.measurements).length
+    : 0;
+  elements.physicalSpecStatus.textContent = specification
+    ? t("specStatusCount", { count })
+    : t("specStatusNew");
+  elements.savePhysicalSpec.disabled = !state.serverConnected;
+  elements.removePhysicalSpec.disabled = !state.serverConnected || !specification;
+  elements.newPhysicalSpec.disabled = !state.serverConnected;
+  elements.exportPhysicalSpecs.disabled = !state.serverConnected;
+  elements.saveSpecLayout.disabled = !state.serverConnected;
+}
+
 function renderLayerControls() {
   const selected = [...state.selectedIds].map(layerById).filter(Boolean);
   const layer = selected.length === 1 ? selected[0] : null;
   elements.layerControls.hidden = !layer;
+  renderPhysicalSpecControls();
   if (!layer) return;
   elements.activeLayerType.textContent = layer.layerType.toUpperCase();
   elements.layerOpacityInput.value = String(Math.round(layer.opacity * 100));
@@ -1755,6 +2004,8 @@ function selectLayer(id, additive = false, objectId = null) {
   if (!additive) {
     state.selectedIds.clear();
     state.selectedObjectIds.clear();
+    state.selectedPhysicalObjectId = null;
+    state.newPhysicalSpecLayerId = null;
   }
   if (additive && state.selectedIds.has(id)) {
     state.selectedIds.delete(id);
@@ -1762,6 +2013,12 @@ function selectLayer(id, additive = false, objectId = null) {
     state.selectedIds.add(id);
   }
   if (objectId && objectId !== id) state.selectedObjectIds.add(objectId);
+  if (objectId) {
+    const linked = physicalObjectsForLayer(layer).find((item) => {
+      return Array.isArray(item.object_node_ids) && item.object_node_ids.includes(objectId);
+    });
+    state.selectedPhysicalObjectId = linked?.id || null;
+  }
   state.bbox = null;
   invalidateRequest();
   renderLayers();
@@ -2456,6 +2713,173 @@ async function saveLayerSettings(move = null) {
   }
 }
 
+function parsePhysicalMeasurements() {
+  const result = {};
+  const lines = elements.specMeasurementsInput.value
+    .split(/\r?\n/)
+    .map((value) => value.trim().replace(/\s+/g, ""))
+    .filter(Boolean);
+  const pattern = /^([a-z][a-z0-9-]*)=([+]?(?:\d+(?:\.\d*)?|\.\d+))(mm|cm|m|in|ft)(?:±(\d+(?:\.\d*)?|\.\d+))?$/i;
+  lines.forEach((line) => {
+    const match = pattern.exec(line);
+    if (!match || Number(match[2]) <= 0) {
+      throw new Error(t("specMeasurementInvalid", { value: line }));
+    }
+    result[match[1].toLowerCase()] = {
+      value: Number(match[2]),
+      unit: match[3].toLowerCase(),
+      ...(match[4] ? { tolerance: Number(match[4]) } : {}),
+    };
+  });
+  return result;
+}
+
+function optionalNumber(input) {
+  return input.value.trim() === "" ? null : Number(input.value);
+}
+
+function choosePhysicalSpecification() {
+  const selected = [...state.selectedIds].map(layerById).filter(Boolean);
+  const layer = selected.length === 1 ? selected[0] : null;
+  if (!layer) return;
+  const objectId = elements.specObjectSelect.value;
+  state.selectedPhysicalObjectId = objectId || null;
+  state.newPhysicalSpecLayerId = objectId ? null : layer.id;
+  renderPhysicalSpecControls();
+}
+
+function beginPhysicalSpecification() {
+  const selected = [...state.selectedIds].map(layerById).filter(Boolean);
+  const layer = selected.length === 1 ? selected[0] : null;
+  if (!layer) return;
+  state.selectedPhysicalObjectId = null;
+  state.newPhysicalSpecLayerId = layer.id;
+  renderPhysicalSpecControls();
+  elements.specObjectIdInput.focus();
+}
+
+async function savePhysicalSpecificationLayout() {
+  const selected = [...state.selectedIds].map(layerById).filter(Boolean);
+  const layer = selected.length === 1 ? selected[0] : null;
+  if (!state.serverConnected) return;
+  try {
+    const width = optionalNumber(elements.specOutputWidthInput);
+    const height = optionalNumber(elements.specOutputHeightInput);
+    if ((width === null) !== (height === null)) throw new Error(t("specLayoutRequired"));
+    const payload = {
+      coordinate_unit: state.physicalSpecifications?.layout?.coordinate_unit
+        || (projectIsRaster() ? "px" : "svg-unit"),
+      drawing_scale: elements.specDrawingScaleInput.value.trim() || "not-to-scale",
+    };
+    if (width !== null && height !== null) {
+      payload.output_width = width;
+      payload.output_height = height;
+      payload.output_unit = elements.specOutputUnitSelect.value;
+    }
+    await postProjectAction("/api/specs/layout", payload);
+    await loadServerProject(false);
+    if (layer) selectLayer(layer.id);
+    showToast(t("specLayoutSaved"));
+  } catch (error) {
+    showToast(t("serverActionFailed", { detail: error.message || String(error) }));
+  }
+}
+
+async function savePhysicalSpecification() {
+  const selected = [...state.selectedIds].map(layerById).filter(Boolean);
+  const layer = selected.length === 1 ? selected[0] : null;
+  if (!state.serverConnected || !layer) {
+    showToast(t("serveHint"));
+    return;
+  }
+  try {
+    const current = physicalSpecForLayer(layer);
+    const sizeLabel = elements.specSizeLabelInput.value.trim();
+    const sizeSystem = elements.specSizeSystemInput.value.trim();
+    if (Boolean(sizeLabel) !== Boolean(sizeSystem)) throw new Error(t("specSizePairRequired"));
+    const yaw = optionalNumber(elements.specYawInput);
+    const pitch = optionalNumber(elements.specPitchInput);
+    const roll = optionalNumber(elements.specRollInput);
+    const coordinateUnit = state.physicalSpecifications?.layout?.coordinate_unit
+      || (projectIsRaster() ? "px" : "svg-unit");
+    const objectNodeIds = state.selectedObjectIds.size
+      ? [...state.selectedObjectIds]
+      : Array.isArray(current?.object_node_ids)
+        ? current.object_node_ids
+        : [];
+    const measurements = parsePhysicalMeasurements();
+    const removeMeasurements = Object.keys(current?.measurements || {}).filter(
+      (name) => !Object.prototype.hasOwnProperty.call(measurements, name),
+    );
+    const changes = {
+      name_zh: elements.specNameZhInput.value.trim() || null,
+      name_en: elements.specNameEnInput.value.trim() || null,
+      category: elements.specCategoryInput.value.trim().toLowerCase(),
+      measurement_source: elements.specSourceSelect.value,
+      verification: elements.specVerificationSelect.value,
+      confidence: Number(elements.specConfidenceInput.value),
+      measurements,
+      remove_measurements: removeMeasurements,
+      declared_size: sizeLabel
+        ? { label: sizeLabel, system: sizeSystem, scope: "garment" }
+        : null,
+      object_node_ids: objectNodeIds,
+      placement: {
+        coordinate_unit: coordinateUnit,
+        x: Number(elements.specXInput.value),
+        y: Number(elements.specYInput.value),
+        rotation_deg: Number(elements.specRotationInput.value),
+        scale_percent: Number(elements.specScaleInput.value),
+        orientation: current?.placement?.orientation || "unspecified",
+        pose: { yaw_deg: yaw, pitch_deg: pitch, roll_deg: roll },
+      },
+      notes: elements.specNotesInput.value.trim() || null,
+    };
+    const objectId = elements.specObjectIdInput.value.trim();
+    await postProjectAction("/api/specs/object", {
+      object_id: objectId,
+      layer_id: layer.id,
+      changes,
+    });
+    await loadServerProject(false);
+    selectLayer(layer.id);
+    state.selectedPhysicalObjectId = objectId;
+    state.newPhysicalSpecLayerId = null;
+    renderPhysicalSpecControls();
+    showToast(t("specSaved"));
+  } catch (error) {
+    showToast(t("serverActionFailed", { detail: error.message || String(error) }));
+  }
+}
+
+async function removePhysicalSpecification() {
+  const selected = [...state.selectedIds].map(layerById).filter(Boolean);
+  const layer = selected.length === 1 ? selected[0] : null;
+  const specification = physicalSpecForLayer(layer);
+  if (!state.serverConnected || !layer || !specification) return;
+  try {
+    await postProjectAction("/api/specs/remove", { object_id: specification.id });
+    await loadServerProject(false);
+    selectLayer(layer.id);
+    state.selectedPhysicalObjectId = null;
+    state.newPhysicalSpecLayerId = null;
+    renderPhysicalSpecControls();
+    showToast(t("specRemoved"));
+  } catch (error) {
+    showToast(t("serverActionFailed", { detail: error.message || String(error) }));
+  }
+}
+
+async function exportPhysicalSpecificationSheet() {
+  if (!state.serverConnected) return;
+  try {
+    await postProjectAction("/api/specs/export", {});
+    showToast(t("specExported"));
+  } catch (error) {
+    showToast(t("serverActionFailed", { detail: error.message || String(error) }));
+  }
+}
+
 function renderHistory() {
   const history = Array.isArray(state.history) ? state.history : [];
   elements.historyCount.textContent = String(history.length);
@@ -2622,6 +3046,12 @@ elements.downloadRequestButton.addEventListener("click", downloadRequest);
 elements.copyRequestButton.addEventListener("click", copyRequest);
 elements.topExportButton.addEventListener("click", downloadRequest);
 elements.applyLayerSettings.addEventListener("click", () => saveLayerSettings());
+elements.saveSpecLayout.addEventListener("click", () => { void savePhysicalSpecificationLayout(); });
+elements.specObjectSelect.addEventListener("change", choosePhysicalSpecification);
+elements.newPhysicalSpec.addEventListener("click", beginPhysicalSpecification);
+elements.savePhysicalSpec.addEventListener("click", () => { void savePhysicalSpecification(); });
+elements.removePhysicalSpec.addEventListener("click", () => { void removePhysicalSpecification(); });
+elements.exportPhysicalSpecs.addEventListener("click", () => { void exportPhysicalSpecificationSheet(); });
 elements.applyPresetButton.addEventListener("click", () => { void applySelectedPreset(); });
 elements.saveDesignButton.addEventListener("click", () => { void saveExpertDesign(); });
 elements.savePresetButton.addEventListener("click", () => { void saveCustomPreset(); });
