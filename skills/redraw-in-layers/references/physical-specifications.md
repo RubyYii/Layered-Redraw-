@@ -90,11 +90,21 @@ python scripts/layered_redraw.py spec-set <project> layer-primary-subject object
 python scripts/layered_redraw.py spec-set <project> layer-primary-subject object-skirt --name-zh "裙子" --name-en "Skirt" --category skirt --size-label XL --size-system "Brand CN 2026" --measurement waist-circumference=82cm --measurement hip-circumference=106cm --measurement skirt-length=78cm
 python scripts/layered_redraw.py specs <project>
 python scripts/layered_redraw.py spec-export <project>
+python scripts/layered_redraw.py spec-export <project> --format svg --format pdf --format png --format csv --format json --dpi 192
 ```
 
-Every mutating command creates a recoverable snapshot. `spec-export` writes an
-editable SVG sheet and UTF-8 CSV under `specifications/`; it does not add text
-to the canonical artwork.
+Every mutating command creates a recoverable snapshot. `spec-export` defaults
+to one editable SVG sheet under `specifications/`. Repeat `--format` to add:
+
+- `pdf`: vector print/approval sheet at the declared physical page size;
+- `png`: review/markup copy at the requested 72–600 DPI;
+- `csv`: UTF-8 tabular measurement exchange;
+- `json`: structured snapshot of the canonical specification data.
+
+PDF/PNG export uses the optional packages in `requirements-output.txt`; SVG,
+CSV, and JSON are dependency-free. Every selected format is generated from the
+same root `object-specs.json`, and a failed multi-format run leaves previously
+exported files intact. Derived files do not add text to the canonical artwork.
 
 ## Handoff checks
 
@@ -104,9 +114,11 @@ Before delivery:
 2. Confirm all production-critical values are verified or explicitly declared.
 3. Confirm size labels name a system and have numeric measurements where needed.
 4. Confirm drawing scale and output size match the intended sheet.
-5. Export the SVG/CSV specification sheet and have a designer or production
-   specialist approve it.
+5. Keep SVG as the editable specification master, select the delivery formats
+   needed by the recipient, and have a designer or production specialist
+   approve the PDF/PNG rendering and CSV/JSON values as applicable.
 
-These specifications improve design handoff. They do not replace garment
-patterns, seam allowance, grading, fabric stretch data, colour management, or
-printer preflight.
+These specifications improve design handoff. PDF and PNG are review outputs,
+not editable masters. None of these formats replace garment patterns, CAD/DXF,
+seam allowance, grading, fabric stretch data, colour management, or printer
+preflight.

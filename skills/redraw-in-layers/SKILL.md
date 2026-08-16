@@ -1,6 +1,6 @@
 ---
 name: redraw-in-layers
-description: Interview the user about visual intent, analyze RGB or RGB-D references, and create or revise artwork with 5–20 stable semantic layers (normally 8–12). Supports editable SVG, generated raster, layered pixel art, depth-aware planning, A/B/C proofs, masks, revisions, OpenRaster, scoped edits, and physical object specifications that keep real measurements, apparel sizes, sheet scale, placement, and angles separate from visual transforms. Use for photo-derived drawing, multi-layer art, product or apparel design handoff, measured layout, art direction, and non-destructive revision.
+description: Interview the user about visual intent, analyze RGB or RGB-D references, and create or revise artwork with 5–20 stable semantic layers (normally 8–12). Supports editable SVG, generated raster, layered pixel art, faithful photo-and-paper stamp archives, depth-aware planning, A/B/C proofs, masks, clean-plate background completion, movable affine transforms, revisions, OpenRaster, scoped edits, and physical object specifications that keep real measurements, apparel sizes, sheet scale, placement, and angles separate from visual transforms. Use for photo-derived drawing, archive or seal compositions, multi-layer art, product or apparel design handoff, measured layout, art direction, and non-destructive revision.
 ---
 
 # Redraw In Layers
@@ -23,7 +23,9 @@ This repository is an incubation prototype. It is not a released VULCA Effect Pa
 
 - Default to `vector-strict` when the user wants hand-editable vector drawing. Write SVG geometry directly and do not call an image-generation model.
 - Choose `raster-layered` when the user asks for 生图, non-vector artwork, raster painting, or generated PNG layers. Use the available image-generation tool for pixels; do not trace the result into SVG.
+- When the user wants to move, scale, rotate, or reorder real-photo objects without holes, keep `raster-layered`, read `references/scene-reconstruction.md`, and build a recompose-ready clean plate before treating cutouts as movable objects.
 - For pixel art, keep `raster-layered`, set `style: pixel-art`, and read `references/pixel-art.md` before creating prompts or files.
+- For a faithful photo joined to warm paper with a subject-derived stamp, keep `raster-layered`, set `style: photo-stamp-archive`, and read `references/photo-stamp-archive.md`.
 - For a named bundled style, install its machine-readable `style-recipe.json`; use `styles` to inspect recipes instead of relying on an unstructured prompt alone.
 - For mixed vector, paint, and pixel treatment, keep the registered PNG render stack canonical and attach an `editable_source` plus `layer_type` to layers that need a vector or pixel source.
 - For an existing Layered Redraw folder, read `project.json` first and preserve its output mode unless the user requests a separate style or mode variant.
@@ -62,7 +64,7 @@ Read `references/physical-specifications.md` whenever the user asks for real dim
 4. Separate physical measurements, output-sheet size/drawing scale, and visual placement/rotation/scale.
 5. Record measurement source, verification state, and confidence. Treat monocular depth as relative and mark uncalibrated photo-derived dimensions as estimates.
 6. Use `spec-set` and `spec-layout`; each mutation creates a recoverable snapshot and changes the project revision.
-7. Run `spec-export` to create a separate editable SVG/CSV technical sheet. This sheet may contain labels without enabling artwork text in the canonical illustration.
+7. Run `spec-export` to create a separate specification sheet. SVG is the default editable master; add PDF for print/approval, PNG for review/markup, and CSV or JSON for measurement-data exchange. All derived formats come from the same canonical `object-specs.json` and may contain labels without enabling artwork text in the canonical illustration.
 
 ## Create raster-layered artwork
 
@@ -71,12 +73,25 @@ Read `references/raster-contract.md` before generating any layer files.
 1. Confirm the canvas, style, composition, and 5–20 semantic layers; target 8–12.
 2. Run `new --mode raster-layered --style <recipe>`, choose Guided or Art Direction mode, and resolve the design plan before generation. Keep every rendered layer as a full-canvas PNG at identical dimensions; attach editable SVG sources only through the hybrid layer fields.
 3. Lock a composition guide before detailed generation. When direction is uncertain, generate A/B/C parameterized proofs and promote one locked candidate first. Record subject boxes, horizon, camera, palette, lighting, and occlusion order in the brief and per-layer prompts.
-4. Generate the bottom background layer as an opaque image. Generate every higher layer as an RGBA image with transparency outside its named content. Include the guide or preceding composite as a reference so registration stays fixed.
+4. Generate the bottom background layer as an opaque image. If source-photo objects must move, initialize a scene reconstruction and register a pixel-verified clean plate that removes every movable foreground object and its attached effects. Generate every higher layer as an RGBA image with transparency outside its named content. Include the guide or preceding composite as a reference so registration stays fixed.
 5. Do not bake lower layers into upper files. Remove stray backgrounds, duplicated subjects, shadows owned by another layer, and accidental opaque borders before accepting a layer.
 6. Place accepted files at the paths declared in `layers/index.json`; keep candidates in `staging/`.
 7. Run `compose`, then `validate --write-manifest`. Visually inspect both the composite and individual alpha layers before delivery.
+
+For photo-stamp archive work, use `archive-new` instead of a generic empty scaffold. Keep the copied source reference immutable, lock the photo layer, reserve most of the paper panel as negative space, and add a caption layer only for exact user-supplied text.
 8. Run `quality` for engineering checks, then perform a separate human visual review. The command does not assess composition, style execution, or artistic quality. Deliver the PNG stack, composite, preview, style recipe, prompts, index, manifest, masks, and recoverable history. Export ORA when the user wants to continue in Krita or another OpenRaster editor.
 
+## Make a real photograph recompose-ready
+
+Read `references/scene-reconstruction.md` before promising free movement or new occlusion relationships.
+
+1. Start from the immutable full-canvas source photograph and a full-canvas binary removal mask. Mask every object that may move plus any contact shadow or reflection owned by that object.
+2. Run `recompose-init` to save the source, mask, completion prompt, hashes, and pending scene contract.
+3. Use the available image-editing or inpainting tool to reconstruct only the hidden static background. Register its full-canvas opaque output with `clean-plate-register`; registration copies original pixels back outside the mask and requires zero outside-mask changes.
+4. Keep the registered clean plate locked at the bottom. Mark movable cutouts `movable-object`; mark separate linked shadows or reflections `dependent-effect` and preserve their `depends_on` relationships.
+5. Use `layer-settings` translation, scale, rotation, anchors, and ordering. The compositor must apply the transform to the final PNG, not merely record metadata. Pixel art uses whole-pixel movement, nearest-neighbour resampling, and 90-degree rotations.
+6. Inspect whether any subject was partly hidden in the source. Background completion does not restore that subject's missing anatomy or shape; keep it `visible-only` or create a separately masked amodal completion before large movement.
+7. Recompose, validate, and inspect the newly revealed background, transformed alpha edges, contact effects, and every occlusion crossing.
 ## Edit existing artwork
 
 1. Read `project.json`, `manifest.json`, and the canonical SVG or raster layer index.
@@ -91,7 +106,7 @@ Read `references/raster-contract.md` before generating any layer files.
 5. Create a recoverable snapshot before applying an edit. Modify only targets inside `expected_changed_layers`.
 6. Rebuild the manifest and verify that every untouched top-level layer has the same hash. If an unrelated layer changed, revert that edit and repair the patch.
 7. For SVG, preserve manually edited geometry. For raster, regenerate only selected PNG layers and apply them with `replace-layer-file`; never regenerate the whole stack for a local request.
-8. Use `layer-settings` for opacity, blend mode, ordering, labels, type, source, and dependencies. Use `diff` and `undo` instead of reconstructing an older version manually.
+8. Use `layer-settings` for opacity, blend mode, ordering, labels, type, source, dependencies, semantic roles, and bounded affine transforms. The clean plate remains identity-transformed and locked. Use `diff` and `undo` instead of reconstructing an older version manually.
 
 ## Drawing rules
 
@@ -104,6 +119,7 @@ Read `references/raster-contract.md` before generating any layer files.
 - Use depth bands only for diagnosis and spatial reasoning; group final layers by semantics and edit intent.
 - In vector mode, prefer deliberate paths over noisy auto-traced geometry.
 - In raster mode, reject empty alpha layers, flattened composites, and mismatched canvas sizes.
+- Do not call a real-photo stack recompose-ready when it only contains cutouts. Require a locked clean plate, transparent movable layers, transform-aware composition, and explicit status for partly occluded objects.
 - In pixel-art projects, preserve the logical grid, shared palette, binary alpha, and nearest-neighbour preview scale.
 - Keep every semantic layer non-empty and independently selectable.
 - Keep IDs unique, stable, lowercase, and descriptive.
@@ -126,10 +142,18 @@ python scripts/layered_redraw.py history <project>
 python scripts/layered_redraw.py diff <project> <snapshot-id>
 python scripts/layered_redraw.py undo <project> <snapshot-id>
 python scripts/layered_redraw.py layer-settings <project> <layer-id> --opacity 0.7 --blend-mode screen
+python scripts/layered_redraw.py recompose-init <project> source.png removal-mask.png --prompt "Continue the background"
+python scripts/layered_redraw.py clean-plate-register <project> candidate.png --model <tool> --seed 7
+python scripts/layered_redraw.py recompose-status <project>
+python scripts/layered_redraw.py layer-settings <project> <layer-id> --role movable-object --translate-x 80 --scale-x 1.1 --scale-y 1.1 --rotation-deg -5
 python scripts/layered_redraw.py spec-layout <project> --output-width 210 --output-height 297 --output-unit mm --drawing-scale 1:10
 python scripts/layered_redraw.py spec-set <project> layer-primary-subject object-belt --category belt --measurement length=100cm --rotation-deg -12
 python scripts/layered_redraw.py specs <project>
+python scripts/layered_redraw.py archive-new source.jpg output/archive --stamp-shape circle
+python scripts/layered_redraw.py archive-config output/archive --paper-age 0.12 --ink-wear 0.28
+python scripts/layered_redraw.py archive-verify output/archive
 python scripts/layered_redraw.py spec-export <project>
+python scripts/layered_redraw.py spec-export <project> --format svg --format pdf --format png --format csv --format json --dpi 192
 python scripts/layered_redraw.py export-ora <raster-project>
 python scripts/layered_redraw.py import-ora <file.ora> <project>
 python scripts/layered_redraw.py styles
@@ -154,7 +178,7 @@ python scripts/layered_redraw.py plan-resolve <project> semantic-regions.json
 python scripts/layered_redraw.py serve <project-directory>
 ```
 
-Use `assets/editor/` for multi-reference registration, RGB/depth comparison, RGB-D import, optional relative-depth estimation, planning-request authoring, Guided presets, Art Direction controls, parameterized A/B/C proof creation and promotion, layer, box, lasso, brush, and text-described selection; mask persistence; composition controls; history comparison; undo; engineering and plan-schema reports; and request authoring. The server is loopback-only and mutations require the same-origin session token fetched by the bundled UI. Preset and expert parameter changes participate in the revision hash and create recoverable snapshots where appropriate.
+Use `assets/editor/` for multi-reference registration, RGB/depth comparison, RGB-D import, optional relative-depth estimation, planning-request authoring, Guided presets, Art Direction controls, parameterized A/B/C proof creation and promotion, layer, box, lasso, brush, and text-described selection; mask persistence; clean-plate task initialization and registration; affine layer transforms and occlusion ordering; history comparison; undo; engineering and plan-schema reports; and request authoring. The server is loopback-only and mutations require the same-origin session token fetched by the bundled UI. Preset and expert parameter changes participate in the revision hash and create recoverable snapshots where appropriate.
 
 ## Load references selectively
 
@@ -162,10 +186,12 @@ Use `assets/editor/` for multi-reference registration, RGB/depth comparison, RGB
 - Read `references/design-modes.md` before choosing or changing the workflow mode or presets.
 - Read `references/design-proofs.md` before creating, comparing, registering, locking, or promoting parameterized proofs.
 - Read `references/reference-intelligence.md` before multi-reference, RGB-D, depth-estimation, or prompt-directed semantic-layer planning.
+- Read `references/photo-stamp-archive.md` whenever the user requests a photo-and-paper archive, custom stamp, seal composite, direct splice, or revisions to its paper, stamp, ink, position, or caption.
 - Read `references/physical-specifications.md` before adding real measurements, apparel sizes, output-sheet scale, placement coordinates, or angles.
 - Read `references/layer-contract.md` before planning or restructuring layers.
 - Read `references/edit-contract.md` before any localized edit.
 - Read `references/raster-contract.md` for raster-layered generation, compositing, or editing.
+- Read `references/scene-reconstruction.md` before background completion, clean-plate registration, real-photo object movement, affine raster transforms, or user-authored occlusion changes.
 - Read `references/pixel-art.md` whenever the requested or existing style is pixel art.
 - Read `references/styles.md` only for the selected style family.
 - Read `references/non-destructive-workflow.md` before history restore, ORA round trips, hybrid-source changes, or mask-based edits.

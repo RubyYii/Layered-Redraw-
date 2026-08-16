@@ -37,6 +37,7 @@ import project_features as FEATURES  # noqa: E402  (local sibling module)
 import design_proofs as PROOFS  # noqa: E402  (local sibling module)
 import reference_intelligence as REFERENCES  # noqa: E402  (local sibling module)
 import physical_specs as PHYSICAL  # noqa: E402  (local sibling module)
+import photo_stamp_archive as ARCHIVE  # noqa: E402  (local sibling module)
 
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -928,8 +929,20 @@ def update_vector_layer_settings(
 def update_layer_settings(raw_target: str | Path, layer_id: str, **settings: Any) -> dict[str, Any]:
     if target_output_mode(raw_target) == "raster-layered":
         return RASTER.update_layer_settings(raw_target, layer_id, **settings)
-    settings.pop("layer_type", None)
-    settings.pop("editable_source", None)
+    for raster_only in (
+        "layer_type",
+        "editable_source",
+        "role",
+        "translate_x",
+        "translate_y",
+        "scale_x",
+        "scale_y",
+        "rotation_deg",
+        "anchor_x",
+        "anchor_y",
+        "reset_transform",
+    ):
+        settings.pop(raster_only, None)
     return update_vector_layer_settings(raw_target, layer_id, **settings)
 
 
@@ -1369,7 +1382,14 @@ def serve_editor(
                         "design_plan": FEATURES.load_design_plan(project_dir),
                         "design_presets": FEATURES.list_design_presets(project_dir),
                         "design_proofs": PROOFS.load_design_proofs(project_dir),
+                        "photo_stamp_archive": ARCHIVE.public_state(project_dir),
+                        "scene_reconstruction": (
+                            RASTER.load_recomposition(project_dir)
+                            if fresh_config.get("output_mode") == "raster-layered"
+                            else {"enabled": False, "status": "not-applicable"}
+                        ),
                         "reference_intelligence": REFERENCES.public_state(project_dir),
+                        "spec_export_capabilities": PHYSICAL.export_capabilities(),
                         "physical_specifications": PHYSICAL.public_state(
                             project_dir,
                             known_layer_ids=layer_ids,
@@ -1519,7 +1539,20 @@ def serve_editor(
                     self._send_json(delete_object_specification(project_dir, object_id))
                     return
                 if path == "/api/specs/export":
-                    self._send_json(PHYSICAL.export_specifications(project_dir))
+                    formats = body.get("formats")
+                    if formats is not None and not isinstance(formats, list):
+                        raise LayeredRedrawError("Specification export formats must be an array")
+                    unknown = sorted(set(body) - {"formats", "dpi"})
+                    if unknown:
+                        raise LayeredRedrawError("Unknown specification export fields: " + ", ".join(unknown))
+                    dpi = body.get("dpi", 144)
+                    if isinstance(dpi, bool) or not isinstance(dpi, int):
+                        raise LayeredRedrawError("Specification export DPI must be an integer")
+                    self._send_json(PHYSICAL.export_specifications(
+                        project_dir,
+                        formats=formats,
+                        dpi=dpi,
+                    ))
                     return
                 if path == "/api/references/add":
                     data_url = body.get("data_url")
@@ -1602,6 +1635,66 @@ def serve_editor(
                         raw_request=body.get("planning_request") if isinstance(body.get("planning_request"), dict) else None,
                     ))
                     return
+                if path == "/api/recompose/init":
+                    allowed = {
+                        "source_data_url",
+                        "source_filename",
+                        "mask_data_url",
+                        "mask_filename",
+                        "background_layer_id",
+                        "prompt",
+                    }
+                    unknown = sorted(set(body) - allowed)
+                    if unknown:
+                        raise LayeredRedrawError("Unknown recompose-init fields: " + ", ".join(unknown))
+                    source_data_url = body.get("source_data_url")
+                    mask_data_url = body.get("mask_data_url")
+                    if not isinstance(source_data_url, str) or not source_data_url.startswith("data:image/") or ";base64," not in source_data_url:
+                        raise LayeredRedrawError("Recompose initialization requires a source image data_url")
+                    if not isinstance(mask_data_url, str) or not mask_data_url.startswith("data:image/") or ";base64," not in mask_data_url:
+                        raise LayeredRedrawError("Recompose initialization requires a mask image data_url")
+                    try:
+                        source_payload = base64.b64decode(source_data_url.split(",", 1)[1], validate=True)
+                        mask_payload = base64.b64decode(mask_data_url.split(",", 1)[1], validate=True)
+                    except (ValueError, binascii.Error) as exc:
+                        raise LayeredRedrawError("Recompose image data_url is not valid base64") from exc
+                    self._send_json(RASTER.initialize_recomposition_bytes(
+                        project_dir,
+                        source_payload,
+                        mask_payload,
+                        source_name=str(body.get("source_filename", "source-image")),
+                        mask_name=str(body.get("mask_filename", "clean-plate-mask")),
+                        background_layer_id=(
+                            body.get("background_layer_id")
+                            if isinstance(body.get("background_layer_id"), str)
+                            else None
+                        ),
+                        prompt=body.get("prompt") if isinstance(body.get("prompt"), str) else None,
+                    ))
+                    return
+                if path == "/api/recompose/clean-plate":
+                    allowed = {"data_url", "filename", "model", "seed"}
+                    unknown = sorted(set(body) - allowed)
+                    if unknown:
+                        raise LayeredRedrawError("Unknown clean-plate fields: " + ", ".join(unknown))
+                    data_url = body.get("data_url")
+                    if not isinstance(data_url, str) or not data_url.startswith("data:image/") or ";base64," not in data_url:
+                        raise LayeredRedrawError("Clean-plate registration requires an image data_url")
+                    seed = body.get("seed")
+                    if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
+                        raise LayeredRedrawError("Clean-plate seed must be an integer")
+                    try:
+                        payload = base64.b64decode(data_url.split(",", 1)[1], validate=True)
+                    except (ValueError, binascii.Error) as exc:
+                        raise LayeredRedrawError("Clean-plate data_url is not valid base64") from exc
+                    self._send_json(RASTER.register_clean_plate_bytes(
+                        project_dir,
+                        payload,
+                        candidate_name=str(body.get("filename", "clean-plate-candidate")),
+                        model=body.get("model") if isinstance(body.get("model"), str) else None,
+                        seed=seed,
+                    ))
+                    return
                 if path == "/api/mask":
                     data_url = body.get("data_url")
                     if not isinstance(data_url, str) or not data_url.startswith("data:image/png;base64,"):
@@ -1632,6 +1725,15 @@ def serve_editor(
                         "layer_type",
                         "editable_source",
                         "depends_on",
+                        "role",
+                        "translate_x",
+                        "translate_y",
+                        "scale_x",
+                        "scale_y",
+                        "rotation_deg",
+                        "anchor_x",
+                        "anchor_y",
+                        "reset_transform",
                         "move",
                     }
                     unknown = sorted(set(body) - allowed)
@@ -1790,6 +1892,43 @@ def build_parser() -> argparse.ArgumentParser:
         "--style",
         help="Style recipe slug; pixel recipes enable hard-alpha palette validation and nearest-neighbour previews",
     )
+    def add_archive_options(target: argparse.ArgumentParser) -> None:
+        target.add_argument("--orientation", choices=sorted(ARCHIVE.ORIENTATIONS))
+        target.add_argument("--photo-side", choices=sorted(ARCHIVE.PHOTO_SIDES))
+        target.add_argument("--photo-ratio", type=float)
+        target.add_argument("--stamp-shape", choices=sorted(ARCHIVE.STAMP_SHAPES))
+        target.add_argument("--stamp-position", choices=sorted(ARCHIVE.STAMP_POSITIONS))
+        target.add_argument("--stamp-scale", type=float)
+        target.add_argument("--paper-age", type=float)
+        target.add_argument("--ink-wear", type=float)
+        target.add_argument("--primary-ink")
+        target.add_argument("--secondary-ink")
+        target.add_argument("--caption-title")
+        target.add_argument("--caption-subtitle")
+        target.add_argument("--seed", dest="procedural_seed", type=int)
+
+    archive_new_parser = subparsers.add_parser(
+        "archive-new",
+        help="Create an editable photo-plus-stamp archival PNG stack",
+    )
+    archive_new_parser.add_argument("source")
+    archive_new_parser.add_argument("output")
+    archive_new_parser.add_argument("--title", default="Photo Stamp Archive")
+    add_archive_options(archive_new_parser)
+
+    archive_config_parser = subparsers.add_parser(
+        "archive-config",
+        help="Show or revise one photo-stamp archive project",
+    )
+    archive_config_parser.add_argument("target")
+    archive_config_parser.add_argument("--clear-caption", action="store_true")
+    add_archive_options(archive_config_parser)
+
+    archive_verify_parser = subparsers.add_parser(
+        "archive-verify",
+        help="Verify immutable source and photo-layer integrity for an archive project",
+    )
+    archive_verify_parser.add_argument("target")
     new_parser.add_argument("--pixel-scale", type=int, default=4, help="Nearest-neighbour preview scale")
     new_parser.add_argument("--palette-size", type=int, default=32, help="Pixel-art project color limit")
 
@@ -1885,7 +2024,41 @@ def build_parser() -> argparse.ArgumentParser:
     settings_parser.add_argument("--layer-type", choices=sorted(RASTER.SUPPORTED_LAYER_TYPES))
     settings_parser.add_argument("--editable-source")
     settings_parser.add_argument("--depends-on", nargs="*")
+    settings_parser.add_argument("--role", choices=sorted(RASTER.SUPPORTED_LAYER_ROLES))
+    settings_parser.add_argument("--translate-x", type=float)
+    settings_parser.add_argument("--translate-y", type=float)
+    settings_parser.add_argument("--scale-x", type=float)
+    settings_parser.add_argument("--scale-y", type=float)
+    settings_parser.add_argument("--rotation-deg", type=float)
+    settings_parser.add_argument("--anchor-x", type=float)
+    settings_parser.add_argument("--anchor-y", type=float)
+    settings_parser.add_argument("--reset-transform", action="store_true")
     settings_parser.add_argument("--move", choices=("up", "down", "top", "bottom"))
+
+    recompose_init_parser = subparsers.add_parser(
+        "recompose-init",
+        help="Register source and removal mask for a recompose-ready clean plate",
+    )
+    recompose_init_parser.add_argument("target")
+    recompose_init_parser.add_argument("source")
+    recompose_init_parser.add_argument("mask")
+    recompose_init_parser.add_argument("--background-layer")
+    recompose_init_parser.add_argument("--prompt")
+
+    recompose_status_parser = subparsers.add_parser(
+        "recompose-status",
+        help="Show clean-plate and occlusion-recomposition status",
+    )
+    recompose_status_parser.add_argument("target")
+
+    clean_plate_parser = subparsers.add_parser(
+        "clean-plate-register",
+        help="Register an inpainted background candidate and preserve known pixels exactly",
+    )
+    clean_plate_parser.add_argument("target")
+    clean_plate_parser.add_argument("candidate")
+    clean_plate_parser.add_argument("--model")
+    clean_plate_parser.add_argument("--seed", type=int)
 
     specs_parser = subparsers.add_parser("specs", help="Show real-world object measurements and visual transforms")
     specs_parser.add_argument("target")
@@ -1944,9 +2117,22 @@ def build_parser() -> argparse.ArgumentParser:
     spec_remove_parser.add_argument("target")
     spec_remove_parser.add_argument("object_id")
 
-    spec_export_parser = subparsers.add_parser("spec-export", help="Export editable SVG and CSV specification sheets")
+    spec_export_parser = subparsers.add_parser("spec-export", help="Export specification sheets in selected formats")
     spec_export_parser.add_argument("target")
     spec_export_parser.add_argument("--output-dir")
+    spec_export_parser.add_argument(
+        "--format",
+        dest="formats",
+        action="append",
+        choices=(*PHYSICAL.SPEC_EXPORT_FORMATS, "all"),
+        help="Output format; repeat to export multiple formats. Defaults to svg.",
+    )
+    spec_export_parser.add_argument(
+        "--dpi",
+        type=int,
+        default=144,
+        help="PNG resolution from 72 to 600 DPI.",
+    )
 
     export_ora_parser = subparsers.add_parser("export-ora", help="Export a raster project to OpenRaster")
     export_ora_parser.add_argument("target")
@@ -2067,7 +2253,69 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        if args.command == "new":
+        if args.command == "archive-new":
+            option_names = (
+                "orientation",
+                "photo_side",
+                "photo_ratio",
+                "stamp_shape",
+                "stamp_position",
+                "stamp_scale",
+                "paper_age",
+                "ink_wear",
+                "primary_ink",
+                "secondary_ink",
+                "caption_title",
+                "caption_subtitle",
+                "procedural_seed",
+            )
+            options = {
+                name: getattr(args, name)
+                for name in option_names
+                if getattr(args, name) is not None
+            }
+            result = ARCHIVE.create_archive_project(
+                args.source,
+                args.output,
+                title=args.title,
+                **options,
+            )
+        elif args.command == "archive-config":
+            if args.clear_caption and (args.caption_title is not None or args.caption_subtitle is not None):
+                raise LayeredRedrawError(
+                    "--clear-caption cannot be combined with --caption-title or --caption-subtitle"
+                )
+            option_names = (
+                "orientation",
+                "photo_side",
+                "photo_ratio",
+                "stamp_shape",
+                "stamp_position",
+                "stamp_scale",
+                "paper_age",
+                "ink_wear",
+                "primary_ink",
+                "secondary_ink",
+                "caption_title",
+                "caption_subtitle",
+                "procedural_seed",
+            )
+            changes = {
+                name: getattr(args, name)
+                for name in option_names
+                if getattr(args, name) is not None
+            }
+            if args.clear_caption:
+                changes["caption_title"] = None
+                changes["caption_subtitle"] = None
+            result = (
+                ARCHIVE.update_archive_project(args.target, changes)
+                if changes
+                else ARCHIVE.load_archive_config(args.target)
+            )
+        elif args.command == "archive-verify":
+            result = ARCHIVE.verify_archive_project(args.target, strict=True)
+        elif args.command == "new":
             style = FEATURES.normalize_style_id(args.style) if isinstance(args.style, str) else None
             recipe = None
             if style:
@@ -2177,6 +2425,24 @@ def main(argv: list[str] | None = None) -> int:
             result = history_diff(args.target, args.snapshot)
         elif args.command == "undo":
             result = undo_to_snapshot(args.target, args.snapshot)
+        elif args.command == "recompose-init":
+            result = RASTER.initialize_recomposition(
+                args.target,
+                args.source,
+                args.mask,
+                background_layer_id=args.background_layer,
+                prompt=args.prompt,
+            )
+        elif args.command == "recompose-status":
+            result = RASTER.load_recomposition(args.target)
+            result["ok"] = True
+        elif args.command == "clean-plate-register":
+            result = RASTER.register_clean_plate(
+                args.target,
+                args.candidate,
+                model=args.model,
+                seed=args.seed,
+            )
         elif args.command == "layer-settings":
             visible = True if args.visible else False if args.hidden else None
             locked = True if args.locked else False if args.unlocked else None
@@ -2190,6 +2456,15 @@ def main(argv: list[str] | None = None) -> int:
                 "layer_type": args.layer_type,
                 "editable_source": args.editable_source,
                 "depends_on": args.depends_on,
+                "role": args.role,
+                "translate_x": args.translate_x,
+                "translate_y": args.translate_y,
+                "scale_x": args.scale_x,
+                "scale_y": args.scale_y,
+                "rotation_deg": args.rotation_deg,
+                "anchor_x": args.anchor_x,
+                "anchor_y": args.anchor_y,
+                "reset_transform": True if args.reset_transform else None,
                 "move": args.move,
             }
             result = update_layer_settings(
@@ -2313,7 +2588,12 @@ def main(argv: list[str] | None = None) -> int:
             result = delete_object_specification(args.target, args.object_id)
         elif args.command == "spec-export":
             project_dir, _, _, _ = specification_context(args.target)
-            result = PHYSICAL.export_specifications(project_dir, args.output_dir)
+            result = PHYSICAL.export_specifications(
+                project_dir,
+                args.output_dir,
+                formats=args.formats,
+                dpi=args.dpi,
+            )
         elif args.command == "export-ora":
             result = RASTER.export_ora(args.target, args.output)
         elif args.command == "import-ora":
@@ -2456,6 +2736,7 @@ def main(argv: list[str] | None = None) -> int:
         PROOFS.DesignProofError,
         REFERENCES.ReferenceIntelligenceError,
         PHYSICAL.PhysicalSpecError,
+        ARCHIVE.PhotoStampArchiveError,
     ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

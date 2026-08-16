@@ -12,6 +12,7 @@ project-name/
 ├─ creative-brief.json
 ├─ design-plan.json      # guided or expert composition-to-material decisions
 ├─ object-specs.json     # real measurements, apparel sizes, transforms, sheet scale
+├─ scene-reconstruction.json # clean-plate provenance and verification when used
 ├─ planning-request.json # RGB + prompt + immutable-depth interpretation
 ├─ layer-plan.json       # resolved semantic edit ownership
 ├─ directed-depth.json   # layer-level spatial interpretation, never raw evidence
@@ -23,7 +24,8 @@ project-name/
 ├─ masks/                # lasso and brush selections
 ├─ directions/           # style proof contact sheet
 ├─ references/           # registered RGB sources and versioned relative-depth runs
-├─ specifications/       # derived editable SVG and CSV technical sheets
+├─ reconstruction/       # immutable source copy and raw completion candidates
+├─ specifications/       # derived SVG/PDF/PNG sheets and CSV/JSON data copies
 ├─ layers/
 │  ├─ index.json
 │  ├─ 01-background.svg | 01-background.png
@@ -37,13 +39,23 @@ project-name/
 
 - For vector modes, treat `artwork.svg` as canonical; `manifest.json` and exported layer SVGs are derived.
 - For `raster-layered`, treat `layers/index.json` plus the PNG layer files as canonical; `artwork.png`, `preview.png`, `composition.json`, and `manifest.json` are derived.
+- For recompose-ready photo projects, keep `scene-reconstruction.json`, the immutable source copy, removal mask, and raw clean-plate candidate beside the canonical stack. The registered clean plate is the locked bottom layer; transforms and z-order remain canonical entries in `layers/index.json`.
 - When reference intelligence is used, keep registered RGB and every canonical depth run immutable under `references/`; create a new run instead of overwriting evidence.
 - Treat `planning-request.json` and `layer-plan.json` as production inputs, not substitutes for the canonical SVG or PNG layer stack.
 - Use `preview.png` for sharing and review, never as the editable source.
 - For pixel art, keep `artwork.png` and every layer at logical resolution; only `preview.png` may be enlarged, using the recorded integer nearest-neighbour scale.
 - For hybrid raster projects, keep each registered PNG render canonical for composition and keep `editable_source` beside it for manual source editing.
 - OpenRaster files are exchange packages, not the only canonical source. Sync them back into the project and validate before delivery.
-- Treat `object-specs.json` as the source of truth for physical measurements. Visual SVG/PNG transforms and derived files under `specifications/` must not redefine those values.
+- Treat root `object-specs.json` as the source of truth for physical measurements. Visual SVG/PNG transforms and derived SVG/PDF/PNG/CSV/JSON files under `specifications/` must not redefine those values.
+
+## Specification export formats
+
+- Default to `specifications/object-spec-sheet.svg` as the editable specification master.
+- Use PDF for print or approval at the declared physical page size.
+- Use PNG for review and markup at the recorded DPI; do not treat it as an editable source.
+- Use CSV for tabular exchange and JSON for a structured derived copy. Root `object-specs.json` remains canonical.
+- Generate all selected formats from one validated document and commit them as one transaction. On failure, keep the previous selected outputs unchanged.
+- A specification sheet is not a garment pattern, manufacturing CAD file, calibrated photogrammetric model, or printer-preflight proof.
 
 ## Project metadata
 
@@ -60,5 +72,6 @@ Record at least:
 - reference provenance without embedding private source data in public metadata.
 - active RGB/depth IDs, source and artifact hashes, relative-depth status, and semantic layer-plan provenance when reference intelligence is used.
 - object IDs, owning semantic layers, physical dimensions and units, declared size systems, measurement provenance/verification/confidence, visual transforms, output-sheet size, and drawing scale when specifications are used.
+- clean-plate source/mask/candidate hashes, outside-mask verification, completion method/model/seed, layer roles, affine transforms, and occlusion order when scene reconstruction is used.
 
 Before delivery, run `design-check` and `quality`, rebuild the manifest, render the preview, and visually inspect both the composite and the independently editable layers.

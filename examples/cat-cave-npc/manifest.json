@@ -18,6 +18,8 @@
   "design_plan_sha256": "db1ba78f1beb3211535205bb41a9fb523f4390e17508b8cb46cb58c860d14604",
   "object_specs": null,
   "object_specs_sha256": null,
+  "scene_reconstruction": null,
+  "scene_reconstruction_sha256": null,
   "layer_model": "semantic",
   "pixel_art": {
     "palette_size": 32,
@@ -50,6 +52,12 @@
         384,
         216
       ],
+      "transformed_bbox": [
+        0.0,
+        0.0,
+        384.0,
+        216.0
+      ],
       "alpha_extrema": [
         255,
         255
@@ -62,6 +70,17 @@
       "opacity": 1.0,
       "blend_mode": "normal",
       "depends_on": [],
+      "role": "artwork",
+      "transform": {
+        "translate_x": 0.0,
+        "translate_y": 0.0,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "rotation_deg": 0.0,
+        "anchor_x": 0.5,
+        "anchor_y": 0.5,
+        "anchor_space": "content-bbox"
+      },
       "error": null
     },
     {
@@ -86,6 +105,12 @@
         384,
         216
       ],
+      "transformed_bbox": [
+        0.0,
+        0.0,
+        384.0,
+        216.0
+      ],
       "alpha_extrema": [
         0,
         255
@@ -100,6 +125,17 @@
       "depends_on": [
         "layer-cave-background"
       ],
+      "role": "artwork",
+      "transform": {
+        "translate_x": 0.0,
+        "translate_y": 0.0,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "rotation_deg": 0.0,
+        "anchor_x": 0.5,
+        "anchor_y": 0.5,
+        "anchor_space": "content-bbox"
+      },
       "error": null
     },
     {
@@ -124,6 +160,12 @@
         55,
         49
       ],
+      "transformed_bbox": [
+        300.0,
+        67.0,
+        55.0,
+        49.0
+      ],
       "alpha_extrema": [
         0,
         255
@@ -138,6 +180,17 @@
       "depends_on": [
         "layer-cave-background"
       ],
+      "role": "artwork",
+      "transform": {
+        "translate_x": 0.0,
+        "translate_y": 0.0,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "rotation_deg": 0.0,
+        "anchor_x": 0.5,
+        "anchor_y": 0.5,
+        "anchor_space": "content-bbox"
+      },
       "error": null
     },
     {
@@ -162,6 +215,12 @@
         68,
         39
       ],
+      "transformed_bbox": [
+        72.0,
+        77.0,
+        68.0,
+        39.0
+      ],
       "alpha_extrema": [
         0,
         255
@@ -176,6 +235,17 @@
       "depends_on": [
         "layer-cave-background"
       ],
+      "role": "artwork",
+      "transform": {
+        "translate_x": 0.0,
+        "translate_y": 0.0,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "rotation_deg": 0.0,
+        "anchor_x": 0.5,
+        "anchor_y": 0.5,
+        "anchor_space": "content-bbox"
+      },
       "error": null
     },
     {
@@ -200,6 +270,12 @@
         103,
         41
       ],
+      "transformed_bbox": [
+        72.0,
+        112.0,
+        103.0,
+        41.0
+      ],
       "alpha_extrema": [
         0,
         255
@@ -214,6 +290,17 @@
       "depends_on": [
         "layer-treasure-chest"
       ],
+      "role": "artwork",
+      "transform": {
+        "translate_x": 0.0,
+        "translate_y": 0.0,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "rotation_deg": 0.0,
+        "anchor_x": 0.5,
+        "anchor_y": 0.5,
+        "anchor_space": "content-bbox"
+      },
       "error": null
     },
     {
@@ -238,6 +325,12 @@
         111,
         73
       ],
+      "transformed_bbox": [
+        190.0,
+        69.0,
+        111.0,
+        73.0
+      ],
       "alpha_extrema": [
         0,
         255
@@ -252,6 +345,17 @@
       "depends_on": [
         "layer-cave-background"
       ],
+      "role": "artwork",
+      "transform": {
+        "translate_x": 0.0,
+        "translate_y": 0.0,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "rotation_deg": 0.0,
+        "anchor_x": 0.5,
+        "anchor_y": 0.5,
+        "anchor_space": "content-bbox"
+      },
       "error": null
     },
     {
@@ -276,6 +380,12 @@
         79,
         39
       ],
+      "transformed_bbox": [
+        201.0,
+        35.0,
+        79.0,
+        39.0
+      ],
       "alpha_extrema": [
         0,
         255
@@ -290,6 +400,17 @@
       "depends_on": [
         "layer-cat-npc"
       ],
+      "role": "artwork",
+      "transform": {
+        "translate_x": 0.0,
+        "translate_y": 0.0,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "rotation_deg": 0.0,
+        "anchor_x": 0.5,
+        "anchor_y": 0.5,
+        "anchor_space": "content-bbox"
+      },
       "error": null
     },
     {
@@ -314,6 +435,12 @@
         63,
         15
       ],
+      "transformed_bbox": [
+        210.0,
+        43.0,
+        63.0,
+        15.0
+      ],
       "alpha_extrema": [
         0,
         255
@@ -328,6 +455,17 @@
       "depends_on": [
         "layer-nameplate-panel"
       ],
+      "role": "artwork",
+      "transform": {
+        "translate_x": 0.0,
+        "translate_y": 0.0,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "rotation_deg": 0.0,
+        "anchor_x": 0.5,
+        "anchor_y": 0.5,
+        "anchor_space": "content-bbox"
+      },
       "error": null
     },
     {
@@ -352,6 +490,12 @@
         331,
         57
       ],
+      "transformed_bbox": [
+        27.0,
+        153.0,
+        331.0,
+        57.0
+      ],
       "alpha_extrema": [
         0,
         255
@@ -364,6 +508,17 @@
       "opacity": 1.0,
       "blend_mode": "normal",
       "depends_on": [],
+      "role": "artwork",
+      "transform": {
+        "translate_x": 0.0,
+        "translate_y": 0.0,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "rotation_deg": 0.0,
+        "anchor_x": 0.5,
+        "anchor_y": 0.5,
+        "anchor_space": "content-bbox"
+      },
       "error": null
     },
     {
@@ -388,6 +543,12 @@
         305,
         42
       ],
+      "transformed_bbox": [
+        45.0,
+        165.0,
+        305.0,
+        42.0
+      ],
       "alpha_extrema": [
         0,
         255
@@ -402,6 +563,17 @@
       "depends_on": [
         "layer-dialogue-panel"
       ],
+      "role": "artwork",
+      "transform": {
+        "translate_x": 0.0,
+        "translate_y": 0.0,
+        "scale_x": 1.0,
+        "scale_y": 1.0,
+        "rotation_deg": 0.0,
+        "anchor_x": 0.5,
+        "anchor_y": 0.5,
+        "anchor_space": "content-bbox"
+      },
       "error": null
     }
   ]

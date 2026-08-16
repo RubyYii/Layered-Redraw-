@@ -34,13 +34,19 @@ After changing a vector source manually, rerender its PNG at the exact canvas di
 
 Use `depends_on` for relationships such as a cast shadow depending on its subject or reflected light depending on water. Keep the dependency graph acyclic. Include linked layers only when the requested change genuinely affects them.
 
+## Recompose-ready photographs
+
+Read `scene-reconstruction.md` before turning source-photo cutouts into movable scene elements. Register one immutable source, one binary removal mask, and one pixel-verified clean plate. Moving a cutout without that clean plate is not a non-destructive scene edit because it reveals a hole. When an object was partly occluded, complete its hidden shape separately or keep it marked `visible-only`.
+
+Keep the clean plate locked at the bottom. Treat translations, scale, rotation, content-bbox anchors, and z-order as recoverable composition state. Keep object-owned shadows and reflections separate and dependency-linked so the user can decide whether they move, regenerate, or remain attached to the receiving surface.
+
 ## Composition controls
 
-Support `normal`, `multiply`, `screen`, `overlay`, `darken`, and `lighten`. Record visibility, lock state, opacity, blend mode, labels, layer type, editable source, dependency list, and z-order in the manifest revision. Pixel-art layers must stay at opacity 1 to preserve their palette.
+Support `normal`, `multiply`, `screen`, `overlay`, `darken`, and `lighten`. Record visibility, lock state, opacity, blend mode, labels, layer type, editable source, dependency list, z-order, semantic role, and canonical transform in the manifest revision. Pixel-art layers must stay at opacity 1, use whole-pixel translations, nearest-neighbour resampling, and rotations in multiples of 90 degrees.
 
 ## OpenRaster round trip
 
-Use `export-ora` for manual editing in Krita or another OpenRaster editor. The export writes stable layer IDs into names, rendered layers, visibility, opacity, blend mode, merged image, and thumbnail. Use `import-ora` with the existing project directory to sync the edited stack back. Reject canvas, count, or stable-ID mismatches; create a snapshot before replacing files.
+Use `export-ora` for manual editing in Krita or another OpenRaster editor. Arbitrary scale and rotation remain project composition metadata because OpenRaster cannot portably represent every affine transform; keep the Layered Redraw project beside the ORA package. The export writes stable layer IDs into names, rendered layers, visibility, opacity, blend mode, merged image, and thumbnail. Use `import-ora` with the existing project directory to sync the edited stack back. Reject canvas, count, or stable-ID mismatches; create a snapshot before replacing files.
 
 ## Quality gate
 

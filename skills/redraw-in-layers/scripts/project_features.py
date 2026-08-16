@@ -137,6 +137,9 @@ def normalize_style_id(raw: str) -> str:
         "watercolour": "watercolour-wash",
         "gba": "gba-warm-narrative",
         "stainedglass": "stained-glass",
+        "photo-stamp": "photo-stamp-archive",
+        "stamp-archive": "photo-stamp-archive",
+        "photo-archive": "photo-stamp-archive",
     }
     return aliases.get(normalized, normalized)
 
@@ -402,6 +405,7 @@ def _default_preset_for_style(style: str | None) -> str:
         "gba-warm-narrative": "gba-warm-story",
         "pixel-art": "gba-warm-story",
         "poster-editorial": "editorial-geometric",
+        "photo-stamp-archive": "photo-stamp-archive-balanced",
     }
     return mapping.get(normalize_style_id(style) if style else "", "faithful-balanced")
 
@@ -841,6 +845,8 @@ def _source_paths(project_dir: Path) -> list[Path]:
         "semantic-regions.json",
         "layer-plan.json",
         "directed-depth.json",
+        "archive-config.json",
+        "scene-reconstruction.json",
     ):
         add(name)
 
@@ -859,7 +865,15 @@ def _source_paths(project_dir: Path) -> list[Path]:
     else:
         add(config.get("canonical_svg", "artwork.svg"))
 
-    for folder_name in ("masks", "directions", "presets", "proofs", "references", "specifications"):
+    for folder_name in (
+        "masks",
+        "directions",
+        "presets",
+        "proofs",
+        "references",
+        "reconstruction",
+        "specifications",
+    ):
         folder = project_dir / folder_name
         if folder.is_dir():
             for path in folder.rglob("*"):

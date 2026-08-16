@@ -11,6 +11,10 @@ Layered Redraw source code and documentation are published under Apache-2.0 by R
 
 Do not add a photograph, font, logo, model weight, or third-party artwork without recording its source, rights basis, permitted uses, and required attribution here or in a colocated asset record.
 
+## Design references
+
+- The `photo-stamp-archive` mode was independently implemented after reviewing [`Dlcccc71913/skill-make-photo-stamp-archive`](https://github.com/Dlcccc71913/skill-make-photo-stamp-archive), which is published under the MIT License. This repository reuses no source code, prompts, or bundled artwork from that project; it applies the high-level photo/paper, custom-seal, dry-ink, and negative-space ideas through Layered Redraw's own deterministic renderer, semantic-layer contract, immutable-source evidence, and recoverable project history.
+
 ## Optional software and models
 
 Python packages in `requirements-raster.txt` and `requirements-depth.txt` retain their own licenses. Depth model weights are not bundled. Installing or downloading an optional model is a separate user action governed by that model's published terms; this repository does not relicense it.

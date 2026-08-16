@@ -21,6 +21,8 @@ Layered Redraw 是一个本地优先的 Codex 插件与多图层工程格式。�
 
 像素画是 `raster-layered` 的正式风格预设：使用逻辑像素画布、共享有限色板、0/255 硬透明和最近邻放大预览，而不是对普通图片套像素化滤镜。
 
+真实照片现在还可升级为“可重构场景”：用移除遮罩生成并登记完整背景（clean plate），把物体保留为透明图层，再由合成器真正执行位移、缩放、旋转和前后层级。登记过程强制恢复遮罩外的原图像素并逐像素校验，因此移动物体时不会露出空洞，也不会让补全工具悄悄改掉已知背景。
+
 v0.6 新增“参考图与空间”工作流：可注册多张 RGB 参考、导入配对深度图或用可选的 Depth Anything V2 后端估计相对深度，再把“原图 + 深度 + 提示词”解析为 5–20 个语义图层。原始深度永不被艺术参数改写；提示词只控制语义合并、独立编辑关系和空间解释。普通的“引导创作”保留少量安全参数，“艺术指导”开放模型、RGB-D 方向与空间压平／夸张。作品文字默认禁止；确需游戏 UI 等文字时，必须在设计合同中列出允许的文字图层。
 
 正式绘制前还可以生成带参数的 A/B/C 设计稿。当前内置输出是参数合同、差异、低细节示意和外部真实渲染请求；只有注册了真实场景渲染后，才能作为画面效果证据。选择并锁定一个方案后，它可以晋升为最终 8–12 图层绘制的设计依据，但这本身不等于艺术质量已经成立。
@@ -93,7 +95,9 @@ Codex 会先确认画面情绪、构图取舍、风格、颜色、主体和细�
 - 一个完全由路径、图形、渐变、图案和 SVG 滤镜绘制的 10 图层运河示例。
 - 未修改图层哈希保护，避免一次局部调整意外重构整张作品。
 - `raster-layered`：同尺寸 RGBA PNG 图层、自动合成、透明通道与尺寸校验，以及 `replace-layer-file` 定向替换。
+- 可重构真实场景：完整背景、不可变原图、二值移除遮罩、补全候选及其来源记录；物体图层支持非破坏位移、独立缩放、旋转、锚点和遮挡顺序，所有变换进入版本哈希与历史。
 - `pixel-art` 预设：默认 320×240、32 色、4× 最近邻预览，并校验抗锯齿半透明、图层不透明度和全工程色板上限。
+- `photo-stamp-archive` 模式：把未经重绘的锁定照片与暖白纸张直接拼接，以照片主体派生小型印章；纸张、边框、主体印纹、副色、磨损和收尾各自成层，默认 8 层，只有用户提供精确文字时才加入第 9 个说明层。
 - 非破坏性版本历史：每次补丁、图层设置或 ORA 回读前自动快照；支持 `history`、`diff` 和可回退的 `undo`。
 - 套索与画笔蒙版：按原画布坐标保存二值 PNG，并与语义图层范围一起约束局部修改。
 - 图层合成控制：透明度、显示、锁定、顺序、双语名称，以及 normal／multiply／screen／overlay／darken／lighten。
@@ -101,7 +105,19 @@ Codex 会先确认画面情绪、构图取舍、风格、颜色、主体和细�
 - 10 个从构图到节奏的风格参数合同、2–6 个方向小样联系表、依赖图层关系，以及彼此分离的工程质量、计划结构完整度和人工视觉确认状态。
 - OpenRaster `.ora` 导出与回读，方便在 Krita 等软件中继续手绘，再同步回 Layered Redraw。
 - 真实规格模式：以 `object-specs.json` 把厘米／英寸测量、XL 等尺码体系、数据来源、核验状态、置信度、位置、旋转、三轴姿态和画面缩放绑定到对象与语义图层，同时与版面实际尺寸和 1:10 等绘图比例保持分离。
-- 规格交付：编辑器可直接录入上述数据；`spec-export` 生成独立、可编辑的 SVG 规格表与 UTF-8 CSV，不把标注文字写进正式画作。
+- 规格交付：编辑器可直接录入上述数据；`spec-export` 默认生成独立、可编辑的 SVG 规格表，也可按用途追加 PDF、PNG、CSV 和 JSON，不把标注文字写进正式画作。
+
+### 规格导出格式
+
+| 格式 | 主要用途 | 说明 |
+| --- | --- | --- |
+| SVG（默认） | 手工修改、可编辑母版 | Inkscape／Illustrator／Affinity Designer |
+| PDF | 按声明纸张尺寸打印、审批 | 保留矢量图形，不作为对象数据源 |
+| PNG | 审阅、批注、聊天发送 | 可选 72–600 DPI，不作为可编辑母版 |
+| CSV | 表格、供应链交换 | UTF-8 尺寸行数据 |
+| JSON | 程序、自动化交换 | 根目录 `object-specs.json` 仍是唯一事实来源 |
+
+一次可勾选多种格式；系统会从同一份已验证数据统一生成，并在全部成功后才替换旧导出。规格表不等同于服装纸样、DXF/CAD 或印前证明。
 
 当前编辑器可以直接保存图层合成设置、蒙版和历史恢复；艺术语言仍由 Codex 解释。将导出的请求与工程交给 Codex，并调用 `$redraw-in-layers`，即可生成受约束的 SVG 补丁或 PNG 图层替换，并验证其他图层保持不变。
 
@@ -115,15 +131,28 @@ Codex 会先确认画面情绪、构图取舍、风格、颜色、主体和细�
 
 ## 快速体验
 
-矢量模式只需要 Python 3.10 或更高版本。`raster-layered` 的校验与合成额外需要 Pillow；深度估计是独立的可选依赖：
+矢量模式只需要 Python 3.10 或更高版本。`raster-layered` 的校验与合成额外需要 Pillow；规格 PDF/PNG 与深度估计分别使用独立的可选依赖：
 
 ```powershell
 python -m pip install Pillow
+# 仅在需要规格 PDF／PNG 导出时：
+python -m pip install -r requirements-output.txt
 # 仅在需要本地深度估计时：
 python -m pip install -r requirements-depth.txt
 python skills/redraw-in-layers/scripts/layered_redraw.py validate examples/canal-evening --write-manifest
 python skills/redraw-in-layers/scripts/layered_redraw.py serve examples/canal-evening --open
 ```
+
+从照片创建可编辑的照片印章档案，并交给 Krita 继续手工调整：
+
+```powershell
+python skills/redraw-in-layers/scripts/layered_redraw.py archive-new input.jpg output/my-photo-stamp --orientation left-right --photo-side left --stamp-shape circle
+python skills/redraw-in-layers/scripts/layered_redraw.py archive-verify output/my-photo-stamp
+python skills/redraw-in-layers/scripts/layered_redraw.py export-ora output/my-photo-stamp --output output/my-photo-stamp.ora
+python skills/redraw-in-layers/scripts/layered_redraw.py serve output/my-photo-stamp --open
+```
+
+原始文件会按字节复制到工程参考目录，照片显示层默认锁定；之后可用 `archive-config` 单独更改纸张老化、印章形状／位置／大小、墨色和磨损，而无需重建照片图层。
 
 如果浏览器没有自动打开，请访问 `http://127.0.0.1:8765/`。
 
@@ -135,7 +164,7 @@ python skills/redraw-in-layers/scripts/layered_redraw.py serve examples/canal-ev
 4. 选择视觉模板或专家参数；再生成、选择、锁定并晋升 A/B/C 参数设计稿。
 5. 从左侧选择语义图层，或用图层点击、框选、套索、画笔和纯文本限定修改范围。
 6. 调整透明度、混合模式、顺序和双语名称；用历史区比较或恢复版本。
-7. 需要真实产品数据时切换到“艺术指导”，展开左侧“真实规格”：填写对象尺寸、尺码体系、角度、视觉缩放、版面宽高与绘图比例，并导出 SVG／CSV 规格表。
+7. 需要真实产品数据时切换到“艺术指导”，展开左侧“真实规格”：填写对象尺寸、尺码体系、角度、视觉缩放、版面宽高与绘图比例；默认导出 SVG，按交付需要勾选 PDF／PNG／CSV／JSON。
 8. 描述变化并下载 `edit-request.json`，再交给 Codex 与 `$redraw-in-layers`。
 
 ## 安装并调用 Skill
@@ -154,6 +183,13 @@ New-Item -ItemType Junction -Path $skillTarget -Target (Resolve-Path ".\skills\r
 先进行创作意图访谈；确认方向后，生成 8–12 个语义图层的 vector-strict SVG 工程。
 ```
 
+照片印章档案模式：
+
+```text
+使用 $redraw-in-layers 的 photo-stamp-archive 模式处理本条照片。
+保留原照片，右侧使用暖白纸张和由主体派生的小型圆形印章，不添加文字，输出可在 Krita 中继续编辑的多图层 ORA。
+```
+
 多图层生图模式：
 
 ```text
@@ -161,6 +197,13 @@ New-Item -ItemType Junction -Path $skillTarget -Target (Resolve-Path ".\skills\r
 不要输出矢量图；生成 8–12 个同尺寸 PNG 图层（背景不透明，其余保留透明区域），并合成为 artwork.png。
 ```
 
+需要自由移动真实物体并重排遮挡：
+
+```text
+使用 $redraw-in-layers 把本条照片制作成 recompose-ready 的 raster-layered 工程。
+先生成移除所有可移动物体及其附属阴影／反射后的完整背景；保留各物体为透明图层。
+之后让我能在艺术指导界面中移动、缩放、旋转和调整前后顺序，且遮罩外原图像素必须保持不变。
+```
 多图层像素画：
 
 ```text
@@ -188,7 +231,7 @@ New-Item -ItemType Junction -Path $skillTarget -Target (Resolve-Path ".\skills\r
 ```text
 使用 $redraw-in-layers 为服装搭配图建立真实规格。
 腰带长度 100 cm；衬衫尺码为 XL（Brand CN 2026），肩宽 48 cm、胸围 116 cm、衣长 74 cm、袖长 62 cm；裙子记录腰围、臀围和裙长。
-真实尺寸不得随画面缩放或旋转改变；同时记录版面实际尺寸、绘图比例、测量来源和核验状态，并导出 SVG／CSV 规格表。
+真实尺寸不得随画面缩放或旋转改变；同时记录版面实际尺寸、绘图比例、测量来源和核验状态。默认导出 SVG；同时生成用于审批的 PDF、用于批注的 192 DPI PNG，以及 CSV／JSON 数据副本。
 ```
 
 原图＋提示词＋深度控制图层：
@@ -277,6 +320,11 @@ python skills/redraw-in-layers/scripts/layered_redraw.py plan-resolve output/my-
 # PNG 图层就位后进行合成
 python skills/redraw-in-layers/scripts/layered_redraw.py compose output/my-raster-project
 
+# 建立可重构背景任务、登记补全结果，并移动主体
+python skills/redraw-in-layers/scripts/layered_redraw.py recompose-init output/my-raster-project source.png removal-mask.png --prompt "延续原有墙面和地面，不增加新物体"
+python skills/redraw-in-layers/scripts/layered_redraw.py clean-plate-register output/my-raster-project clean-plate.png --model my-inpainter --seed 7
+python skills/redraw-in-layers/scripts/layered_redraw.py layer-settings output/my-raster-project layer-primary-subject --role movable-object --translate-x 120 --scale-x 1.15 --scale-y 1.15 --rotation-deg -6
+
 # 校验工程并刷新 manifest.json
 python skills/redraw-in-layers/scripts/layered_redraw.py validate output/my-project --write-manifest
 
@@ -305,6 +353,7 @@ python skills/redraw-in-layers/scripts/layered_redraw.py spec-set output/my-proj
 python skills/redraw-in-layers/scripts/layered_redraw.py spec-set output/my-project layer-primary-subject object-skirt --name-zh "裙子" --name-en "Skirt" --category skirt --size-label XL --size-system "Brand CN 2026" --measurement waist-circumference=82cm --measurement hip-circumference=106cm --measurement skirt-length=78cm
 python skills/redraw-in-layers/scripts/layered_redraw.py specs output/my-project
 python skills/redraw-in-layers/scripts/layered_redraw.py spec-export output/my-project
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-export output/my-project --format svg --format pdf --format png --format csv --format json --dpi 192
 
 # 查看风格配方并制作方向小样板
 python skills/redraw-in-layers/scripts/layered_redraw.py styles
@@ -332,7 +381,7 @@ python skills/redraw-in-layers/scripts/layered_redraw.py import-ora edited.ora o
 
 推荐使用 Inkscape 打开 `artwork.svg`，它对 SVG 图层结构的往返兼容性最好。Illustrator 和 Affinity Designer 也可以使用，但编辑后应重新运行校验，因为其他软件可能重命名 ID 或重组分组。
 
-位图工程可在 Photoshop、Affinity Photo、Krita 或 Photopea 中编辑：按 `index.json` 的由底到顶顺序导入 `layers/*.png`，修改后保持原始画布尺寸、透明通道和文件名，再运行 `compose` 与 `validate`。
+位图工程可在 Photoshop、Affinity Photo、Krita 或 Photopea 中编辑：按 `index.json` 的由底到顶顺序导入 `layers/*.png`，修改后保持原始画布尺寸、透明通道和文件名，再运行 `compose` 与 `validate`。 如果要保留任意缩放和旋转，请同时保留 Layered Redraw 工程；这些仿射变换记录在 `layers/index.json`，并不保证被所有 ORA／PSD 工具完整表示。
 
 更推荐 Krita／OpenRaster 工作流：运行 `export-ora`，在外部软件中修改完整图层栈，再用 `import-ora` 同步回原工程。同步前会创建可恢复快照，并拒绝画布、图层数量或稳定 ID 不匹配的文件。
 

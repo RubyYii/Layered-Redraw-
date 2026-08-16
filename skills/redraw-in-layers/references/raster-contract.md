@@ -13,6 +13,8 @@ project-name/
 ├─ composition.json
 ├─ manifest.json
 ├─ style-recipe.json
+├─ scene-reconstruction.json # when objects must move over a completed background
+├─ reconstruction/          # immutable source and raw completion candidates
 ├─ history/
 ├─ masks/
 ├─ directions/
@@ -40,12 +42,14 @@ The PNG stack plus `layers/index.json` is canonical. `artwork.png`, `preview.png
 - Set `layer_type` to `raster`, `pixel`, or `vector`. A vector layer keeps its registered PNG in `file` and its safe local SVG in `editable_source`.
 - Use an acyclic `depends_on` list for shadows, reflections, lighting, or other edit-linked ownership.
 - Treat prompts and layout guides as provenance, not visible project layers.
+- For recompose-ready projects, use `role: clean-plate` only on the locked bottom layer, `movable-object` on independently positioned subjects, and `dependent-effect` on object-owned shadows or reflections.
+- Store bounded `translate_x`, `translate_y`, `scale_x`, `scale_y`, `rotation_deg`, and content-bbox anchors in each movable layer transform; the compositor, manifest, editor view, history, and revision hash must all honor them.
 
 ## Registration workflow
 
 1. Lock canvas dimensions, camera, horizon, subject boxes, palette, and light direction.
 2. Create a layout guide or accepted base composite before detailed layers.
-3. Generate the opaque background first.
+3. Generate the opaque background first. When the user must move source-photo objects, read `scene-reconstruction.md` and register a completed clean plate instead of a foreground-contaminated crop.
 4. Generate transparent layers from back to front, always using the same guide and canvas.
 5. Composite after each accepted layer and reject drift early.
 6. Put temporary candidates in `staging/`; copy only accepted PNGs to paths declared in `layers/index.json`.
@@ -55,6 +59,9 @@ The PNG stack plus `layers/index.json` is canonical. `artwork.png`, `preview.png
 ```text
 python scripts/layered_redraw.py new output/project --mode raster-layered --layers 10 --width 1200 --height 1600
 python scripts/layered_redraw.py compose output/project
+python scripts/layered_redraw.py recompose-init output/project source.png removal-mask.png
+python scripts/layered_redraw.py clean-plate-register output/project clean-plate-candidate.png
+python scripts/layered_redraw.py layer-settings output/project layer-primary-subject --translate-x 80 --scale-x 1.1 --scale-y 1.1
 python scripts/layered_redraw.py validate output/project --write-manifest
 python scripts/layered_redraw.py serve output/project --open
 ```

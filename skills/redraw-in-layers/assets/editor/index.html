@@ -124,6 +124,28 @@
                 <input id="editableSourceInput" type="text" placeholder="layers/source.svg" />
               </label>
             </div>
+            <details class="layer-transform-controls" open>
+              <summary data-i18n="transformTitle">位置与变换</summary>
+              <label class="field-stack" for="layerRoleSelect">
+                <span data-i18n="layerRoleLabel">遮挡角色</span>
+                <select id="layerRoleSelect">
+                  <option value="artwork" data-i18n="roleArtwork">普通画面</option>
+                  <option value="movable-object" data-i18n="roleMovable">可移动物体</option>
+                  <option value="dependent-effect" data-i18n="roleDependent">随物体变化的阴影／反射</option>
+                  <option value="clean-plate" data-i18n="roleCleanPlate">完整背景（锁定）</option>
+                </select>
+              </label>
+              <div class="field-grid transform-grid">
+                <label class="field-stack" for="layerTranslateX"><span data-i18n="translateXLabel">水平位移 px</span><input id="layerTranslateX" type="number" step="0.1" value="0" /></label>
+                <label class="field-stack" for="layerTranslateY"><span data-i18n="translateYLabel">垂直位移 px</span><input id="layerTranslateY" type="number" step="0.1" value="0" /></label>
+                <label class="field-stack" for="layerRotation"><span data-i18n="rotationLabel">旋转 °</span><input id="layerRotation" type="number" min="-360" max="360" step="0.1" value="0" /></label>
+                <label class="field-stack" for="layerScaleX"><span data-i18n="scaleXLabel">水平缩放 %</span><input id="layerScaleX" type="number" min="1" max="2000" step="0.1" value="100" /></label>
+                <label class="field-stack" for="layerScaleY"><span data-i18n="scaleYLabel">垂直缩放 %</span><input id="layerScaleY" type="number" min="1" max="2000" step="0.1" value="100" /></label>
+                <label class="field-stack" for="layerAnchorX"><span data-i18n="anchorXLabel">锚点 X（0–1）</span><input id="layerAnchorX" type="number" min="0" max="1" step="0.05" value="0.5" /></label>
+                <label class="field-stack" for="layerAnchorY"><span data-i18n="anchorYLabel">锚点 Y（0–1）</span><input id="layerAnchorY" type="number" min="0" max="1" step="0.05" value="0.5" /></label>
+              </div>
+              <label class="check-row transform-reset-row" for="resetLayerTransform"><input id="resetLayerTransform" type="checkbox" /><span data-i18n="resetTransform">重置变换</span></label>
+            </details>
             <div class="field-grid">
               <label class="field-stack" for="labelZhInput">
                 <span data-i18n="labelZh">中文名称</span>
@@ -141,6 +163,26 @@
             </div>
           </section>
 
+          <details class="recompose-controls expert-only" id="recomposeControls" hidden>
+            <summary>
+              <span data-i18n="recomposeTitle">背景补全与遮挡重组</span>
+              <small id="recomposeStatus">—</small>
+            </summary>
+            <p class="spec-intro" data-i18n="recomposeIntro">先用原图和移除遮罩建立完整背景，再自由移动、缩放图层和调整前后关系。遮罩外像素会被强制保留。</p>
+            <div class="field-grid">
+              <label class="field-stack" for="recomposeSourceInput"><span data-i18n="recomposeSource">原始完整照片</span><input id="recomposeSourceInput" type="file" accept="image/*" /></label>
+              <label class="field-stack" for="recomposeMaskInput"><span data-i18n="recomposeMask">移除遮罩（白色为需补全区域）</span><input id="recomposeMaskInput" type="file" accept="image/*" /></label>
+            </div>
+            <label class="field-stack" for="recomposePromptInput"><span data-i18n="recomposePrompt">补全方向（可选）</span><textarea id="recomposePromptInput" rows="3" data-i18n-placeholder="recomposePromptPlaceholder" placeholder="例如：延续墙面纹理和光线，不添加新物体。"></textarea></label>
+            <button type="button" id="initializeRecompose" data-i18n="recomposeInitialize">建立补全任务</button>
+            <div class="recompose-divider" aria-hidden="true"></div>
+            <label class="field-stack" for="cleanPlateInput"><span data-i18n="cleanPlateCandidate">生成后的完整背景</span><input id="cleanPlateInput" type="file" accept="image/*" /></label>
+            <div class="field-grid">
+              <label class="field-stack" for="cleanPlateModel"><span data-i18n="cleanPlateModel">模型／工具（可选）</span><input id="cleanPlateModel" type="text" /></label>
+              <label class="field-stack" for="cleanPlateSeed"><span data-i18n="cleanPlateSeed">随机种子（可选）</span><input id="cleanPlateSeed" type="number" step="1" /></label>
+            </div>
+            <button type="button" id="registerCleanPlate" data-i18n="cleanPlateRegister">登记完整背景</button>
+          </details>
           <details class="object-spec-controls expert-only" id="physicalSpecControls" hidden>
             <summary>
               <span data-i18n="physicalSpecTitle">真实规格</span>
@@ -247,6 +289,21 @@
                 <textarea id="specNotesInput" rows="2"></textarea>
               </label>
             </details>
+            <fieldset class="spec-export-options" aria-describedby="specExportHint">
+              <legend data-i18n="specExportFormats">导出格式</legend>
+              <p id="specExportHint" class="spec-export-hint" data-i18n="specExportHint">SVG 是默认可编辑母版；可按交付用途追加其他格式。</p>
+              <div class="spec-format-grid">
+                <label><input type="checkbox" value="svg" data-spec-export-format checked /><span><b>SVG</b><small data-i18n="specFormatSvg">可编辑母版</small></span></label>
+                <label><input type="checkbox" value="pdf" data-spec-export-format /><span><b>PDF</b><small data-i18n="specFormatPdf">打印／审批</small></span></label>
+                <label><input type="checkbox" value="png" data-spec-export-format aria-controls="specPngDpiField" aria-expanded="false" /><span><b>PNG</b><small data-i18n="specFormatPng">预览／批注</small></span></label>
+                <label><input type="checkbox" value="csv" data-spec-export-format /><span><b>CSV</b><small data-i18n="specFormatCsv">表格数据</small></span></label>
+                <label><input type="checkbox" value="json" data-spec-export-format /><span><b>JSON</b><small data-i18n="specFormatJson">结构数据</small></span></label>
+              </div>
+              <label class="field-stack spec-dpi-field" id="specPngDpiField" for="specExportDpi" hidden>
+                <span data-i18n="specExportDpi">PNG 分辨率（DPI）</span>
+                <input id="specExportDpi" type="number" min="72" max="600" step="1" value="144" disabled />
+              </label>
+            </fieldset>
             <div class="spec-action-row">
               <button type="button" id="removePhysicalSpec" data-i18n="specRemove">删除</button>
               <button type="button" id="exportPhysicalSpecs" data-i18n="specExport">导出规格表</button>

@@ -423,6 +423,131 @@ class LayeredRedrawTests(unittest.TestCase):
             self.assertFalse(report["ok"])
             self.assertTrue(any("fully opaque" in error for error in report["errors"]))
 
+    @unittest.skipUnless(Image is not None, "Pillow is required for raster transform tests")
+    def test_raster_layer_transform_is_composed_and_revisioned(self) -> None:
+        assert Image is not None and ImageDraw is not None
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = self._make_raster_project(Path(temp_dir))
+            index_path = project / "layers" / "index.json"
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+            for position, entry in enumerate(index["layers"], start=1):
+                if position == 1:
+                    continue
+                layer = Image.new("RGBA", (160, 120), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(layer)
+                if position == 2:
+                    draw.rectangle((5, 5, 8, 8), fill=(240, 40, 30, 255))
+                else:
+                    draw.point((145 + position % 8, 105 + position % 8), fill=(20, 220, 90, 255))
+                layer.save(project / entry["file"])
+            before = TOOLS.RASTER.compose_project(project)
+            before_revision = before["revision"]
+
+            updated = TOOLS.update_layer_settings(
+                project,
+                "layer-sky",
+                translate_x=20,
+                translate_y=10,
+                scale_x=2,
+                scale_y=2,
+                anchor_x=0,
+                anchor_y=0,
+                role="movable-object",
+            )
+            self.assertNotEqual(updated["after_revision"], before_revision)
+            manifest = TOOLS.RASTER.build_manifest(project)
+            sky = next(layer for layer in manifest["layers"] if layer["id"] == "layer-sky")
+            self.assertEqual(sky["role"], "movable-object")
+            self.assertEqual(sky["transform"]["translate_x"], 20.0)
+            self.assertEqual(sky["transformed_bbox"], [25.0, 15.0, 8.0, 8.0])
+            with Image.open(project / "artwork.png") as artwork:
+                rgba = artwork.convert("RGBA")
+                self.assertEqual(rgba.getpixel((6, 6))[:3], (24, 45, 68))
+                transformed_pixel = rgba.getpixel((27, 17))[:3]
+                self.assertGreater(transformed_pixel[0], 200)
+                self.assertLess(transformed_pixel[1], 80)
+                self.assertLess(transformed_pixel[2], 80)
+
+            with self.assertRaises(TOOLS.RASTER.RasterLayeredError):
+                TOOLS.update_layer_settings(project, "layer-sky", scale_x=25)
+
+    @unittest.skipUnless(Image is not None, "Pillow is required for clean-plate tests")
+    def test_clean_plate_preserves_known_pixels_and_detects_tampering(self) -> None:
+        assert Image is not None and ImageDraw is not None
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            project = self._make_raster_project(root)
+            source = Image.new("RGBA", (160, 120), (80, 110, 140, 255))
+            ImageDraw.Draw(source).rectangle((40, 30, 79, 69), fill=(210, 60, 50, 255))
+            source_path = root / "source.png"
+            source.save(source_path)
+            mask = Image.new("L", (160, 120), 0)
+            ImageDraw.Draw(mask).rectangle((38, 28, 81, 71), fill=255)
+            mask_path = root / "mask.png"
+            mask.save(mask_path)
+            initialized = TOOLS.RASTER.initialize_recomposition(
+                project,
+                source_path,
+                mask_path,
+                prompt="Continue the plain wall behind the removed object.",
+            )
+            self.assertEqual(initialized["status"], "awaiting-clean-plate")
+            pending = TOOLS.RASTER.load_recomposition(project)
+            self.assertTrue(pending["enabled"])
+
+            candidate = source.copy()
+            ImageDraw.Draw(candidate).rectangle((38, 28, 81, 71), fill=(70, 120, 145, 255))
+            candidate.putpixel((0, 0), (255, 0, 255, 255))
+            candidate_path = root / "candidate.png"
+            candidate.save(candidate_path)
+            registered = TOOLS.RASTER.register_clean_plate(
+                project,
+                candidate_path,
+                model="test-inpainter",
+                seed=7,
+            )
+            self.assertEqual(registered["outside_mask_changed_pixels"], 0)
+            self.assertGreater(registered["inside_mask_changed_pixels"], 0)
+            with Image.open(registered["clean_plate"]) as clean_plate:
+                rgba = clean_plate.convert("RGBA")
+                self.assertEqual(rgba.getpixel((0, 0)), source.getpixel((0, 0)))
+                self.assertEqual(rgba.getpixel((50, 40)), candidate.getpixel((50, 40)))
+            index = json.loads((project / "layers" / "index.json").read_text(encoding="utf-8"))
+            self.assertEqual(index["layers"][0]["role"], "clean-plate")
+            self.assertTrue(index["layers"][0]["locked"])
+            report = TOOLS.RASTER.validate_project(project)
+            self.assertTrue(report["ok"], report["errors"])
+            manifest = TOOLS.RASTER.build_manifest(project)
+            self.assertIsNotNone(manifest["scene_reconstruction_sha256"])
+            with self.assertRaises(TOOLS.RASTER.RasterLayeredError):
+                TOOLS.update_layer_settings(project, index["layers"][0]["id"], locked=False)
+            with self.assertRaises(TOOLS.RASTER.RasterLayeredError):
+                TOOLS.update_layer_settings(project, index["layers"][0]["id"], translate_x=1)
+
+            background_path = project / index["layers"][0]["file"]
+            with Image.open(background_path) as opened:
+                tampered = opened.convert("RGBA")
+            tampered.putpixel((1, 1), (1, 2, 3, 255))
+            tampered.save(background_path)
+            report = TOOLS.RASTER.validate_project(project)
+            self.assertFalse(report["ok"])
+            self.assertTrue(any("outside the removal mask" in error for error in report["errors"]))
+
+    @unittest.skipUnless(Image is not None, "Pillow is required for pixel transform tests")
+    def test_pixel_art_transform_rejects_subpixels_and_arbitrary_rotation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = self._make_pixel_art_project(Path(temp_dir))
+            with self.assertRaises(TOOLS.RASTER.RasterLayeredError):
+                TOOLS.update_layer_settings(project, "layer-sky", translate_x=0.5)
+            with self.assertRaises(TOOLS.RASTER.RasterLayeredError):
+                TOOLS.update_layer_settings(project, "layer-sky", rotation_deg=45)
+            result = TOOLS.update_layer_settings(
+                project,
+                "layer-sky",
+                translate_x=3,
+                rotation_deg=90,
+            )
+            self.assertTrue(result["ok"])
     @unittest.skipUnless(Image is not None, "Pillow is required for raster-layered tests")
     def test_pixel_art_preset_composes_nearest_neighbour_preview(self) -> None:
         assert Image is not None
@@ -598,8 +723,135 @@ class LayeredRedrawTests(unittest.TestCase):
                 TOOLS.FEATURES.STYLE_DESIGN_PROFILE_KEYS.issubset(profile),
                 recipe["id"],
             )
-            self.assertIs(profile["forbid_artwork_text"], True)
+            self.assertIsInstance(profile["forbid_artwork_text"], bool)
+        archive_recipe = next(recipe for recipe in recipes if recipe["id"] == "photo-stamp-archive")
+        self.assertIs(archive_recipe["design_profile"]["forbid_artwork_text"], False)
 
+    @unittest.skipUnless(Image is not None, "Pillow is required for photo-stamp archive tests")
+    def test_photo_stamp_archive_creates_eight_editable_layers_and_preserves_source_pixels(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.png"
+            image = Image.new("RGB", (96, 64), "#86A7C4")
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((8, 9, 54, 55), fill="#D3A15A")
+            draw.ellipse((45, 12, 86, 53), fill="#435D68")
+            draw.line((0, 48, 95, 28), fill="#EEE2C8", width=4)
+            image.save(source)
+            source_bytes = source.read_bytes()
+
+            project = root / "archive"
+            created = TOOLS.ARCHIVE.create_archive_project(
+                source,
+                project,
+                title="Archive Fixture",
+                stamp_shape="circle",
+                stamp_position="lower-right",
+            )
+            self.assertEqual(created["layers"], 8)
+            self.assertTrue(created["integrity"]["ok"], created["integrity"]["errors"])
+            config = json.loads((project / "project.json").read_text(encoding="utf-8"))
+            archive = json.loads((project / "archive-config.json").read_text(encoding="utf-8"))
+            index = json.loads((project / "layers" / "index.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["style"], "photo-stamp-archive")
+            self.assertEqual(config["design_preset"], "photo-stamp-archive-balanced")
+            self.assertEqual(
+                [entry["id"] for entry in index["layers"]],
+                [
+                    "layer-paper-base",
+                    "layer-photo-panel",
+                    "layer-paper-texture",
+                    "layer-stamp-border",
+                    "layer-stamp-motif",
+                    "layer-secondary-ink",
+                    "layer-dry-ink-wear",
+                    "layer-archive-finish",
+                ],
+            )
+            reference = project / archive["source"]["file"]
+            self.assertEqual(reference.read_bytes(), source_bytes)
+            photo_entry = next(entry for entry in index["layers"] if entry["id"] == "layer-photo-panel")
+            self.assertTrue(photo_entry["locked"])
+            with Image.open(project / photo_entry["file"]) as photo_layer:
+                photo_box = tuple(archive["composition"]["photo_box"])
+                self.assertEqual(
+                    photo_layer.crop(photo_box).convert("RGBA").tobytes(),
+                    image.convert("RGBA").tobytes(),
+                )
+
+            validation = TOOLS.RASTER.validate_project(project)
+            self.assertTrue(validation["ok"], validation["errors"])
+            self.assertEqual(validation["warnings"], [])
+            quality = TOOLS.RASTER.quality_report(project)
+            self.assertEqual(quality["engineering_score"], 100)
+            integrity = TOOLS.ARCHIVE.verify_archive_project(project, strict=True)
+            self.assertTrue(integrity["ok"])
+            self.assertEqual(integrity["algorithm"], "SHA-256")
+
+            reference.write_bytes(source_bytes + b"\x00")
+            tampered = TOOLS.ARCHIVE.verify_archive_project(project, strict=False)
+            self.assertFalse(tampered["ok"])
+            self.assertFalse(tampered["checks"]["source_file_sha256"])
+            with self.assertRaises(TOOLS.ARCHIVE.PhotoStampArchiveError):
+                TOOLS.ARCHIVE.verify_archive_project(project, strict=True)
+
+    @unittest.skipUnless(Image is not None, "Pillow is required for photo-stamp archive tests")
+    def test_photo_stamp_archive_updates_are_recoverable_and_caption_is_explicit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.png"
+            image = Image.new("RGB", (88, 60), "#CBA465")
+            draw = ImageDraw.Draw(image)
+            draw.polygon([(12, 46), (43, 8), (78, 46)], fill="#334B5B")
+            draw.rectangle((23, 36, 68, 54), fill="#EFE2CA")
+            image.save(source)
+            project = root / "archive"
+            TOOLS.ARCHIVE.create_archive_project(source, project)
+            with self.assertRaises(TOOLS.ARCHIVE.PhotoStampArchiveError):
+                TOOLS.ARCHIVE.update_archive_project(project, {"paper_age": 0.61})
+            self.assertEqual(TOOLS.FEATURES.list_history(project)["count"], 0)
+
+            before = TOOLS.RASTER.build_manifest(project)
+            before_photo = next(layer["sha256"] for layer in before["layers"] if layer["id"] == "layer-photo-panel")
+            updated = TOOLS.ARCHIVE.update_archive_project(
+                project,
+                {"paper_age": 0.22, "ink_wear": 0.34, "stamp_shape": "arch"},
+            )
+            self.assertEqual(updated["layers"], 8)
+            after = TOOLS.RASTER.build_manifest(project)
+            after_photo = next(layer["sha256"] for layer in after["layers"] if layer["id"] == "layer-photo-panel")
+            self.assertEqual(before_photo, after_photo)
+            self.assertEqual(TOOLS.FEATURES.list_history(project)["count"], 1)
+
+            structural = TOOLS.ARCHIVE.update_archive_project(
+                project,
+                {"orientation": "top-bottom", "photo_ratio": 0.58},
+            )
+            self.assertTrue(structural["integrity"]["ok"])
+            self.assertEqual(TOOLS.FEATURES.list_history(project)["count"], 2)
+            structural_config = TOOLS.ARCHIVE.load_archive_config(project)
+            self.assertEqual(
+                structural_config["invariants"]["photo_layer_pixel_sha256"],
+                structural_config["source"]["pixel_sha256"],
+            )
+
+            captioned = TOOLS.ARCHIVE.update_archive_project(
+                project,
+                {"caption_title": "ROOFTOP", "caption_subtitle": "sun / watch"},
+            )
+            self.assertEqual(captioned["layers"], 9)
+            plan = TOOLS.FEATURES.load_design_plan(project)
+            self.assertTrue(plan["artwork_text"])
+            self.assertEqual(plan["text_policy"]["allowed_layers"], ["layer-caption"])
+
+            cleared = TOOLS.ARCHIVE.update_archive_project(
+                project,
+                {"caption_title": None, "caption_subtitle": None},
+            )
+            self.assertEqual(cleared["layers"], 8)
+            plan = TOOLS.FEATURES.load_design_plan(project)
+            self.assertFalse(plan["artwork_text"])
+            self.assertEqual(plan["text_policy"]["allowed_layers"], [])
     def test_guided_preset_changes_design_revision_and_is_recoverable(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project = Path(temp_dir) / "guided-project"
@@ -1120,6 +1372,24 @@ class LayeredRedrawTests(unittest.TestCase):
         with self.assertRaises(TOOLS.LayeredRedrawError):
             TOOLS.serve_editor(self.sample, host="0.0.0.0", port=0, open_browser=False)
 
+    def test_editor_spec_export_selector_is_bilingual_and_defaults_to_svg(self) -> None:
+        editor = ROOT / "skills" / "redraw-in-layers" / "assets" / "editor"
+        html_text = (editor / "index.html").read_text(encoding="utf-8")
+        app_text = (editor / "app.js").read_text(encoding="utf-8")
+        self.assertIn('value="svg" data-spec-export-format checked', html_text)
+        for output_format in ("pdf", "png", "csv", "json"):
+            self.assertIn(f'value="{output_format}" data-spec-export-format', html_text)
+        self.assertIn('specExportFormats: "导出格式"', app_text)
+        self.assertIn('specExportFormats: "Export formats"', app_text)
+        self.assertIn('specFormatPdf: "打印／审批"', app_text)
+        self.assertIn('specFormatPdf: "Print / approval"', app_text)
+        self.assertIn('id="layerTranslateX"', html_text)
+        self.assertIn('id="recomposeControls"', html_text)
+        self.assertIn('transformTitle: "位置与变换"', app_text)
+        self.assertIn('transformTitle: "Position and transform"', app_text)
+        self.assertIn('recomposeTitle: "背景补全与遮挡重组"', app_text)
+        self.assertIn('recomposeTitle: "Background completion and occlusion"', app_text)
+
     def test_local_editor_can_save_and_export_physical_specifications(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project = Path(temp_dir) / "project"
@@ -1201,12 +1471,13 @@ class LayeredRedrawTests(unittest.TestCase):
                 inspect.close()
 
                 export = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-                export.request("POST", "/api/specs/export", body="{}", headers=headers)
+                export.request("POST", "/api/specs/export", body=json.dumps({"formats": ["svg", "json"], "dpi": 144}), headers=headers)
                 export_response = export.getresponse()
                 export_result = json.loads(export_response.read().decode("utf-8"))
                 self.assertEqual(export_response.status, 200, export_result)
+                self.assertEqual(export_result["formats"], ["svg", "json"])
                 self.assertTrue(Path(export_result["svg"]).is_file())
-                self.assertTrue(Path(export_result["csv"]).is_file())
+                self.assertTrue(Path(export_result["json"]).is_file())
                 export.close()
             finally:
                 server.shutdown()  # type: ignore[attr-defined]
@@ -1218,7 +1489,14 @@ class LayeredRedrawTests(unittest.TestCase):
             root = Path(temp_dir)
             project = self._make_raster_project(root)
             TOOLS.RASTER.compose_project(project)
-            TOOLS.update_layer_settings(project, "layer-lighting", blend_mode="screen", opacity=0.7)
+            TOOLS.update_layer_settings(
+                project,
+                "layer-lighting",
+                blend_mode="screen",
+                opacity=0.7,
+                translate_x=12,
+                translate_y=-4,
+            )
             exported = TOOLS.RASTER.export_ora(project, root / "roundtrip.ora")
             self.assertTrue(Path(exported["ora"]).is_file())
 
@@ -1233,6 +1511,15 @@ class LayeredRedrawTests(unittest.TestCase):
             lighting = next(layer for layer in imported_index["layers"] if layer["id"] == "layer-lighting")
             self.assertEqual(lighting["blend_mode"], "screen")
             self.assertAlmostEqual(lighting["opacity"], 0.7)
+
+            synced = TOOLS.RASTER.import_ora(exported["ora"], project)
+            self.assertEqual(synced["mode"], "updated")
+            synced_index = json.loads((project / "layers" / "index.json").read_text(encoding="utf-8"))
+            synced_lighting = next(
+                layer for layer in synced_index["layers"] if layer["id"] == "layer-lighting"
+            )
+            self.assertEqual(synced_lighting["transform"]["translate_x"], 12.0)
+            self.assertEqual(synced_lighting["transform"]["translate_y"], -4.0)
 
     @unittest.skipUnless(Image is not None, "Pillow is required for hybrid layer tests")
     def test_hybrid_vector_source_keeps_a_registered_png_render(self) -> None:
@@ -1353,6 +1640,23 @@ class LayeredRedrawTests(unittest.TestCase):
             self.assertEqual(belt["placement"]["scale_percent"], 44.0)
             self.assertNotEqual(first["manifest"]["revision"], second["manifest"]["revision"])
 
+            model_document = json.loads(json.dumps(document))
+            model_document["objects"][0]["measurements"].update({
+                "chest-circumference": {"value": 116.0, "unit": "cm"},
+                "garment-length": {"value": 74.0, "unit": "cm"},
+                "shoulder-width": {"value": 48.0, "unit": "cm"},
+                "sleeve-length": {"value": 62.0, "unit": "cm"},
+            })
+            sheet_model = TOOLS.PHYSICAL._sheet_model(model_document)
+            model_text = " ".join(
+                item["text"]
+                for column in sheet_model["rows"][0]["columns"]
+                for item in column["items"]
+            )
+            self.assertIn("sleeve-length: 62 cm", model_text)
+            self.assertNotIn("…", model_text)
+            self.assertGreater(sheet_model["rows"][0]["height"], 68)
+
             layout = TOOLS.update_specification_layout(
                 project,
                 output_width=210,
@@ -1364,13 +1668,74 @@ class LayeredRedrawTests(unittest.TestCase):
             self.assertEqual(layout["layout"]["drawing_scale"]["denominator"], 10.0)
             self.assertEqual(TOOLS.PHYSICAL.load_document(project)["objects"][0]["measurements"]["length"]["value"], 100.0)
 
-            exported = TOOLS.PHYSICAL.export_specifications(project)
+            default_export = TOOLS.PHYSICAL.export_specifications(project)
+            self.assertEqual(default_export["formats"], ["svg"])
+            self.assertEqual(default_export["primary_format"], "svg")
+            self.assertNotIn("csv", default_export)
+            self.assertTrue(Path(default_export["svg"]).is_file())
+
+            before_data = (project / "object-specs.json").read_bytes()
+            formats = ["svg", "csv", "json"]
+            capabilities = TOOLS.PHYSICAL.export_capabilities()
+            formats.extend(item for item in ("pdf", "png") if capabilities[item])
+            exported = TOOLS.PHYSICAL.export_specifications(project, formats=formats, dpi=192)
             csv_path = Path(exported["csv"])
             svg_path = Path(exported["svg"])
+            json_path = Path(exported["json"])
             self.assertTrue(csv_path.is_file())
             self.assertTrue(svg_path.is_file())
+            self.assertTrue(json_path.is_file())
             self.assertIn("length: 100 cm", csv_path.read_text(encoding="utf-8-sig"))
             self.assertIn("Physical Object Specification", svg_path.read_text(encoding="utf-8"))
+            self.assertEqual(json.loads(json_path.read_text(encoding="utf-8"))["objects"][0]["measurements"]["length"]["value"], 100)
+            self.assertEqual((project / "object-specs.json").read_bytes(), before_data)
+            if "pdf" in formats:
+                self.assertTrue(Path(exported["pdf"]).read_bytes().startswith(b"%PDF"))
+            if "png" in formats:
+                self.assertTrue(Path(exported["png"]).read_bytes().startswith(b"\x89PNG"))
+                with Image.open(exported["png"]) as rendered:
+                    self.assertAlmostEqual(rendered.info.get("dpi")[0], 192, delta=1)
+                    self.assertAlmostEqual(rendered.width, round(210 / 25.4 * 192), delta=1)
+                    self.assertAlmostEqual(rendered.height, round(297 / 25.4 * 192), delta=1)
+
+            with self.assertRaises(TOOLS.PHYSICAL.PhysicalSpecError):
+                TOOLS.PHYSICAL.export_specifications(project, formats=["psd"])
+            with self.assertRaises(TOOLS.PHYSICAL.PhysicalSpecError):
+                TOOLS.PHYSICAL.export_specifications(project, formats=["png"], dpi=601)
+            with self.assertRaises(TOOLS.PHYSICAL.PhysicalSpecError):
+                TOOLS.PHYSICAL.export_specifications(project, output_dir=project, formats=["json"])
+
+            sentinel = project / "specifications" / "object-spec-sheet.svg"
+            sentinel.write_text("keep-me", encoding="utf-8")
+            original_capabilities = TOOLS.PHYSICAL.export_capabilities
+            try:
+                TOOLS.PHYSICAL.export_capabilities = lambda: {
+                    "svg": True, "pdf": False, "png": False, "csv": True, "json": True,
+                }
+                with self.assertRaises(TOOLS.PHYSICAL.PhysicalSpecError):
+                    TOOLS.PHYSICAL.export_specifications(project, formats=["svg", "pdf"])
+            finally:
+                TOOLS.PHYSICAL.export_capabilities = original_capabilities
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep-me")
+
+            original_pdf_renderer = TOOLS.PHYSICAL._render_pdf_sheet
+            original_capabilities = TOOLS.PHYSICAL.export_capabilities
+            try:
+                TOOLS.PHYSICAL.export_capabilities = lambda: {
+                    "svg": True, "pdf": True, "png": False, "csv": True, "json": True,
+                }
+
+                def fail_pdf_render(*_args: object, **_kwargs: object) -> None:
+                    raise TOOLS.PHYSICAL.PhysicalSpecError("simulated renderer failure")
+
+                TOOLS.PHYSICAL._render_pdf_sheet = fail_pdf_render
+                with self.assertRaises(TOOLS.PHYSICAL.PhysicalSpecError):
+                    TOOLS.PHYSICAL.export_specifications(project, formats=["svg", "pdf"])
+            finally:
+                TOOLS.PHYSICAL._render_pdf_sheet = original_pdf_renderer
+                TOOLS.PHYSICAL.export_capabilities = original_capabilities
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep-me")
+            self.assertFalse(any(path.name.startswith(".spec-export-") for path in sentinel.parent.iterdir()))
             report = TOOLS.validate_project(project)
             self.assertTrue(report["ok"], report["errors"])
             self.assertEqual(report["warnings"], [])

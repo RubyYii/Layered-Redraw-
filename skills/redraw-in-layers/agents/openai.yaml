@@ -1,4 +1,4 @@
 interface:
   display_name: "Layered Redraw"
-  short_description: "Editable art layers with measured object specs"
-  default_prompt: "Use $redraw-in-layers to create editable semantic layers and keep any real object dimensions, apparel sizes, placement, angles, and sheet scale as validated specifications separate from visual transforms."
+  short_description: "Editable layered scenes, art, archives, and specs"
+  default_prompt: "Use $redraw-in-layers to create editable semantic layers, including verified clean-plate backgrounds for movable photo objects and faithful photo-and-paper stamp archives, while keeping real measurements separate from visual transforms."
