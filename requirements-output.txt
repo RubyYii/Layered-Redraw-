@@ -1,0 +1,3 @@
+# Optional specification-sheet PDF/PNG rendering
+Pillow>=10.0
+reportlab>=4.0,<5

@@ -171,6 +171,53 @@
       "prompt_constraints": ["Translate perspective into emblematic structure", "Preserve subject recognition through negative space"]
     },
     {
+      "id": "photo-stamp-archive",
+      "name": {"zh": "\u7167\u7247\u5370\u7ae0\u6863\u6848", "en": "Photo stamp archive"},
+      "compatible_modes": ["raster-layered"],
+      "palette": {"size": 6, "bias": "faithful photograph, warm paper, one dominant ink and one restrained secondary ink"},
+      "mark_making": "direct photo-paper splice with a compact subject-derived dry-ink impression",
+      "edges": "perfectly straight panel seam and worn but readable stamp boundaries",
+      "texture": "subtle warm paper fibres, restrained scan residue, dry ink loss",
+      "abstraction": 0.52,
+      "design_profile": {
+        "composition": "one faithful photographic panel joined edge-to-edge to a quiet paper panel with a small corner stamp group",
+        "proportion": "default to 55 percent photograph and 45 percent paper; reserve most paper as unoccupied breathing space",
+        "space_model": "retain photographic depth only inside the source panel and compress the stamp into one graphic print plane",
+        "shape_grammar": "a straight rectangular splice plus one subject-appropriate circular, square, arched, panoramic, or silhouette seal",
+        "value_structure": "full photographic values balanced by warm paper and two compressed ink values",
+        "color_system": "preserve the photograph; derive one dominant spot ink and at most one muted registration-offset ink from its colour memory",
+        "edge_system": "a clean unfeathered seam, complete stamp boundary, dry-ink chips, and no decorative divider",
+        "lighting": "preserve source lighting in the photo; use flat printed ink with no invented dimensional light on paper",
+        "rhythm": "large quiet paper field interrupted by one compact stamp-and-optional-caption cluster",
+        "forbid_artwork_text": false
+      },
+      "preferred_layer_types": ["raster", "vector"],
+      "archive": {
+        "schema_version": "1.0",
+        "default_orientation": "left-right",
+        "default_photo_side": "left",
+        "default_photo_ratio": 0.55,
+        "photo_ratio_range": [0.45, 0.7],
+        "default_stamp_shape": "circle",
+        "stamp_shapes": ["circle", "square", "arch", "panoramic", "subject-silhouette"],
+        "default_stamp_position": "lower-right",
+        "stamp_positions": ["upper-left", "upper-right", "lower-left", "lower-right"],
+        "default_stamp_scale": 0.42,
+        "default_paper_age": 0.14,
+        "default_ink_wear": 0.26,
+        "caption_policy": "explicit-only",
+        "default_layers": 8,
+        "caption_layers": 9
+      },
+      "prompt_constraints": [
+        "Preserve the source photograph without redrawing or recolouring it",
+        "Keep the panel seam straight, hard, and edge-to-edge",
+        "Reserve at least sixty-five percent of the paper panel as quiet negative space",
+        "Make the stamp a compressed print rather than a miniature pasted photograph",
+        "Do not add a caption unless the user supplies exact text"
+      ]
+    },
+    {
       "id": "stained-glass",
       "name": {"zh": "彩色玻璃", "en": "Stained glass"},
       "compatible_modes": ["vector-strict", "raster-layered"],

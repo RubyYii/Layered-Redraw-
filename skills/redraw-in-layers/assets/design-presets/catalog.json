@@ -46,6 +46,32 @@
       "controls": {"faithfulness": 0.42, "abstraction": 0.68, "subject_emphasis": 0.76, "space_flattening": 0.72, "color_intensity": 0.66}
     },
     {
+      "id": "photo-stamp-archive-balanced",
+      "name": {"zh": "\u7167\u7247\u5370\u7ae0\u6863\u6848", "en": "Photo stamp archive"},
+      "description": {"zh": "\u5fe0\u5b9e\u7167\u7247\u4e0e\u6696\u767d\u6863\u6848\u7eb8\u76f4\u62fc\uff0c\u4ee5\u5c0f\u6bd4\u4f8b\u4e3b\u9898\u7ae0\u548c\u5927\u9762\u79ef\u7559\u767d\u5efa\u7acb\u8bb0\u5fc6\u611f\u3002", "en": "Directly splice a faithful photo to warm archival paper with a compact subject stamp and generous quiet space."},
+      "style": "photo-stamp-archive",
+      "compatible_modes": ["raster-layered"],
+      "swatches": ["#F4EBE1", "#2B3E50", "#C05C46", "#B7A890"],
+      "fixed": {
+        "composition": {"balance": "direct-splice", "crop_strength": 0.12, "negative_space": 0.46, "asymmetry": 0.58, "subject_scale": 0.50},
+        "space": {"flattening": 0.76, "depth_separation": 0.34, "perspective_strength": 0.28},
+        "form": {"simplification": 0.72, "geometricity": 0.54, "exaggeration": 0.08, "contour_closure": 0.88},
+        "value": {"groups": 4, "contrast": 0.66, "focal_contrast": 0.72},
+        "color": {"intensity": 0.48, "palette_size": 6, "warmth": 0.18, "accent_ratio": 0.08},
+        "edge": {"hardness": 0.78, "hierarchy": 0.82},
+        "material": {"texture": 0.34, "mark_scale": 0.28}
+      },
+      "controls": {"faithfulness": 0.98, "abstraction": 0.52, "subject_emphasis": 0.42, "space_flattening": 0.76, "color_intensity": 0.48},
+      "archive_controls": {
+        "orientation": {"type": "enum", "values": ["left-right", "top-bottom"], "default": "left-right"},
+        "photo_ratio": {"type": "number", "min": 0.45, "max": 0.7, "default": 0.55},
+        "stamp_shape": {"type": "enum", "values": ["circle", "square", "arch", "panoramic", "subject-silhouette"], "default": "circle"},
+        "stamp_position": {"type": "enum", "values": ["upper-left", "upper-right", "lower-left", "lower-right"], "default": "lower-right"},
+        "paper_age": {"type": "number", "min": 0.0, "max": 0.6, "default": 0.14},
+        "ink_wear": {"type": "number", "min": 0.02, "max": 0.8, "default": 0.26}
+      }
+    },
+    {
       "id": "stained-glass-luminous",
       "name": {"zh": "透光彩色玻璃", "en": "Luminous stained glass"},
       "description": {"zh": "压平透视，把主体与环境重组为封闭色格和深色结构线。", "en": "Flatten perspective into closed colour cells held by a dark structural network."},

@@ -12,6 +12,7 @@ import hashlib
 import html
 import io
 import json
+import math
 import os
 import re
 import shutil
@@ -35,12 +36,35 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 import project_features as FEATURES  # noqa: E402
+import physical_specs as PHYSICAL  # noqa: E402
 
 
 LAYER_ID_RE = re.compile(r"^layer-[a-z0-9]+(?:-[a-z0-9]+)*$")
 SUPPORTED_LAYER_SUFFIXES = {".png"}
 SUPPORTED_BLEND_MODES = {"normal", "multiply", "screen", "overlay", "darken", "lighten"}
 SUPPORTED_LAYER_TYPES = {"raster", "vector", "pixel"}
+SUPPORTED_LAYER_ROLES = {"artwork", "clean-plate", "movable-object", "dependent-effect"}
+TRANSFORM_FIELDS = {
+    "translate_x",
+    "translate_y",
+    "scale_x",
+    "scale_y",
+    "rotation_deg",
+    "anchor_x",
+    "anchor_y",
+    "anchor_space",
+}
+DEFAULT_LAYER_TRANSFORM = {
+    "translate_x": 0.0,
+    "translate_y": 0.0,
+    "scale_x": 1.0,
+    "scale_y": 1.0,
+    "rotation_deg": 0.0,
+    "anchor_x": 0.5,
+    "anchor_y": 0.5,
+    "anchor_space": "content-bbox",
+}
+RECOMPOSITION_KIND = "layered-redraw-scene-reconstruction"
 ORA_BLEND_MODES = {
     "normal": "svg:src-over",
     "multiply": "svg:multiply",
@@ -145,6 +169,198 @@ def _is_pixel_art(config: dict[str, Any]) -> bool:
     return isinstance(config.get("pixel_art"), dict) or config.get("style") == "pixel-art"
 
 
+def _finite_number(value: Any, *, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        raise RasterLayeredError(f"{field} must be a finite number")
+    return float(value)
+
+
+def normalize_layer_transform(
+    raw_transform: Any,
+    *,
+    width: int,
+    height: int,
+    pixel_art: bool = False,
+) -> dict[str, Any]:
+    """Return a bounded, canonical transform for one full-canvas layer."""
+
+    if raw_transform is None:
+        raw_transform = {}
+    if not isinstance(raw_transform, dict):
+        raise RasterLayeredError("layer transform must be an object")
+    unknown = sorted(set(raw_transform) - TRANSFORM_FIELDS)
+    if unknown:
+        raise RasterLayeredError("Unknown layer transform fields: " + ", ".join(unknown))
+    transform = dict(DEFAULT_LAYER_TRANSFORM)
+    transform.update(raw_transform)
+    transform["anchor_space"] = str(transform.get("anchor_space", "content-bbox"))
+    if transform["anchor_space"] != "content-bbox":
+        raise RasterLayeredError("transform.anchor_space must be content-bbox")
+    for field in (
+        "translate_x",
+        "translate_y",
+        "scale_x",
+        "scale_y",
+        "rotation_deg",
+        "anchor_x",
+        "anchor_y",
+    ):
+        transform[field] = _finite_number(transform.get(field), field=f"transform.{field}")
+    if abs(transform["translate_x"]) > width * 4:
+        raise RasterLayeredError("transform.translate_x exceeds the four-canvas safety limit")
+    if abs(transform["translate_y"]) > height * 4:
+        raise RasterLayeredError("transform.translate_y exceeds the four-canvas safety limit")
+    for field in ("scale_x", "scale_y"):
+        if not 0.01 <= transform[field] <= 20:
+            raise RasterLayeredError(f"transform.{field} must be between 0.01 and 20")
+    if not -360 <= transform["rotation_deg"] <= 360:
+        raise RasterLayeredError("transform.rotation_deg must be between -360 and 360")
+    for field in ("anchor_x", "anchor_y"):
+        if not 0 <= transform[field] <= 1:
+            raise RasterLayeredError(f"transform.{field} must be between 0 and 1")
+    if pixel_art:
+        for field in ("translate_x", "translate_y"):
+            if abs(transform[field] - round(transform[field])) > 1e-9:
+                raise RasterLayeredError(f"Pixel-art {field} must use whole logical pixels")
+        turns = transform["rotation_deg"] / 90
+        if abs(turns - round(turns)) > 1e-9:
+            raise RasterLayeredError("Pixel-art rotation_deg must be a multiple of 90")
+    for field in ("translate_x", "translate_y", "rotation_deg"):
+        if transform[field] == 0:
+            transform[field] = 0.0
+    return transform
+
+
+def _identity_transform(transform: dict[str, Any]) -> bool:
+    return all(
+        abs(float(transform[field]) - expected) <= 1e-12
+        for field, expected in {
+            "translate_x": 0.0,
+            "translate_y": 0.0,
+            "scale_x": 1.0,
+            "scale_y": 1.0,
+            "rotation_deg": 0.0,
+            "anchor_x": 0.5,
+            "anchor_y": 0.5,
+        }.items()
+    )
+
+
+def _content_anchor(
+    alpha_bbox: list[int] | tuple[int, int, int, int] | None,
+    transform: dict[str, Any],
+    *,
+    width: int,
+    height: int,
+) -> tuple[float, float]:
+    if alpha_bbox is None:
+        left, top, box_width, box_height = 0.0, 0.0, float(width), float(height)
+    else:
+        left, top, box_width, box_height = (float(value) for value in alpha_bbox)
+    return (
+        left + box_width * float(transform["anchor_x"]),
+        top + box_height * float(transform["anchor_y"]),
+    )
+
+
+def _forward_transform_point(
+    x: float,
+    y: float,
+    transform: dict[str, Any],
+    anchor: tuple[float, float],
+) -> tuple[float, float]:
+    angle = math.radians(float(transform["rotation_deg"]))
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    relative_x = x - anchor[0]
+    relative_y = y - anchor[1]
+    scaled_x = relative_x * float(transform["scale_x"])
+    scaled_y = relative_y * float(transform["scale_y"])
+    return (
+        cosine * scaled_x - sine * scaled_y + anchor[0] + float(transform["translate_x"]),
+        sine * scaled_x + cosine * scaled_y + anchor[1] + float(transform["translate_y"]),
+    )
+
+
+def _transformed_bbox(
+    alpha_bbox: list[int] | None,
+    transform: dict[str, Any],
+    *,
+    width: int,
+    height: int,
+) -> list[float] | None:
+    if alpha_bbox is None:
+        return None
+    left, top, box_width, box_height = (float(value) for value in alpha_bbox)
+    anchor = _content_anchor(alpha_bbox, transform, width=width, height=height)
+    corners = [
+        _forward_transform_point(x, y, transform, anchor)
+        for x, y in (
+            (left, top),
+            (left + box_width, top),
+            (left + box_width, top + box_height),
+            (left, top + box_height),
+        )
+    ]
+    minimum_x = min(point[0] for point in corners)
+    minimum_y = min(point[1] for point in corners)
+    maximum_x = max(point[0] for point in corners)
+    maximum_y = max(point[1] for point in corners)
+    return [
+        round(minimum_x, 6),
+        round(minimum_y, 6),
+        round(maximum_x - minimum_x, 6),
+        round(maximum_y - minimum_y, 6),
+    ]
+
+
+def _transform_layer_image(
+    layer: Any,
+    transform: dict[str, Any],
+    *,
+    alpha_bbox: list[int] | None,
+    pixel_art: bool,
+) -> Any:
+    if _identity_transform(transform):
+        return layer
+    pillow = _require_pillow()
+    width, height = layer.size
+    anchor_x, anchor_y = _content_anchor(alpha_bbox, transform, width=width, height=height)
+    scale_x = float(transform["scale_x"])
+    scale_y = float(transform["scale_y"])
+    angle = math.radians(float(transform["rotation_deg"]))
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    forward_00 = cosine * scale_x
+    forward_01 = -sine * scale_y
+    forward_10 = sine * scale_x
+    forward_11 = cosine * scale_y
+    forward_x = anchor_x + float(transform["translate_x"]) - forward_00 * anchor_x - forward_01 * anchor_y
+    forward_y = anchor_y + float(transform["translate_y"]) - forward_10 * anchor_x - forward_11 * anchor_y
+    inverse_00 = cosine / scale_x
+    inverse_01 = sine / scale_x
+    inverse_10 = -sine / scale_y
+    inverse_11 = cosine / scale_y
+    coefficients = (
+        inverse_00,
+        inverse_01,
+        -inverse_00 * forward_x - inverse_01 * forward_y,
+        inverse_10,
+        inverse_11,
+        -inverse_10 * forward_x - inverse_11 * forward_y,
+    )
+    affine_mode = pillow.Transform.AFFINE if hasattr(pillow, "Transform") else pillow.AFFINE
+    resampling = pillow.Resampling.NEAREST if pixel_art else pillow.Resampling.BICUBIC
+    working = layer if pixel_art else layer.convert("RGBa")
+    transformed = working.transform(
+        (width, height),
+        affine_mode,
+        coefficients,
+        resample=resampling,
+        fillcolor=(0, 0, 0, 0),
+    )
+    return transformed.convert("RGBA")
+
 def _layer_entries(index: dict[str, Any]) -> list[dict[str, Any]]:
     layers = index.get("layers")
     if not isinstance(layers, list) or not all(isinstance(item, dict) for item in layers):
@@ -192,6 +408,199 @@ def _image_info(path: Path) -> dict[str, Any]:
         raise RasterLayeredError(f"Unable to read raster layer {path}: {exc}") from exc
 
 
+def _binary_mask(image: Any, *, size: tuple[int, int]) -> Any:
+    if image.size != size:
+        raise RasterLayeredError(
+            f"Reconstruction mask is {image.width}×{image.height}; expected {size[0]}×{size[1]}"
+        )
+    if "A" in image.getbands() and image.getchannel("A").getextrema()[0] < 255:
+        channel = image.getchannel("A")
+    else:
+        channel = image.convert("L")
+    mask = channel.point(lambda value: 255 if value >= 128 else 0, mode="1").convert("L")
+    histogram = mask.histogram()
+    selected = int(histogram[255])
+    if selected == 0:
+        raise RasterLayeredError("Reconstruction mask is empty")
+    if selected == size[0] * size[1]:
+        raise RasterLayeredError("Reconstruction mask cannot cover the whole canvas")
+    return mask
+
+
+def _masked_changed_pixels(first: Any, second: Any, selector: Any) -> int:
+    if ImageChops is None:  # pragma: no cover - Pillow exposes ImageChops with Image
+        raise RasterLayeredError("Scene reconstruction verification requires Pillow ImageChops")
+    difference = ImageChops.difference(first.convert("RGB"), second.convert("RGB"))
+    red, green, blue = difference.split()
+    maximum = ImageChops.lighter(ImageChops.lighter(red, green), blue)
+    selected = ImageChops.multiply(maximum, selector.convert("L"))
+    return sum(selected.histogram()[1:])
+
+
+def _reconstruction_path(project_dir: Path, config: dict[str, Any]) -> Path | None:
+    relative = config.get("scene_reconstruction")
+    if relative is None:
+        return None
+    return _resolve_inside(project_dir, relative, field="scene_reconstruction")
+
+
+def load_recomposition(raw_target: str | Path) -> dict[str, Any]:
+    project_dir, config, _, _ = resolve_project(raw_target)
+    path = _reconstruction_path(project_dir, config)
+    if path is None or not path.is_file():
+        return {
+            "enabled": False,
+            "status": "not-configured",
+            "scene_reconstruction": config.get("scene_reconstruction"),
+        }
+    document = _read_json(path, required=True)
+    return {"enabled": True, **document, "file": path.relative_to(project_dir).as_posix()}
+
+
+def _validate_recomposition(
+    project_dir: Path,
+    config: dict[str, Any],
+    entries: list[dict[str, Any]],
+    *,
+    width: int,
+    height: int,
+) -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    path = _reconstruction_path(project_dir, config)
+    if path is None:
+        if (project_dir / "scene-reconstruction.json").is_file():
+            warnings.append("scene-reconstruction.json exists but is not registered in project.json.")
+        return errors, warnings
+    if not path.is_file():
+        return ["Registered scene_reconstruction file does not exist."], warnings
+    try:
+        document = _read_json(path, required=True)
+    except RasterLayeredError as exc:
+        return [str(exc)], warnings
+    if document.get("kind") != RECOMPOSITION_KIND:
+        errors.append("scene-reconstruction.json has an invalid kind.")
+    status = document.get("status")
+    if status not in {"awaiting-clean-plate", "ready"}:
+        errors.append("Scene reconstruction status must be awaiting-clean-plate or ready.")
+    by_id = {entry.get("id"): entry for entry in entries}
+    background_id = document.get("background_layer_id")
+    background_entry = by_id.get(background_id)
+    if background_entry is None:
+        errors.append("Scene reconstruction background_layer_id does not exist.")
+    source_info = document.get("source")
+    mask_info = document.get("removal_mask")
+    if not isinstance(source_info, dict) or not isinstance(source_info.get("file"), str):
+        errors.append("Scene reconstruction requires a registered source file.")
+        source_path = None
+    else:
+        try:
+            source_path = _resolve_inside(project_dir, source_info["file"], field="scene source")
+        except RasterLayeredError as exc:
+            errors.append(str(exc))
+            source_path = None
+    if not isinstance(mask_info, dict) or not isinstance(mask_info.get("file"), str):
+        errors.append("Scene reconstruction requires a registered removal mask.")
+        mask_path = None
+    else:
+        try:
+            mask_path = _resolve_inside(project_dir, mask_info["file"], field="scene removal mask")
+        except RasterLayeredError as exc:
+            errors.append(str(exc))
+            mask_path = None
+    source_image = None
+    mask = None
+    pillow = _require_pillow()
+    if source_path is not None:
+        if not source_path.is_file():
+            errors.append("Scene reconstruction source file is missing.")
+        else:
+            try:
+                with pillow.open(source_path) as opened:
+                    source_image = opened.convert("RGBA")
+                    source_image.load()
+                if source_image.size != (width, height):
+                    errors.append("Scene reconstruction source does not match the project canvas.")
+                if source_image.getchannel("A").getextrema()[0] < 255:
+                    errors.append("Scene reconstruction source must be fully opaque.")
+                if source_info.get("sha256") and source_info.get("sha256") != _sha256(source_path):
+                    errors.append("Scene reconstruction source hash does not match its provenance record.")
+            except (OSError, ValueError) as exc:
+                errors.append(f"Unable to read scene reconstruction source: {exc}")
+    if mask_path is not None:
+        if not mask_path.is_file():
+            errors.append("Scene reconstruction removal mask is missing.")
+        else:
+            try:
+                with pillow.open(mask_path) as opened:
+                    opened.load()
+                    mask = _binary_mask(opened, size=(width, height))
+                if mask_info.get("sha256") and mask_info.get("sha256") != _sha256(mask_path):
+                    errors.append("Scene reconstruction mask hash does not match its provenance record.")
+            except (OSError, ValueError, RasterLayeredError) as exc:
+                errors.append(f"Invalid scene reconstruction mask: {exc}")
+    if status == "awaiting-clean-plate":
+        warnings.append("Scene reconstruction is waiting for a completed clean-plate candidate.")
+    if status == "ready" and background_entry is not None:
+        if background_entry.get("role") != "clean-plate":
+            errors.append("Ready scene reconstruction requires a clean-plate layer role.")
+        if background_entry.get("locked") is not True:
+            errors.append("Ready clean-plate background must remain locked.")
+        clean_info = document.get("clean_plate")
+        if not isinstance(clean_info, dict) or not isinstance(clean_info.get("file"), str):
+            errors.append("Ready scene reconstruction requires clean_plate provenance.")
+        else:
+            candidate_relative = clean_info.get("candidate_file")
+            if not isinstance(candidate_relative, str):
+                errors.append("Ready clean-plate provenance requires the raw candidate file.")
+            else:
+                try:
+                    candidate_path = _resolve_inside(
+                        project_dir,
+                        candidate_relative,
+                        field="clean-plate candidate",
+                    )
+                    if not candidate_path.is_file():
+                        errors.append("Raw clean-plate candidate is missing.")
+                    elif clean_info.get("candidate_sha256") and clean_info.get("candidate_sha256") != _sha256(candidate_path):
+                        errors.append("Raw clean-plate candidate hash does not match its provenance record.")
+                except RasterLayeredError as exc:
+                    errors.append(str(exc))
+            verification = clean_info.get("verification")
+            if not isinstance(verification, dict):
+                errors.append("Ready clean plate requires verification metadata.")
+            elif verification.get("inside_mask_changed_pixels") == 0:
+                warnings.append("Clean-plate candidate changed no pixels inside the removal mask; inspect the completion.")
+            try:
+                clean_path = _resolve_inside(project_dir, clean_info["file"], field="clean plate")
+                expected_path = _resolve_inside(
+                    project_dir,
+                    background_entry.get("file"),
+                    field=f"{background_id}.file",
+                )
+                if clean_path != expected_path:
+                    errors.append("Clean-plate provenance must reference the bottom layer file.")
+                if not clean_path.is_file():
+                    errors.append("Registered clean-plate layer file is missing.")
+                elif source_image is not None and mask is not None:
+                    with pillow.open(clean_path) as opened:
+                        clean_image = opened.convert("RGBA")
+                        clean_image.load()
+                    outside = mask.point(lambda value: 255 - value)
+                    changed = _masked_changed_pixels(source_image, clean_image, outside)
+                    if changed != 0:
+                        errors.append(
+                            f"Clean plate changed {changed} pixels outside the removal mask."
+                        )
+                    recorded = clean_info.get("verification", {}).get("outside_mask_changed_pixels")
+                    if recorded not in {None, 0}:
+                        errors.append("Clean-plate provenance reports changes outside the mask.")
+                    if clean_info.get("sha256") and clean_info.get("sha256") != _sha256(clean_path):
+                        errors.append("Clean-plate hash does not match its provenance record.")
+            except (OSError, ValueError, RasterLayeredError) as exc:
+                errors.append(f"Unable to verify clean plate: {exc}")
+    return errors, warnings
+
 def _visible_palette(path: Path, limit: int) -> set[tuple[int, int, int]] | None:
     pillow = _require_pillow()
     colors: set[tuple[int, int, int]] = set()
@@ -234,7 +643,15 @@ def _validate_editable_source(path: Path, layer_type: str) -> list[str]:
     return sorted(set(errors))
 
 
-def _manifest_layer(project_dir: Path, entry: dict[str, Any], position: int) -> dict[str, Any]:
+def _manifest_layer(
+    project_dir: Path,
+    entry: dict[str, Any],
+    position: int,
+    *,
+    width: int,
+    height: int,
+    pixel_art: bool,
+) -> dict[str, Any]:
     layer_id = entry.get("id")
     file_path: Path | None = None
     error: str | None = None
@@ -259,6 +676,23 @@ def _manifest_layer(project_dir: Path, entry: dict[str, Any], position: int) -> 
         except RasterLayeredError:
             source_digest = None
     layer_type = entry.get("layer_type", "pixel" if entry.get("pixel_art") else "raster")
+    try:
+        transform = normalize_layer_transform(
+            entry.get("transform"),
+            width=width,
+            height=height,
+            pixel_art=pixel_art,
+        )
+        transformed_bbox = _transformed_bbox(
+            info.get("alpha_bbox"),
+            transform,
+            width=width,
+            height=height,
+        )
+    except RasterLayeredError:
+        transform = entry.get("transform", dict(DEFAULT_LAYER_TRANSFORM))
+        transformed_bbox = None
+    role = entry.get("role", "artwork")
     state_payload = {
         "file_sha256": digest,
         "editable_source_sha256": source_digest,
@@ -273,6 +707,12 @@ def _manifest_layer(project_dir: Path, entry: dict[str, Any], position: int) -> 
         "depends_on": entry.get("depends_on", []),
         "z_index": entry.get("z_index", position),
     }
+    # Preserve revision compatibility for older projects that predate explicit
+    # roles and transforms. Once either field is authored, it becomes canonical.
+    if "role" in entry:
+        state_payload["role"] = role
+    if "transform" in entry:
+        state_payload["transform"] = transform
     state_digest = hashlib.sha256(
         json.dumps(state_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
@@ -293,6 +733,7 @@ def _manifest_layer(project_dir: Path, entry: dict[str, Any], position: int) -> 
         "pixel_mode": info.get("mode"),
         "has_alpha": info.get("has_alpha"),
         "alpha_bbox": info.get("alpha_bbox"),
+        "transformed_bbox": transformed_bbox,
         "alpha_extrema": info.get("alpha_extrema"),
         "partial_alpha_pixels": info.get("partial_alpha_pixels"),
         "light_partial_pixels": info.get("light_partial_pixels"),
@@ -302,6 +743,8 @@ def _manifest_layer(project_dir: Path, entry: dict[str, Any], position: int) -> 
         "opacity": entry.get("opacity", 1.0),
         "blend_mode": entry.get("blend_mode", "normal"),
         "depends_on": entry.get("depends_on", []),
+        "role": role,
+        "transform": transform,
         "error": error,
     }
 
@@ -310,8 +753,33 @@ def build_manifest(raw_target: str | Path) -> dict[str, Any]:
     project_dir, config, _, index = resolve_project(raw_target)
     width, height = _canvas(config, index)
     entries = _layer_entries(index)
-    layers = [_manifest_layer(project_dir, entry, position) for position, entry in enumerate(entries, 1)]
+    pixel_art = _is_pixel_art(config)
+    layers = [
+        _manifest_layer(
+            project_dir,
+            entry,
+            position,
+            width=width,
+            height=height,
+            pixel_art=pixel_art,
+        )
+        for position, entry in enumerate(entries, 1)
+    ]
     design_plan_digest = FEATURES.design_plan_sha256(project_dir, config)
+    object_specs_digest = PHYSICAL.document_sha256(project_dir, config)
+    reconstruction_relative = config.get("scene_reconstruction")
+    reconstruction_digest: str | None = None
+    if isinstance(reconstruction_relative, str) and reconstruction_relative.strip():
+        try:
+            reconstruction_path = _resolve_inside(
+                project_dir,
+                reconstruction_relative,
+                field="scene_reconstruction",
+            )
+            if reconstruction_path.is_file():
+                reconstruction_digest = _sha256(reconstruction_path)
+        except RasterLayeredError:
+            reconstruction_digest = None
     revision_payload = {
         "schema_version": config.get("schema_version", "1.0"),
         "title": config.get("title"),
@@ -341,6 +809,10 @@ def build_manifest(raw_target: str | Path) -> dict[str, Any]:
             for item in layers
         ],
     }
+    if isinstance(object_specs_digest, str) and object_specs_digest:
+        revision_payload["object_specs_sha256"] = object_specs_digest
+    if reconstruction_digest:
+        revision_payload["scene_reconstruction_sha256"] = reconstruction_digest
     revision = hashlib.sha256(
         json.dumps(revision_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()[:12]
@@ -358,6 +830,10 @@ def build_manifest(raw_target: str | Path) -> dict[str, Any]:
         "design_plan": config.get("design_plan"),
         "design_preset": config.get("design_preset"),
         "design_plan_sha256": design_plan_digest,
+        "object_specs": config.get("object_specs"),
+        "object_specs_sha256": object_specs_digest,
+        "scene_reconstruction": reconstruction_relative,
+        "scene_reconstruction_sha256": reconstruction_digest,
         "layer_model": config.get("layer_model", "semantic-raster"),
         "pixel_art": config.get("pixel_art") if _is_pixel_art(config) else None,
         "layer_count": len(layers),
@@ -453,6 +929,29 @@ def validate_project(raw_target: str | Path, *, write_manifest_file: bool = Fals
             )
         if pixel_art and layer_type != "pixel":
             errors.append(f"Pixel-art project layer {layer_id} must use layer_type pixel.")
+        role = entry.get("role", "artwork")
+        if role not in SUPPORTED_LAYER_ROLES:
+            errors.append(
+                f"Layer {layer_id} uses unsupported role {role!r}; "
+                f"choose from {', '.join(sorted(SUPPORTED_LAYER_ROLES))}."
+            )
+        try:
+            transform = normalize_layer_transform(
+                entry.get("transform"),
+                width=width,
+                height=height,
+                pixel_art=pixel_art,
+            )
+        except RasterLayeredError as exc:
+            errors.append(f"Layer {layer_id}: {exc}")
+            transform = dict(DEFAULT_LAYER_TRANSFORM)
+        if role == "clean-plate":
+            if position != 1:
+                errors.append(f"Clean-plate layer {layer_id} must be the bottom layer.")
+            if not _identity_transform(transform):
+                errors.append(f"Clean-plate layer {layer_id} must keep an identity transform.")
+            if entry.get("locked", False) is not True:
+                errors.append(f"Clean-plate layer {layer_id} must stay locked.")
         depends_on = entry.get("depends_on", [])
         if not isinstance(depends_on, list) or not all(isinstance(value, str) for value in depends_on):
             errors.append(f"Layer {layer_id} depends_on must be an array of layer IDs.")
@@ -584,6 +1083,27 @@ def validate_project(raw_target: str | Path, *, write_manifest_file: bool = Fals
     if any(visit_dependency(layer_id) for layer_id in dependency_graph):
         errors.append("Layer depends_on relationships contain a cycle.")
 
+    reconstruction_errors, reconstruction_warnings = _validate_recomposition(
+        project_dir,
+        config,
+        entries,
+        width=width,
+        height=height,
+    )
+    errors.extend(reconstruction_errors)
+    warnings.extend(reconstruction_warnings)
+    if config.get("object_specs") or (project_dir / "object-specs.json").exists():
+        try:
+            specifications = PHYSICAL.load_document(project_dir)
+            spec_report = PHYSICAL.validate_document(
+                specifications,
+                known_layer_ids=known_layer_ids,
+            )
+            errors.extend(f"Invalid object specifications: {item}" for item in spec_report["errors"])
+            warnings.extend(f"Object specifications: {item}" for item in spec_report["warnings"])
+        except PHYSICAL.PhysicalSpecError as exc:
+            errors.append(f"Invalid object specifications: {exc}")
+
     manifest = build_manifest(project_dir)
     manifest_path = project_dir / "manifest.json"
     previous = _read_json(manifest_path)
@@ -639,6 +1159,7 @@ def quality_report(raw_target: str | Path) -> dict[str, Any]:
     project_dir, config, _, _ = resolve_project(raw_target)
     validation = validate_project(project_dir)
     manifest = build_manifest(project_dir)
+    reconstruction = load_recomposition(project_dir)
     checks = {
         "contract": validation["ok"],
         "layer_count_preferred": 8 <= manifest["layer_count"] <= 12,
@@ -647,6 +1168,10 @@ def quality_report(raw_target: str | Path) -> dict[str, Any]:
         "no_duplicate_pixels": not any("identical rendered pixels" in item for item in validation["warnings"]),
         "no_alpha_halo_warning": not any("alpha halos" in item for item in validation["warnings"]),
         "no_baked_upper_layer_warning": not any("baked lower-layer" in item for item in validation["warnings"]),
+        "clean_plate_ready": not reconstruction.get("enabled") or reconstruction.get("status") == "ready",
+        "clean_plate_preserves_known_pixels": not any(
+            "outside the removal mask" in item for item in validation["errors"]
+        ),
     }
     engineering_score = max(0, 100 - len(validation["errors"]) * 20 - len(validation["warnings"]) * 4)
     return {
@@ -743,12 +1268,32 @@ def compose_project(raw_target: str | Path) -> dict[str, Any]:
         raise RasterLayeredError("Cannot compose invalid raster project: " + "; ".join(report["errors"]))
     width, height = _canvas(config, index)
     composite = pillow.new("RGBA", (width, height), (0, 0, 0, 0))
+    transformed_layer_ids: list[str] = []
     for entry in _layer_entries(index):
         if entry.get("visible", True) is False:
             continue
         layer_path = _resolve_inside(project_dir, entry.get("file"), field=f"{entry.get('id')}.file")
         with pillow.open(layer_path) as source:
             layer = source.convert("RGBA")
+        raw_bbox = layer.getchannel("A").getbbox()
+        alpha_bbox = None
+        if raw_bbox is not None:
+            left, top, right, bottom = raw_bbox
+            alpha_bbox = [left, top, right - left, bottom - top]
+        transform = normalize_layer_transform(
+            entry.get("transform"),
+            width=width,
+            height=height,
+            pixel_art=_is_pixel_art(config),
+        )
+        layer = _transform_layer_image(
+            layer,
+            transform,
+            alpha_bbox=alpha_bbox,
+            pixel_art=_is_pixel_art(config),
+        )
+        if not _identity_transform(transform):
+            transformed_layer_ids.append(str(entry.get("id")))
         opacity = float(entry.get("opacity", 1.0))
         if opacity < 1:
             alpha = layer.getchannel("A").point(lambda value: round(value * opacity))
@@ -790,6 +1335,8 @@ def compose_project(raw_target: str | Path) -> dict[str, Any]:
         "preview_scale": preview_scale,
         "preview_size": [preview.width, preview.height],
         "resampling": "nearest" if preview_scale > 1 else "none",
+        "transformed_layers": transformed_layer_ids,
+        "layer_transform_resampling": "nearest" if _is_pixel_art(config) else "premultiplied-alpha bicubic",
     }
     comparable = {key: value for key, value in composition.items() if key != "generated_at"}
     previous_comparable = {
@@ -808,8 +1355,422 @@ def compose_project(raw_target: str | Path) -> dict[str, Any]:
         "layer_count": manifest["layer_count"],
         "style": config.get("style"),
         "preview_scale": preview_scale,
+        "transformed_layer_count": len(transformed_layer_ids),
     }
 
+
+def _decode_uploaded_image(payload: bytes, *, label: str) -> Any:
+    pillow = _require_pillow()
+    try:
+        with pillow.open(io.BytesIO(payload)) as opened:
+            opened.load()
+            return opened.convert("RGBA")
+    except (OSError, ValueError) as exc:
+        raise RasterLayeredError(f"Unable to decode {label}: {exc}") from exc
+
+
+def _restore_file_backups(backups: dict[Path, bytes | None]) -> None:
+    for path, payload in backups.items():
+        if payload is None:
+            if path.exists() and path.is_file():
+                path.unlink()
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+
+
+def _clean_plate_prompt(width: int, height: int, user_prompt: str | None) -> str:
+    extra = user_prompt.strip() if isinstance(user_prompt, str) and user_prompt.strip() else "None."
+    return (
+        "# Clean-plate background completion\n\n"
+        f"Create one opaque {width}×{height} background image from the registered source and binary mask.\n\n"
+        "Mask meaning: white pixels are unknown background hidden by movable foreground material; "
+        "black pixels are immutable source evidence.\n\n"
+        "Requirements:\n"
+        "- Remove masked foreground subjects, their contact shadows, and reflections only when those effects move with them.\n"
+        "- Reconstruct the static background with matching perspective, structure, texture, lighting, grain, and depth continuity.\n"
+        "- Do not add new subjects, text, logos, props, or decorative content.\n"
+        "- Preserve every pixel outside the mask. The registration step will enforce this exactly.\n"
+        "- Return a full-canvas opaque image with no transparency.\n\n"
+        f"Additional direction: {extra}\n"
+    )
+
+
+def _initialize_recomposition_images(
+    raw_target: str | Path,
+    source_image: Any,
+    mask_image: Any,
+    *,
+    source_name: str,
+    mask_name: str,
+    background_layer_id: str | None = None,
+    prompt: str | None = None,
+) -> dict[str, Any]:
+    project_dir, config, index_path, index = resolve_project(raw_target)
+    width, height = _canvas(config, index)
+    entries = _layer_entries(index)
+    background_id = background_layer_id or str(entries[0].get("id"))
+    background_position = next(
+        (position for position, entry in enumerate(entries) if entry.get("id") == background_id),
+        None,
+    )
+    if background_position is None:
+        raise RasterLayeredError(f"Unknown background layer: {background_id}")
+    if background_position != 0:
+        raise RasterLayeredError("The reconstruction background must be the bottom layer")
+    source = source_image.convert("RGBA")
+    if source.size != (width, height):
+        raise RasterLayeredError(
+            f"Reconstruction source is {source.width}×{source.height}; expected {width}×{height}"
+        )
+    if source.getchannel("A").getextrema()[0] < 255:
+        raise RasterLayeredError("Reconstruction source must be fully opaque")
+    mask = _binary_mask(mask_image, size=(width, height))
+    source_path = project_dir / "reconstruction" / "source.png"
+    mask_path = project_dir / "masks" / "clean-plate-mask.png"
+    prompt_path = project_dir / "prompts" / "clean-plate.md"
+    document_path = project_dir / "scene-reconstruction.json"
+    manifest_path = project_dir / "manifest.json"
+    composition_path = project_dir / "composition.json"
+    composite_path = _resolve_inside(
+        project_dir,
+        config.get("canonical_composite", "artwork.png"),
+        field="canonical_composite",
+    )
+    preview_path = _resolve_inside(project_dir, config.get("preview", "preview.png"), field="preview")
+    config_path = project_dir / "project.json"
+    before = build_manifest(project_dir)
+    FEATURES.create_snapshot(
+        project_dir,
+        before,
+        reason="Before initializing recompose-ready scene",
+        changed_layers=[background_id],
+    )
+    affected = {
+        config_path,
+        index_path,
+        source_path,
+        mask_path,
+        prompt_path,
+        document_path,
+        manifest_path,
+        composition_path,
+        composite_path,
+        preview_path,
+    }
+    backups = {path: path.read_bytes() if path.is_file() else None for path in affected}
+    now = datetime.now(timezone.utc).isoformat()
+    previous = _read_json(document_path)
+    try:
+        _atomic_save_png(source, source_path)
+        _atomic_save_png(mask, mask_path)
+        prompt_path.parent.mkdir(parents=True, exist_ok=True)
+        prompt_path.write_text(_clean_plate_prompt(width, height, prompt), encoding="utf-8")
+        candidate_config = copy.deepcopy(config)
+        candidate_config["scene_reconstruction"] = "scene-reconstruction.json"
+        candidate_config["layer_model"] = "recompose-ready-semantic-raster"
+        _write_json(config_path, candidate_config)
+        document = {
+            "schema_version": "1.0",
+            "kind": RECOMPOSITION_KIND,
+            "status": "awaiting-clean-plate",
+            "created_at": previous.get("created_at", now),
+            "updated_at": now,
+            "background_layer_id": background_id,
+            "source": {
+                "file": source_path.relative_to(project_dir).as_posix(),
+                "sha256": _sha256(source_path),
+                "original_name": Path(source_name).name,
+                "immutable": True,
+            },
+            "removal_mask": {
+                "file": mask_path.relative_to(project_dir).as_posix(),
+                "sha256": _sha256(mask_path),
+                "original_name": Path(mask_name).name,
+                "white_means": "unknown background hidden by movable foreground material",
+                "selected_pixels": int(mask.histogram()[255]),
+            },
+            "generation_request": {
+                "kind": "masked-background-inpainting",
+                "prompt_file": prompt_path.relative_to(project_dir).as_posix(),
+                "preserve_outside_mask": "pixel-exact",
+                "output": "full-canvas opaque image",
+            },
+            "clean_plate": {
+                "status": "awaiting-generation",
+                "file": entries[0].get("file"),
+            },
+            "object_completion": {
+                "policy": "visible-only unless a separately masked amodal completion is registered",
+                "partially_occluded_objects": [],
+            },
+            "occlusion": {
+                "z_order_source": "layers/index.json",
+                "movable_layers_keep_transparency": True,
+                "dependent_shadows_and_reflections_stay_separate": True,
+            },
+        }
+        _write_json(document_path, document)
+        validation = validate_project(project_dir)
+        if validation["errors"]:
+            raise RasterLayeredError(
+                "Scene reconstruction initialization is invalid: " + "; ".join(validation["errors"])
+            )
+        composed = compose_project(project_dir)
+    except Exception:
+        _restore_file_backups(backups)
+        raise
+    return {
+        "ok": True,
+        "project": str(project_dir),
+        "status": "awaiting-clean-plate",
+        "background_layer_id": background_id,
+        "scene_reconstruction": str(document_path),
+        "source": str(source_path),
+        "mask": str(mask_path),
+        "prompt": str(prompt_path),
+        "artwork": composed["artwork"],
+        "revision": composed["revision"],
+    }
+
+
+def initialize_recomposition(
+    raw_target: str | Path,
+    source: str | Path,
+    mask: str | Path,
+    *,
+    background_layer_id: str | None = None,
+    prompt: str | None = None,
+) -> dict[str, Any]:
+    pillow = _require_pillow()
+    source_path = Path(source).expanduser().resolve()
+    mask_path = Path(mask).expanduser().resolve()
+    if not source_path.is_file():
+        raise RasterLayeredError(f"Reconstruction source does not exist: {source_path}")
+    if not mask_path.is_file():
+        raise RasterLayeredError(f"Reconstruction mask does not exist: {mask_path}")
+    try:
+        with pillow.open(source_path) as opened:
+            opened.load()
+            source_image = opened.convert("RGBA")
+        with pillow.open(mask_path) as opened:
+            opened.load()
+            mask_image = opened.copy()
+    except (OSError, ValueError) as exc:
+        raise RasterLayeredError(f"Unable to read reconstruction input: {exc}") from exc
+    return _initialize_recomposition_images(
+        raw_target,
+        source_image,
+        mask_image,
+        source_name=source_path.name,
+        mask_name=mask_path.name,
+        background_layer_id=background_layer_id,
+        prompt=prompt,
+    )
+
+
+def initialize_recomposition_bytes(
+    raw_target: str | Path,
+    source_payload: bytes,
+    mask_payload: bytes,
+    *,
+    source_name: str,
+    mask_name: str,
+    background_layer_id: str | None = None,
+    prompt: str | None = None,
+) -> dict[str, Any]:
+    return _initialize_recomposition_images(
+        raw_target,
+        _decode_uploaded_image(source_payload, label="reconstruction source"),
+        _decode_uploaded_image(mask_payload, label="reconstruction mask"),
+        source_name=source_name,
+        mask_name=mask_name,
+        background_layer_id=background_layer_id,
+        prompt=prompt,
+    )
+
+
+def _register_clean_plate_image(
+    raw_target: str | Path,
+    candidate_image: Any,
+    *,
+    candidate_name: str,
+    model: str | None = None,
+    seed: int | None = None,
+) -> dict[str, Any]:
+    project_dir, config, index_path, index = resolve_project(raw_target)
+    document_path = _reconstruction_path(project_dir, config)
+    if document_path is None or not document_path.is_file():
+        raise RasterLayeredError("Run recompose-init before registering a clean plate")
+    document = _read_json(document_path, required=True)
+    if document.get("kind") != RECOMPOSITION_KIND:
+        raise RasterLayeredError("scene-reconstruction.json has an invalid kind")
+    width, height = _canvas(config, index)
+    candidate = candidate_image.convert("RGBA")
+    if candidate.size != (width, height):
+        raise RasterLayeredError(
+            f"Clean-plate candidate is {candidate.width}×{candidate.height}; expected {width}×{height}"
+        )
+    if candidate.getchannel("A").getextrema()[0] < 255:
+        raise RasterLayeredError("Clean-plate candidate must be fully opaque")
+    source_path = _resolve_inside(project_dir, document.get("source", {}).get("file"), field="scene source")
+    mask_path = _resolve_inside(
+        project_dir,
+        document.get("removal_mask", {}).get("file"),
+        field="scene removal mask",
+    )
+    pillow = _require_pillow()
+    try:
+        with pillow.open(source_path) as opened:
+            source = opened.convert("RGBA")
+            source.load()
+        with pillow.open(mask_path) as opened:
+            opened.load()
+            mask = _binary_mask(opened, size=(width, height))
+    except (OSError, ValueError) as exc:
+        raise RasterLayeredError(f"Unable to read registered reconstruction inputs: {exc}") from exc
+    clean_plate = pillow.composite(candidate, source, mask).convert("RGBA")
+    clean_plate.putalpha(255)
+    entries = _layer_entries(index)
+    background_id = document.get("background_layer_id")
+    position = next((idx for idx, entry in enumerate(entries) if entry.get("id") == background_id), None)
+    if position is None or position != 0:
+        raise RasterLayeredError("Registered reconstruction background is not the bottom layer")
+    target_path = _resolve_inside(
+        project_dir,
+        entries[position].get("file"),
+        field=f"{background_id}.file",
+    )
+    pixel_digest = hashlib.sha256(candidate.tobytes()).hexdigest()[:12]
+    candidate_path = project_dir / "reconstruction" / "candidates" / f"clean-plate-{pixel_digest}.png"
+    manifest_path = project_dir / "manifest.json"
+    composition_path = project_dir / "composition.json"
+    composite_path = _resolve_inside(
+        project_dir,
+        config.get("canonical_composite", "artwork.png"),
+        field="canonical_composite",
+    )
+    preview_path = _resolve_inside(project_dir, config.get("preview", "preview.png"), field="preview")
+    before = build_manifest(project_dir)
+    FEATURES.create_snapshot(
+        project_dir,
+        before,
+        reason="Before registering clean-plate background",
+        changed_layers=[str(background_id)],
+    )
+    affected = {
+        index_path,
+        document_path,
+        target_path,
+        candidate_path,
+        manifest_path,
+        composition_path,
+        composite_path,
+        preview_path,
+    }
+    backups = {path: path.read_bytes() if path.is_file() else None for path in affected}
+    try:
+        _atomic_save_png(candidate, candidate_path)
+        _atomic_save_png(clean_plate, target_path)
+        candidate_index = copy.deepcopy(index)
+        candidate_entries = _layer_entries(candidate_index)
+        background_entry = candidate_entries[position]
+        background_entry["role"] = "clean-plate"
+        background_entry["locked"] = True
+        background_entry["transform"] = dict(DEFAULT_LAYER_TRANSFORM)
+        _write_json(index_path, candidate_index)
+        inside_changed = _masked_changed_pixels(source, clean_plate, mask)
+        outside = mask.point(lambda value: 255 - value)
+        outside_changed = _masked_changed_pixels(source, clean_plate, outside)
+        now = datetime.now(timezone.utc).isoformat()
+        updated_document = copy.deepcopy(document)
+        updated_document["status"] = "ready"
+        updated_document["updated_at"] = now
+        updated_document["clean_plate"] = {
+            "status": "ready",
+            "file": target_path.relative_to(project_dir).as_posix(),
+            "sha256": _sha256(target_path),
+            "candidate_file": candidate_path.relative_to(project_dir).as_posix(),
+            "candidate_sha256": _sha256(candidate_path),
+            "candidate_name": Path(candidate_name).name,
+            "generation": {
+                "method": "external-masked-inpainting",
+                "model": model,
+                "seed": seed,
+            },
+            "verification": {
+                "outside_mask_policy": "pixel-exact",
+                "outside_mask_changed_pixels": outside_changed,
+                "inside_mask_changed_pixels": inside_changed,
+                "known_pixels_copied_from_source": True,
+            },
+        }
+        _write_json(document_path, updated_document)
+        validation = validate_project(project_dir)
+        if validation["errors"]:
+            raise RasterLayeredError(
+                "Registered clean plate is invalid: " + "; ".join(validation["errors"])
+            )
+        composed = compose_project(project_dir)
+    except Exception:
+        _restore_file_backups(backups)
+        raise
+    return {
+        "ok": True,
+        "project": str(project_dir),
+        "status": "ready",
+        "background_layer_id": background_id,
+        "clean_plate": str(target_path),
+        "candidate": str(candidate_path),
+        "outside_mask_changed_pixels": outside_changed,
+        "inside_mask_changed_pixels": inside_changed,
+        "artwork": composed["artwork"],
+        "preview": composed["preview"],
+        "revision": composed["revision"],
+    }
+
+
+def register_clean_plate(
+    raw_target: str | Path,
+    candidate: str | Path,
+    *,
+    model: str | None = None,
+    seed: int | None = None,
+) -> dict[str, Any]:
+    pillow = _require_pillow()
+    candidate_path = Path(candidate).expanduser().resolve()
+    if not candidate_path.is_file():
+        raise RasterLayeredError(f"Clean-plate candidate does not exist: {candidate_path}")
+    try:
+        with pillow.open(candidate_path) as opened:
+            opened.load()
+            image = opened.convert("RGBA")
+    except (OSError, ValueError) as exc:
+        raise RasterLayeredError(f"Unable to read clean-plate candidate: {exc}") from exc
+    return _register_clean_plate_image(
+        raw_target,
+        image,
+        candidate_name=candidate_path.name,
+        model=model,
+        seed=seed,
+    )
+
+
+def register_clean_plate_bytes(
+    raw_target: str | Path,
+    payload: bytes,
+    *,
+    candidate_name: str,
+    model: str | None = None,
+    seed: int | None = None,
+) -> dict[str, Any]:
+    return _register_clean_plate_image(
+        raw_target,
+        _decode_uploaded_image(payload, label="clean-plate candidate"),
+        candidate_name=candidate_name,
+        model=model,
+        seed=seed,
+    )
 
 def export_ora(raw_target: str | Path, output: str | Path | None = None) -> dict[str, Any]:
     """Export a raster-layered project as an OpenRaster round-trip package."""
@@ -1083,6 +2044,7 @@ def create_project(
     (project_dir / "directions" / "candidates").mkdir(parents=True, exist_ok=True)
     (project_dir / "proofs" / "sets").mkdir(parents=True, exist_ok=True)
     (project_dir / "references").mkdir(exist_ok=True)
+    (project_dir / "reconstruction" / "candidates").mkdir(parents=True, exist_ok=True)
 
     names = DEFAULT_LAYER_NAMES[:layers]
     if layers > len(names):
@@ -1110,6 +2072,8 @@ def create_project(
                 "blend_mode": "normal",
                 "layer_type": "pixel" if pixel_art else "raster",
                 "depends_on": [],
+                "role": "artwork",
+                "transform": dict(DEFAULT_LAYER_TRANSFORM),
                 "bbox_hint": [0, 0, width, height],
             }
         )
@@ -1135,7 +2099,7 @@ def create_project(
         )
 
     config = {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "title": title,
         "output_mode": "raster-layered",
         "canvas": {"width": width, "height": height, "color_space": "sRGB"},
@@ -1147,6 +2111,7 @@ def create_project(
         "style_recipe": "style-recipe.json" if style else None,
         "workflow_mode": "guided",
         "design_plan": "design-plan.json",
+        "object_specs": "object-specs.json",
         "layer_model": "hybrid-semantic",
         "procedural_seed": 1,
     }
@@ -1168,6 +2133,7 @@ def create_project(
     _write_json(project_dir / "layers" / "index.json", index)
     FEATURES.install_style_recipe(project_dir, style)
     design_plan = FEATURES.initialize_design_plan(project_dir, style=style, workflow_mode="guided")
+    PHYSICAL.initialize_document(project_dir, coordinate_unit="px")
     _write_json(
         project_dir / "creative-brief.json",
         {
@@ -1186,6 +2152,7 @@ def create_project(
         "canvas": {"width": width, "height": height},
         "style": style,
         "design_preset": design_plan["selected_preset"],
+        "object_specs": str(project_dir / "object-specs.json"),
         "pixel_art": config.get("pixel_art"),
     }
 
@@ -1227,13 +2194,39 @@ def viewer_svg(raw_target: str | Path) -> bytes:
         display = "none" if entry.get("visible", True) is False else "inline"
         locked = "true" if entry.get("locked", False) else "false"
         endpoint = f"/api/layer/{quote(raw_layer_id, safe='')}"
-        bbox = manifest_layers.get(raw_layer_id, {}).get("alpha_bbox") or entry.get("bbox_hint")
-        if not isinstance(bbox, list) or len(bbox) != 4 or not all(isinstance(value, (int, float)) for value in bbox):
-            bbox = [0, 0, width, height]
+        manifest_layer = manifest_layers.get(raw_layer_id, {})
+        source_bbox = manifest_layer.get("alpha_bbox") or entry.get("bbox_hint")
+        if not isinstance(source_bbox, list) or len(source_bbox) != 4 or not all(
+            isinstance(value, (int, float)) for value in source_bbox
+        ):
+            source_bbox = [0, 0, width, height]
+        transform = normalize_layer_transform(
+            entry.get("transform"),
+            width=width,
+            height=height,
+            pixel_art=pixel_art,
+        )
+        anchor_x, anchor_y = _content_anchor(source_bbox, transform, width=width, height=height)
+        svg_transform = (
+            f"translate({transform['translate_x']:g} {transform['translate_y']:g}) "
+            f"translate({anchor_x:g} {anchor_y:g}) "
+            f"rotate({transform['rotation_deg']:g}) "
+            f"scale({transform['scale_x']:g} {transform['scale_y']:g}) "
+            f"translate({-anchor_x:g} {-anchor_y:g})"
+        )
+        bbox = manifest_layer.get("transformed_bbox") or source_bbox
         bbox_text = " ".join(f"{float(value):g}" for value in bbox)
+        role = html.escape(str(entry.get("role", "artwork")), quote=True)
+        translate_x = float(transform["translate_x"])
+        translate_y = float(transform["translate_y"])
+        scale_x = float(transform["scale_x"])
+        scale_y = float(transform["scale_y"])
+        rotation_deg = float(transform["rotation_deg"])
+        normalized_anchor_x = float(transform["anchor_x"])
+        normalized_anchor_y = float(transform["anchor_y"])
         nodes.extend(
             [
-                f'  <g id="{layer_id}" data-layer="true" data-label="{label}" data-label-zh="{label_zh}" data-label-en="{label_en}" data-locked="{locked}" data-layer-type="{layer_type}" data-editable-source="{editable_source}" data-blend-mode="{blend_mode}" data-opacity="{opacity:g}" data-depends-on="{depends_on}" data-bbox="{bbox_text}" inkscape:groupmode="layer" inkscape:label="{label}" display="{display}" style="mix-blend-mode:{blend_mode}">',
+                f'  <g id="{layer_id}" data-layer="true" data-label="{label}" data-label-zh="{label_zh}" data-label-en="{label_en}" data-locked="{locked}" data-layer-type="{layer_type}" data-editable-source="{editable_source}" data-blend-mode="{blend_mode}" data-opacity="{opacity:g}" data-depends-on="{depends_on}" data-role="{role}" data-translate-x="{translate_x:g}" data-translate-y="{translate_y:g}" data-scale-x="{scale_x:g}" data-scale-y="{scale_y:g}" data-rotation-deg="{rotation_deg:g}" data-anchor-x="{normalized_anchor_x:g}" data-anchor-y="{normalized_anchor_y:g}" data-bbox="{bbox_text}" transform="{svg_transform}" inkscape:groupmode="layer" inkscape:label="{label}" display="{display}" style="mix-blend-mode:{blend_mode}">',
                 f'    <image id="{layer_id}-bitmap" href="{endpoint}" x="0" y="0" width="{width}" height="{height}" opacity="{opacity:g}" preserveAspectRatio="none"{rendering}/>',
                 "  </g>",
             ]
@@ -1255,6 +2248,15 @@ def update_layer_settings(
     layer_type: str | None = None,
     editable_source: str | None = None,
     depends_on: list[str] | None = None,
+    role: str | None = None,
+    translate_x: float | None = None,
+    translate_y: float | None = None,
+    scale_x: float | None = None,
+    scale_y: float | None = None,
+    rotation_deg: float | None = None,
+    anchor_x: float | None = None,
+    anchor_y: float | None = None,
+    reset_transform: bool = False,
     move: str | None = None,
 ) -> dict[str, Any]:
     project_dir, config, index_path, index = resolve_project(raw_target)
@@ -1268,6 +2270,8 @@ def update_layer_settings(
         raise RasterLayeredError("Unsupported blend_mode: " + blend_mode)
     if layer_type is not None and layer_type not in SUPPORTED_LAYER_TYPES:
         raise RasterLayeredError("Unsupported layer_type: " + layer_type)
+    if role is not None and role not in SUPPORTED_LAYER_ROLES:
+        raise RasterLayeredError("Unsupported layer role: " + role)
     if move not in {None, "up", "down", "top", "bottom"}:
         raise RasterLayeredError("move must be up, down, top, or bottom")
 
@@ -1294,6 +2298,35 @@ def update_layer_settings(
         entry["editable_source"] = editable_source
     if depends_on is not None:
         entry["depends_on"] = list(dict.fromkeys(depends_on))
+    if role is not None:
+        entry["role"] = role
+    transform_updates = {
+        key: value
+        for key, value in {
+            "translate_x": translate_x,
+            "translate_y": translate_y,
+            "scale_x": scale_x,
+            "scale_y": scale_y,
+            "rotation_deg": rotation_deg,
+            "anchor_x": anchor_x,
+            "anchor_y": anchor_y,
+        }.items()
+        if value is not None
+    }
+    if reset_transform and transform_updates:
+        raise RasterLayeredError("reset_transform cannot be combined with transform values")
+    if reset_transform or transform_updates:
+        raw_transform = {} if reset_transform else dict(entry.get("transform") or {})
+        raw_transform.update(transform_updates)
+        normalized_transform = normalize_layer_transform(
+            raw_transform,
+            width=_canvas(config, index)[0],
+            height=_canvas(config, index)[1],
+            pixel_art=_is_pixel_art(config),
+        )
+        if entry.get("role") == "clean-plate" and not _identity_transform(normalized_transform):
+            raise RasterLayeredError("The clean-plate background cannot be transformed")
+        entry["transform"] = normalized_transform
     if move:
         item = candidate_entries.pop(position)
         if move == "up":

@@ -42,6 +42,34 @@ const TRANSLATIONS = {
     moveDown: "下移",
     moveUp: "上移",
     applySettings: "应用设置",
+    transformTitle: "位置与变换",
+    layerRoleLabel: "遮挡角色",
+    roleArtwork: "普通画面",
+    roleMovable: "可移动物体",
+    roleDependent: "随物体变化的阴影／反射",
+    roleCleanPlate: "完整背景（锁定）",
+    translateXLabel: "水平位移 px",
+    translateYLabel: "垂直位移 px",
+    scaleXLabel: "水平缩放 %",
+    scaleYLabel: "垂直缩放 %",
+    rotationLabel: "旋转 °",
+    anchorXLabel: "锚点 X（0–1）",
+    anchorYLabel: "锚点 Y（0–1）",
+    resetTransform: "重置变换",
+    recomposeTitle: "背景补全与遮挡重组",
+    recomposeIntro: "先用原图和移除遮罩建立完整背景，再自由移动、缩放图层和调整前后关系。遮罩外像素会被强制保留。",
+    recomposeStatusOff: "尚未建立",
+    recomposeStatusPending: "等待完整背景",
+    recomposeStatusReady: "可重组",
+    recomposeSource: "原始完整照片",
+    recomposeMask: "移除遮罩（白色为需补全区域）",
+    recomposePrompt: "补全方向（可选）",
+    recomposePromptPlaceholder: "例如：延续墙面纹理和光线，不添加新物体。",
+    recomposeInitialize: "建立补全任务",
+    cleanPlateCandidate: "生成后的完整背景",
+    cleanPlateModel: "模型／工具（可选）",
+    cleanPlateSeed: "随机种子（可选）",
+    cleanPlateRegister: "登记完整背景",
     layerListLabel: "语义图层列表",
     layerEmptyInitial: "打开分层工程后，图层会出现在这里。",
     layerEmptyDiscovered: "没有发现语义顶层图层。请检查 data-layer 或 Inkscape layer 标记。",
@@ -142,6 +170,10 @@ const TRANSLATIONS = {
     requestDownloaded: "edit-request.json 已下载。",
     requestCopied: "修改请求 JSON 已复制。",
     layerSettingsSaved: "图层合成设置已保存，并创建了可恢复版本。",
+    recomposeInitialized: "背景补全任务已建立；请生成并登记完整背景。",
+    cleanPlateRegistered: "完整背景已登记，遮罩外像素校验通过。",
+    chooseSourceAndMask: "请同时选择原图和移除遮罩。",
+    chooseCleanPlate: "请选择生成后的完整背景。",
     serverActionFailed: "本地工程操作失败：{detail}",
     historyTitle: "版本历史",
     historyEmpty: "应用修改后，可恢复版本会显示在这里。",
@@ -331,6 +363,34 @@ const TRANSLATIONS = {
     moveDown: "Move down",
     moveUp: "Move up",
     applySettings: "Apply",
+    transformTitle: "Position and transform",
+    layerRoleLabel: "Occlusion role",
+    roleArtwork: "Regular artwork",
+    roleMovable: "Movable object",
+    roleDependent: "Object-linked shadow / reflection",
+    roleCleanPlate: "Clean plate (locked)",
+    translateXLabel: "Horizontal offset px",
+    translateYLabel: "Vertical offset px",
+    scaleXLabel: "Horizontal scale %",
+    scaleYLabel: "Vertical scale %",
+    rotationLabel: "Rotation °",
+    anchorXLabel: "Anchor X (0–1)",
+    anchorYLabel: "Anchor Y (0–1)",
+    resetTransform: "Reset transform",
+    recomposeTitle: "Background completion and occlusion",
+    recomposeIntro: "Build a clean plate from the original image and removal mask, then move, scale, and reorder layers freely. Pixels outside the mask are preserved exactly.",
+    recomposeStatusOff: "Not configured",
+    recomposeStatusPending: "Awaiting clean plate",
+    recomposeStatusReady: "Recompose ready",
+    recomposeSource: "Original full photograph",
+    recomposeMask: "Removal mask (white is completed)",
+    recomposePrompt: "Completion direction (optional)",
+    recomposePromptPlaceholder: "For example: continue the wall texture and lighting; add no new objects.",
+    recomposeInitialize: "Create completion task",
+    cleanPlateCandidate: "Generated clean-plate background",
+    cleanPlateModel: "Model / tool (optional)",
+    cleanPlateSeed: "Seed (optional)",
+    cleanPlateRegister: "Register clean plate",
     layerListLabel: "Semantic layer list",
     layerEmptyInitial: "Open a layered project to inspect its semantic structure.",
     layerEmptyDiscovered: "No semantic top-level layers found. Check data-layer or Inkscape layer metadata.",
@@ -434,6 +494,10 @@ const TRANSLATIONS = {
     requestDownloaded: "edit-request.json downloaded.",
     requestCopied: "Edit request JSON copied.",
     layerSettingsSaved: "Layer composition settings saved with a recoverable revision.",
+    recomposeInitialized: "The background-completion task is ready; generate and register a clean plate.",
+    cleanPlateRegistered: "The clean plate was registered and passed outside-mask verification.",
+    chooseSourceAndMask: "Choose both the original image and the removal mask.",
+    chooseCleanPlate: "Choose the generated clean-plate image.",
     serverActionFailed: "Local project action failed: {detail}",
     historyTitle: "Revision history",
     historyEmpty: "Recoverable revisions appear here after applied changes.",
@@ -589,6 +653,120 @@ const TRANSLATIONS = {
   },
 };
 
+Object.assign(TRANSLATIONS.zh, {
+  specConfidence: "置信度（0–1）",
+  specSizePairRequired: "标称尺码必须同时填写尺码标签和尺码体系。",
+  specLayoutTitle: "版面尺寸与比例",
+  specOutputWidth: "输出宽",
+  specOutputHeight: "输出高",
+  specOutputUnit: "单位",
+  specDrawingScale: "绘图比例",
+  specLayoutSave: "保存版面",
+  specLayoutSaved: "版面尺寸与绘图比例已保存。",
+  specLayoutRequired: "请同时填写输出宽、高和单位。",
+  physicalSpecTitle: "真实规格",
+  physicalSpecIntro: "真实尺寸独立于画面缩放、位置和角度；估算值不能冒充生产测量。",
+  specObjectPicker: "当前规格对象",
+  specNewObject: "新建对象",
+  specNewObjectOption: "（尚未保存的新对象）",
+  specObjectId: "对象 ID",
+  specCategory: "品类",
+  specSizeLabel: "标称尺码",
+  specSizeSystem: "尺码体系",
+  specMeasurements: "真实测量值",
+  specMeasurementsPlaceholder: "每行一项，例如：\nlength=100cm\nwidth=3.5cm",
+  specSource: "数据来源",
+  specSourceUser: "用户提供",
+  specSourceCalibrated: "标定参照",
+  specSourceChart: "尺码表",
+  specSourceDepth: "单目估算",
+  specSourceVisual: "视觉估算",
+  specVerification: "核验状态",
+  specDeclared: "已声明",
+  specVerified: "已核验",
+  specEstimated: "估算",
+  specUnknown: "未知",
+  specRotation: "旋转 °",
+  specVisualScale: "画面缩放 %",
+  specAdvanced: "姿态与备注",
+  specNotes: "备注",
+  specRemove: "删除",
+  specExport: "导出规格表",
+  specExportFormats: "导出格式",
+  specExportHint: "SVG 是默认可编辑母版；可按交付用途追加其他格式。",
+  specFormatSvg: "可编辑母版",
+  specFormatPdf: "打印／审批",
+  specFormatPng: "预览／批注",
+  specFormatCsv: "表格数据",
+  specFormatJson: "结构数据",
+  specExportDpi: "PNG 分辨率（DPI）",
+  specExportRequired: "请至少选择一种导出格式。",
+  specSave: "保存规格",
+  specStatusNew: "新对象",
+  specStatusCount: "{count} 项测量",
+  specSaved: "真实规格已保存，并创建了可恢复版本。",
+  specRemoved: "对象规格已删除。",
+  specExported: "已导出：{formats}。",
+  specMeasurementInvalid: "测量值格式错误：{value}",
+});
+
+Object.assign(TRANSLATIONS.en, {
+  specConfidence: "Confidence (0–1)",
+  specSizePairRequired: "A declared size requires both a label and a size system.",
+  specLayoutTitle: "Output size and scale",
+  specOutputWidth: "Output width",
+  specOutputHeight: "Output height",
+  specOutputUnit: "Unit",
+  specDrawingScale: "Drawing scale",
+  specLayoutSave: "Save layout",
+  specLayoutSaved: "Output size and drawing scale saved.",
+  specLayoutRequired: "Output width, height, and unit are required together.",
+  physicalSpecTitle: "Physical specification",
+  physicalSpecIntro: "Real dimensions stay independent from visual scale, position, and angle; estimates are never production measurements.",
+  specObjectPicker: "Current specification object",
+  specNewObject: "New object",
+  specNewObjectOption: "(unsaved new object)",
+  specObjectId: "Object ID",
+  specCategory: "Category",
+  specSizeLabel: "Declared size",
+  specSizeSystem: "Size system",
+  specMeasurements: "Real measurements",
+  specMeasurementsPlaceholder: "One per line, for example:\nlength=100cm\nwidth=3.5cm",
+  specSource: "Data source",
+  specSourceUser: "User provided",
+  specSourceCalibrated: "Calibrated reference",
+  specSourceChart: "Size chart",
+  specSourceDepth: "Monocular estimate",
+  specSourceVisual: "Visual estimate",
+  specVerification: "Verification",
+  specDeclared: "Declared",
+  specVerified: "Verified",
+  specEstimated: "Estimated",
+  specUnknown: "Unknown",
+  specRotation: "Rotation °",
+  specVisualScale: "Visual scale %",
+  specAdvanced: "Pose and notes",
+  specNotes: "Notes",
+  specRemove: "Remove",
+  specExport: "Export sheet",
+  specExportFormats: "Export formats",
+  specExportHint: "SVG is the default editable master; add delivery formats as needed.",
+  specFormatSvg: "Editable master",
+  specFormatPdf: "Print / approval",
+  specFormatPng: "Review / markup",
+  specFormatCsv: "Table data",
+  specFormatJson: "Structured data",
+  specExportDpi: "PNG resolution (DPI)",
+  specExportRequired: "Select at least one export format.",
+  specSave: "Save specification",
+  specStatusNew: "New object",
+  specStatusCount: "{count} measurements",
+  specSaved: "Physical specification saved with a recoverable revision.",
+  specRemoved: "Object specification removed.",
+  specExported: "Exported: {formats}.",
+  specMeasurementInvalid: "Invalid measurement: {value}",
+});
+
 function initialLocale() {
   const queryLocale = new URLSearchParams(window.location.search).get("lang");
   if (queryLocale === "zh" || queryLocale === "en") return queryLocale;
@@ -643,10 +821,52 @@ const elements = {
   layerOpacityInput: document.querySelector("#layerOpacityInput"),
   layerOpacityValue: document.querySelector("#layerOpacityValue"),
   layerTypeSelect: document.querySelector("#layerTypeSelect"),
+  layerRoleSelect: document.querySelector("#layerRoleSelect"),
+  layerTranslateX: document.querySelector("#layerTranslateX"),
+  layerTranslateY: document.querySelector("#layerTranslateY"),
+  layerScaleX: document.querySelector("#layerScaleX"),
+  layerScaleY: document.querySelector("#layerScaleY"),
+  layerRotation: document.querySelector("#layerRotation"),
+  layerAnchorX: document.querySelector("#layerAnchorX"),
+  layerAnchorY: document.querySelector("#layerAnchorY"),
+  resetLayerTransform: document.querySelector("#resetLayerTransform"),
   linkedLayersCheckbox: document.querySelector("#linkedLayersCheckbox"),
   loadDemoButton: document.querySelector("#loadDemoButton"),
   localeButtons: Array.from(document.querySelectorAll("[data-locale]")),
   outputModeBadge: document.querySelector("#outputModeBadge"),
+  physicalSpecControls: document.querySelector("#physicalSpecControls"),
+  physicalSpecStatus: document.querySelector("#physicalSpecStatus"),
+  specObjectSelect: document.querySelector("#specObjectSelect"),
+  newPhysicalSpec: document.querySelector("#newPhysicalSpec"),
+  specObjectIdInput: document.querySelector("#specObjectIdInput"),
+  specCategoryInput: document.querySelector("#specCategoryInput"),
+  specConfidenceInput: document.querySelector("#specConfidenceInput"),
+  specNameZhInput: document.querySelector("#specNameZhInput"),
+  specNameEnInput: document.querySelector("#specNameEnInput"),
+  specSizeLabelInput: document.querySelector("#specSizeLabelInput"),
+  specSizeSystemInput: document.querySelector("#specSizeSystemInput"),
+  specMeasurementsInput: document.querySelector("#specMeasurementsInput"),
+  specSourceSelect: document.querySelector("#specSourceSelect"),
+  specVerificationSelect: document.querySelector("#specVerificationSelect"),
+  specXInput: document.querySelector("#specXInput"),
+  specYInput: document.querySelector("#specYInput"),
+  specRotationInput: document.querySelector("#specRotationInput"),
+  specScaleInput: document.querySelector("#specScaleInput"),
+  specYawInput: document.querySelector("#specYawInput"),
+  specPitchInput: document.querySelector("#specPitchInput"),
+  specRollInput: document.querySelector("#specRollInput"),
+  specNotesInput: document.querySelector("#specNotesInput"),
+  specOutputWidthInput: document.querySelector("#specOutputWidthInput"),
+  specOutputHeightInput: document.querySelector("#specOutputHeightInput"),
+  specOutputUnitSelect: document.querySelector("#specOutputUnitSelect"),
+  specDrawingScaleInput: document.querySelector("#specDrawingScaleInput"),
+  saveSpecLayout: document.querySelector("#saveSpecLayout"),
+  savePhysicalSpec: document.querySelector("#savePhysicalSpec"),
+  removePhysicalSpec: document.querySelector("#removePhysicalSpec"),
+  exportPhysicalSpecs: document.querySelector("#exportPhysicalSpecs"),
+  specExportFormatInputs: Array.from(document.querySelectorAll("[data-spec-export-format]")),
+  specExportDpiField: document.querySelector("#specPngDpiField"),
+  specExportDpiInput: document.querySelector("#specExportDpi"),
   maskCanvas: document.querySelector("#maskCanvas"),
   maskToolbar: document.querySelector("#maskToolbar"),
   moveLayerDown: document.querySelector("#moveLayerDown"),
@@ -674,6 +894,16 @@ const elements = {
   referenceRgbMeta: document.querySelector("#referenceRgbMeta"),
   referenceRgbPreview: document.querySelector("#referenceRgbPreview"),
   referenceRoleSelect: document.querySelector("#referenceRoleSelect"),
+  recomposeControls: document.querySelector("#recomposeControls"),
+  recomposeStatus: document.querySelector("#recomposeStatus"),
+  recomposeSourceInput: document.querySelector("#recomposeSourceInput"),
+  recomposeMaskInput: document.querySelector("#recomposeMaskInput"),
+  recomposePromptInput: document.querySelector("#recomposePromptInput"),
+  initializeRecompose: document.querySelector("#initializeRecompose"),
+  cleanPlateInput: document.querySelector("#cleanPlateInput"),
+  cleanPlateModel: document.querySelector("#cleanPlateModel"),
+  cleanPlateSeed: document.querySelector("#cleanPlateSeed"),
+  registerCleanPlate: document.querySelector("#registerCleanPlate"),
   depthFileInput: document.querySelector("#depthFileInput"),
   depthZoneCount: document.querySelector("#depthZoneCount"),
   depthBackendStatus: document.querySelector("#depthBackendStatus"),
@@ -729,13 +959,18 @@ const state = {
   maskMeta: null,
   maskPointer: null,
   projectMeta: null,
+  physicalSpecifications: null,
+  specExportCapabilities: { svg: true, pdf: false, png: false, csv: true, json: true },
   referenceBusy: false,
   referenceIntelligence: null,
+  sceneReconstruction: null,
   request: null,
   revision: null,
   sessionHeader: "X-Layered-Redraw-Token",
   sessionToken: null,
   selectedIds: new Set(),
+  selectedPhysicalObjectId: null,
+  newPhysicalSpecLayerId: null,
   selectedPresetId: null,
   selectedObjectIds: new Set(),
   sourceName: null,
@@ -1120,6 +1355,51 @@ async function uploadDepthMap(file) {
   elements.depthFileInput.value = "";
 }
 
+async function initializeRecomposeScene() {
+  const source = elements.recomposeSourceInput.files[0];
+  const mask = elements.recomposeMaskInput.files[0];
+  if (!source || !mask) {
+    showToast(t("chooseSourceAndMask"));
+    return;
+  }
+  try {
+    await postProjectAction("/api/recompose/init", {
+      source_data_url: await fileAsDataUrl(source),
+      source_filename: source.name,
+      mask_data_url: await fileAsDataUrl(mask),
+      mask_filename: mask.name,
+      prompt: elements.recomposePromptInput.value.trim(),
+    });
+    elements.recomposeSourceInput.value = "";
+    elements.recomposeMaskInput.value = "";
+    await loadServerProject(false);
+    showToast(t("recomposeInitialized"));
+  } catch (error) {
+    showToast(t("serverActionFailed", { detail: error.message || String(error) }));
+  }
+}
+
+async function registerCleanPlate() {
+  const candidate = elements.cleanPlateInput.files[0];
+  if (!candidate) {
+    showToast(t("chooseCleanPlate"));
+    return;
+  }
+  const rawSeed = elements.cleanPlateSeed.value.trim();
+  try {
+    await postProjectAction("/api/recompose/clean-plate", {
+      data_url: await fileAsDataUrl(candidate),
+      filename: candidate.name,
+      model: elements.cleanPlateModel.value.trim() || undefined,
+      seed: rawSeed ? Number.parseInt(rawSeed, 10) : undefined,
+    });
+    elements.cleanPlateInput.value = "";
+    await loadServerProject(false);
+    showToast(t("cleanPlateRegistered"));
+  } catch (error) {
+    showToast(t("serverActionFailed", { detail: error.message || String(error) }));
+  }
+}
 async function savePlanningRequest() {
   const active = activeReferenceItem();
   const prompt = elements.planningPromptInput.value.trim();
@@ -1444,6 +1724,7 @@ function applyLocale(locale) {
   renderOutputMode();
   renderDesignStudio();
   renderReferenceStudio();
+  renderRecomposeControls();
 
   refreshLayerLabels();
   renderLayers();
@@ -1529,6 +1810,10 @@ function isLayerNode(node) {
   );
 }
 
+function numericDataset(node, key, fallback) {
+  const value = Number.parseFloat(node.dataset[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
 function discoverLayers(svg) {
   return Array.from(svg.children)
     .filter(isLayerNode)
@@ -1553,6 +1838,16 @@ function discoverLayers(svg) {
         blendMode: node.dataset.blendMode || "normal",
         opacity: Number.isFinite(opacity) ? opacity : 1,
         dependsOn: (node.dataset.dependsOn || "").split(/\s+/).filter(Boolean),
+        role: node.dataset.role || "artwork",
+        transform: {
+          translateX: numericDataset(node, "translateX", 0),
+          translateY: numericDataset(node, "translateY", 0),
+          scaleX: numericDataset(node, "scaleX", 1),
+          scaleY: numericDataset(node, "scaleY", 1),
+          rotationDeg: numericDataset(node, "rotationDeg", 0),
+          anchorX: numericDataset(node, "anchorX", 0.5),
+          anchorY: numericDataset(node, "anchorY", 0.5),
+        },
         locked,
         hidden,
         node,
@@ -1594,6 +1889,8 @@ async function loadSvgText(text, sourceName, projectMeta = null) {
   state.layers = discoverLayers(svg);
   state.selectedIds.clear();
   state.selectedObjectIds.clear();
+  state.selectedPhysicalObjectId = null;
+  state.newPhysicalSpecLayerId = null;
   state.bbox = null;
   state.request = null;
   state.projectMeta = projectMeta;
@@ -1603,6 +1900,9 @@ async function loadSvgText(text, sourceName, projectMeta = null) {
   state.designPresets = Array.isArray(projectMeta?.design_presets) ? projectMeta.design_presets : [];
   state.designProofs = projectMeta?.design_proofs || null;
   state.referenceIntelligence = projectMeta?.reference_intelligence || null;
+  state.sceneReconstruction = projectMeta?.scene_reconstruction || null;
+  state.physicalSpecifications = projectMeta?.physical_specifications?.document || null;
+  state.specExportCapabilities = projectMeta?.spec_export_capabilities || { svg: true, pdf: false, png: false, csv: true, json: true };
   state.workflowMode = state.designPlan?.workflow_mode === "expert" ? "expert" : "guided";
   state.selectedPresetId = state.designPlan?.selected_preset || null;
   state.maskDirty = false;
@@ -1622,6 +1922,7 @@ async function loadSvgText(text, sourceName, projectMeta = null) {
   renderOutputMode();
   renderDesignStudio();
   renderReferenceStudio();
+  renderRecomposeControls();
   elements.revisionBadge.textContent = state.revision;
   elements.canvasSize.textContent = `${Math.round(width)} × ${Math.round(height)}`;
   elements.layerCount.textContent = String(state.layers.length);
@@ -1679,6 +1980,7 @@ function renderLayers() {
     lockButton.className = "layer-icon-button";
     lockButton.textContent = layer.locked ? "◆" : "◇";
     lockButton.setAttribute("aria-label", t(layer.locked ? "unlockLayer" : "lockLayer", { label: layer.label }));
+    lockButton.disabled = layer.role === "clean-plate";
     lockButton.addEventListener("click", () => toggleLock(layer.id));
 
     const selectButton = document.createElement("button");
@@ -1701,10 +2003,150 @@ function renderLayers() {
   elements.layerList.replaceChildren(fragment);
 }
 
+function physicalObjects() {
+  const objects = state.physicalSpecifications?.objects;
+  return Array.isArray(objects) ? objects : [];
+}
+
+function physicalObjectsForLayer(layer) {
+  if (!layer) return [];
+  return physicalObjects().filter((item) => item?.layer_id === layer.id);
+}
+
+function physicalSpecForLayer(layer) {
+  if (!layer || state.newPhysicalSpecLayerId === layer.id) return null;
+  const linkedObjectIds = state.selectedObjectIds;
+  const layerObjects = physicalObjectsForLayer(layer);
+  const explicitlySelected = layerObjects.find((item) => item?.id === state.selectedPhysicalObjectId);
+  if (explicitlySelected) return explicitlySelected;
+  return layerObjects.find((item) => {
+    const nodeIds = Array.isArray(item.object_node_ids) ? item.object_node_ids : [];
+    return nodeIds.some((id) => linkedObjectIds.has(id));
+  }) || layerObjects[0] || null;
+}
+
+function defaultPhysicalObjectId(layer) {
+  const base = `object-${layer.id.replace(/^layer-/, "")}`;
+  const used = new Set(physicalObjects().map((item) => item?.id).filter(Boolean));
+  if (!used.has(base)) return base;
+  let suffix = 2;
+  while (used.has(`${base}-${suffix}`)) suffix += 1;
+  return `${base}-${suffix}`;
+}
+
+function renderPhysicalObjectPicker(layer, specification) {
+  const fragment = document.createDocumentFragment();
+  if (!specification) {
+    const newOption = document.createElement("option");
+    newOption.value = "";
+    newOption.textContent = t("specNewObjectOption");
+    fragment.append(newOption);
+  }
+  physicalObjectsForLayer(layer).forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.id;
+    const label = state.locale === "en"
+      ? item.name_en || item.name_zh || item.id
+      : item.name_zh || item.name_en || item.id;
+    option.textContent = `${label} · ${item.id}`;
+    fragment.append(option);
+  });
+  elements.specObjectSelect.replaceChildren(fragment);
+  elements.specObjectSelect.value = specification?.id || "";
+  state.selectedPhysicalObjectId = specification?.id || null;
+}
+
+function measurementLines(specification) {
+  const measurements = specification?.measurements;
+  if (!measurements || typeof measurements !== "object") return "";
+  return Object.entries(measurements)
+    .sort(([first], [second]) => first.localeCompare(second))
+    .map(([name, item]) => {
+      const tolerance = Number.isFinite(Number(item?.tolerance)) ? `±${Number(item.tolerance)}` : "";
+      return `${name}=${Number(item?.value)}${item?.unit || ""}${tolerance}`;
+    })
+    .join("\n");
+}
+
+function renderPhysicalSpecControls() {
+  const selected = [...state.selectedIds].map(layerById).filter(Boolean);
+  const layer = selected.length === 1 ? selected[0] : null;
+  elements.physicalSpecControls.hidden = !layer;
+  if (!layer) return;
+  const specification = physicalSpecForLayer(layer);
+  renderPhysicalObjectPicker(layer, specification);
+  const placement = specification?.placement || {};
+  const pose = placement.pose || {};
+  const declaredSize = specification?.declared_size || {};
+  const layout = state.physicalSpecifications?.layout || {};
+  const outputSize = layout.output_size || {};
+  const drawingScale = layout.drawing_scale || { mode: "not-to-scale" };
+  elements.specOutputWidthInput.value = outputSize.width ?? "";
+  elements.specOutputHeightInput.value = outputSize.height ?? "";
+  elements.specOutputUnitSelect.value = outputSize.unit || "mm";
+  elements.specDrawingScaleInput.value = drawingScale.mode === "ratio"
+    ? `${drawingScale.numerator}:${drawingScale.denominator}`
+    : "not-to-scale";
+  elements.specObjectIdInput.value = specification?.id || defaultPhysicalObjectId(layer);
+  elements.specObjectIdInput.readOnly = Boolean(specification);
+  elements.specCategoryInput.value = specification?.category || "generic-object";
+  elements.specNameZhInput.value = specification?.name_zh || layer.labelZh || "";
+  elements.specNameEnInput.value = specification?.name_en || layer.labelEn || layer.label || "";
+  elements.specSizeLabelInput.value = declaredSize.label || "";
+  elements.specSizeSystemInput.value = declaredSize.system || "";
+  elements.specMeasurementsInput.value = measurementLines(specification);
+  elements.specSourceSelect.value = specification?.measurement_source || "user-provided";
+  elements.specVerificationSelect.value = specification?.verification || "declared";
+  elements.specConfidenceInput.value = String(specification?.confidence ?? 1);
+  elements.specXInput.value = String(placement.x ?? 0);
+  elements.specYInput.value = String(placement.y ?? 0);
+  elements.specRotationInput.value = String(placement.rotation_deg ?? 0);
+  elements.specScaleInput.value = String(placement.scale_percent ?? 100);
+  elements.specYawInput.value = pose.yaw_deg ?? "";
+  elements.specPitchInput.value = pose.pitch_deg ?? "";
+  elements.specRollInput.value = pose.roll_deg ?? "";
+  elements.specNotesInput.value = specification?.notes || "";
+  const count = specification && specification.measurements
+    ? Object.keys(specification.measurements).length
+    : 0;
+  elements.physicalSpecStatus.textContent = specification
+    ? t("specStatusCount", { count })
+    : t("specStatusNew");
+  elements.savePhysicalSpec.disabled = !state.serverConnected;
+  elements.removePhysicalSpec.disabled = !state.serverConnected || !specification;
+  elements.newPhysicalSpec.disabled = !state.serverConnected;
+  elements.specExportFormatInputs.forEach((input) => {
+    const available = state.specExportCapabilities[input.value] !== false;
+    input.disabled = !available;
+    input.closest("label")?.classList.toggle("is-unavailable", !available);
+    if (!available) input.checked = false;
+  });
+  updateSpecificationExportControls();
+  elements.exportPhysicalSpecs.disabled = !state.serverConnected;
+  elements.saveSpecLayout.disabled = !state.serverConnected;
+}
+
+function renderRecomposeControls() {
+  const raster = projectIsRaster();
+  elements.recomposeControls.hidden = !raster;
+  if (!raster) return;
+  const reconstruction = state.sceneReconstruction || { enabled: false, status: "not-configured" };
+  const statusKey = reconstruction.status === "ready"
+    ? "recomposeStatusReady"
+    : reconstruction.enabled ? "recomposeStatusPending" : "recomposeStatusOff";
+  elements.recomposeStatus.textContent = t(statusKey);
+  elements.recomposeStatus.dataset.status = reconstruction.status || "not-configured";
+  elements.initializeRecompose.disabled = !state.serverConnected;
+  elements.registerCleanPlate.disabled = !state.serverConnected || !reconstruction.enabled;
+  elements.cleanPlateInput.disabled = !state.serverConnected || !reconstruction.enabled;
+  elements.cleanPlateModel.disabled = !state.serverConnected || !reconstruction.enabled;
+  elements.cleanPlateSeed.disabled = !state.serverConnected || !reconstruction.enabled;
+}
 function renderLayerControls() {
   const selected = [...state.selectedIds].map(layerById).filter(Boolean);
   const layer = selected.length === 1 ? selected[0] : null;
   elements.layerControls.hidden = !layer;
+  renderPhysicalSpecControls();
   if (!layer) return;
   elements.activeLayerType.textContent = layer.layerType.toUpperCase();
   elements.layerOpacityInput.value = String(Math.round(layer.opacity * 100));
@@ -1712,13 +2154,43 @@ function renderLayerControls() {
   elements.blendModeSelect.value = layer.blendMode;
   elements.layerTypeSelect.value = layer.layerType;
   elements.layerTypeSelect.disabled = !projectIsRaster();
+  elements.layerRoleSelect.value = layer.role || "artwork";
+  const transform = layer.transform || {
+    translateX: 0,
+    translateY: 0,
+    scaleX: 1,
+    scaleY: 1,
+    rotationDeg: 0,
+    anchorX: 0.5,
+    anchorY: 0.5,
+  };
+  elements.layerTranslateX.value = String(transform.translateX);
+  elements.layerTranslateY.value = String(transform.translateY);
+  elements.layerScaleX.value = String(transform.scaleX * 100);
+  elements.layerScaleY.value = String(transform.scaleY * 100);
+  elements.layerRotation.value = String(transform.rotationDeg);
+  elements.layerAnchorX.value = String(transform.anchorX);
+  elements.layerAnchorY.value = String(transform.anchorY);
+  elements.resetLayerTransform.checked = false;
+  const transformDisabled = !projectIsRaster() || layer.role === "clean-plate";
+  elements.layerRoleSelect.disabled = !projectIsRaster() || layer.role === "clean-plate";
+  [
+    elements.layerTranslateX,
+    elements.layerTranslateY,
+    elements.layerScaleX,
+    elements.layerScaleY,
+    elements.layerRotation,
+    elements.layerAnchorX,
+    elements.layerAnchorY,
+    elements.resetLayerTransform,
+  ].forEach((input) => { input.disabled = transformDisabled; });
   elements.editableSourceInput.value = layer.editableSource || "";
   elements.editableSourceInput.disabled = !projectIsRaster();
   elements.labelZhInput.value = layer.labelZh || layer.label;
   elements.labelEnInput.value = layer.labelEn || layer.label;
   const position = state.layers.indexOf(layer);
-  elements.moveLayerDown.disabled = !state.serverConnected || position <= 0;
-  elements.moveLayerUp.disabled = !state.serverConnected || position >= state.layers.length - 1;
+  elements.moveLayerDown.disabled = !state.serverConnected || layer.role === "clean-plate" || position <= 0;
+  elements.moveLayerUp.disabled = !state.serverConnected || layer.role === "clean-plate" || position >= state.layers.length - 1;
   elements.applyLayerSettings.disabled = !state.serverConnected;
 }
 
@@ -1736,7 +2208,7 @@ function toggleVisibility(id) {
 
 function toggleLock(id) {
   const layer = layerById(id);
-  if (!layer) return;
+  if (!layer || layer.role === "clean-plate") return;
   layer.locked = !layer.locked;
   layer.node.classList.toggle("lr-is-locked", layer.locked);
   if (layer.locked) state.selectedIds.delete(id);
@@ -1755,6 +2227,8 @@ function selectLayer(id, additive = false, objectId = null) {
   if (!additive) {
     state.selectedIds.clear();
     state.selectedObjectIds.clear();
+    state.selectedPhysicalObjectId = null;
+    state.newPhysicalSpecLayerId = null;
   }
   if (additive && state.selectedIds.has(id)) {
     state.selectedIds.delete(id);
@@ -1762,6 +2236,12 @@ function selectLayer(id, additive = false, objectId = null) {
     state.selectedIds.add(id);
   }
   if (objectId && objectId !== id) state.selectedObjectIds.add(objectId);
+  if (objectId) {
+    const linked = physicalObjectsForLayer(layer).find((item) => {
+      return Array.isArray(item.object_node_ids) && item.object_node_ids.includes(objectId);
+    });
+    state.selectedPhysicalObjectId = linked?.id || null;
+  }
   state.bbox = null;
   invalidateRequest();
   renderLayers();
@@ -2442,6 +2922,18 @@ async function saveLayerSettings(move = null) {
   };
   if (projectIsRaster()) {
     payload.layer_type = elements.layerTypeSelect.value;
+    payload.role = elements.layerRoleSelect.value;
+    if (elements.resetLayerTransform.checked) {
+      payload.reset_transform = true;
+    } else if (layer.role !== "clean-plate") {
+      payload.translate_x = Number(elements.layerTranslateX.value);
+      payload.translate_y = Number(elements.layerTranslateY.value);
+      payload.scale_x = Number(elements.layerScaleX.value) / 100;
+      payload.scale_y = Number(elements.layerScaleY.value) / 100;
+      payload.rotation_deg = Number(elements.layerRotation.value);
+      payload.anchor_x = Number(elements.layerAnchorX.value);
+      payload.anchor_y = Number(elements.layerAnchorY.value);
+    }
     if (elements.editableSourceInput.value.trim()) {
       payload.editable_source = elements.editableSourceInput.value.trim();
     }
@@ -2451,6 +2943,191 @@ async function saveLayerSettings(move = null) {
     await postProjectAction("/api/layer-settings", payload);
     await loadServerProject(false);
     showToast(t("layerSettingsSaved"));
+  } catch (error) {
+    showToast(t("serverActionFailed", { detail: error.message || String(error) }));
+  }
+}
+
+function parsePhysicalMeasurements() {
+  const result = {};
+  const lines = elements.specMeasurementsInput.value
+    .split(/\r?\n/)
+    .map((value) => value.trim().replace(/\s+/g, ""))
+    .filter(Boolean);
+  const pattern = /^([a-z][a-z0-9-]*)=([+]?(?:\d+(?:\.\d*)?|\.\d+))(mm|cm|m|in|ft)(?:±(\d+(?:\.\d*)?|\.\d+))?$/i;
+  lines.forEach((line) => {
+    const match = pattern.exec(line);
+    if (!match || Number(match[2]) <= 0) {
+      throw new Error(t("specMeasurementInvalid", { value: line }));
+    }
+    result[match[1].toLowerCase()] = {
+      value: Number(match[2]),
+      unit: match[3].toLowerCase(),
+      ...(match[4] ? { tolerance: Number(match[4]) } : {}),
+    };
+  });
+  return result;
+}
+
+function optionalNumber(input) {
+  return input.value.trim() === "" ? null : Number(input.value);
+}
+
+function choosePhysicalSpecification() {
+  const selected = [...state.selectedIds].map(layerById).filter(Boolean);
+  const layer = selected.length === 1 ? selected[0] : null;
+  if (!layer) return;
+  const objectId = elements.specObjectSelect.value;
+  state.selectedPhysicalObjectId = objectId || null;
+  state.newPhysicalSpecLayerId = objectId ? null : layer.id;
+  renderPhysicalSpecControls();
+}
+
+function beginPhysicalSpecification() {
+  const selected = [...state.selectedIds].map(layerById).filter(Boolean);
+  const layer = selected.length === 1 ? selected[0] : null;
+  if (!layer) return;
+  state.selectedPhysicalObjectId = null;
+  state.newPhysicalSpecLayerId = layer.id;
+  renderPhysicalSpecControls();
+  elements.specObjectIdInput.focus();
+}
+
+async function savePhysicalSpecificationLayout() {
+  const selected = [...state.selectedIds].map(layerById).filter(Boolean);
+  const layer = selected.length === 1 ? selected[0] : null;
+  if (!state.serverConnected) return;
+  try {
+    const width = optionalNumber(elements.specOutputWidthInput);
+    const height = optionalNumber(elements.specOutputHeightInput);
+    if ((width === null) !== (height === null)) throw new Error(t("specLayoutRequired"));
+    const payload = {
+      coordinate_unit: state.physicalSpecifications?.layout?.coordinate_unit
+        || (projectIsRaster() ? "px" : "svg-unit"),
+      drawing_scale: elements.specDrawingScaleInput.value.trim() || "not-to-scale",
+    };
+    if (width !== null && height !== null) {
+      payload.output_width = width;
+      payload.output_height = height;
+      payload.output_unit = elements.specOutputUnitSelect.value;
+    }
+    await postProjectAction("/api/specs/layout", payload);
+    await loadServerProject(false);
+    if (layer) selectLayer(layer.id);
+    showToast(t("specLayoutSaved"));
+  } catch (error) {
+    showToast(t("serverActionFailed", { detail: error.message || String(error) }));
+  }
+}
+
+async function savePhysicalSpecification() {
+  const selected = [...state.selectedIds].map(layerById).filter(Boolean);
+  const layer = selected.length === 1 ? selected[0] : null;
+  if (!state.serverConnected || !layer) {
+    showToast(t("serveHint"));
+    return;
+  }
+  try {
+    const current = physicalSpecForLayer(layer);
+    const sizeLabel = elements.specSizeLabelInput.value.trim();
+    const sizeSystem = elements.specSizeSystemInput.value.trim();
+    if (Boolean(sizeLabel) !== Boolean(sizeSystem)) throw new Error(t("specSizePairRequired"));
+    const yaw = optionalNumber(elements.specYawInput);
+    const pitch = optionalNumber(elements.specPitchInput);
+    const roll = optionalNumber(elements.specRollInput);
+    const coordinateUnit = state.physicalSpecifications?.layout?.coordinate_unit
+      || (projectIsRaster() ? "px" : "svg-unit");
+    const objectNodeIds = state.selectedObjectIds.size
+      ? [...state.selectedObjectIds]
+      : Array.isArray(current?.object_node_ids)
+        ? current.object_node_ids
+        : [];
+    const measurements = parsePhysicalMeasurements();
+    const removeMeasurements = Object.keys(current?.measurements || {}).filter(
+      (name) => !Object.prototype.hasOwnProperty.call(measurements, name),
+    );
+    const changes = {
+      name_zh: elements.specNameZhInput.value.trim() || null,
+      name_en: elements.specNameEnInput.value.trim() || null,
+      category: elements.specCategoryInput.value.trim().toLowerCase(),
+      measurement_source: elements.specSourceSelect.value,
+      verification: elements.specVerificationSelect.value,
+      confidence: Number(elements.specConfidenceInput.value),
+      measurements,
+      remove_measurements: removeMeasurements,
+      declared_size: sizeLabel
+        ? { label: sizeLabel, system: sizeSystem, scope: "garment" }
+        : null,
+      object_node_ids: objectNodeIds,
+      placement: {
+        coordinate_unit: coordinateUnit,
+        x: Number(elements.specXInput.value),
+        y: Number(elements.specYInput.value),
+        rotation_deg: Number(elements.specRotationInput.value),
+        scale_percent: Number(elements.specScaleInput.value),
+        orientation: current?.placement?.orientation || "unspecified",
+        pose: { yaw_deg: yaw, pitch_deg: pitch, roll_deg: roll },
+      },
+      notes: elements.specNotesInput.value.trim() || null,
+    };
+    const objectId = elements.specObjectIdInput.value.trim();
+    await postProjectAction("/api/specs/object", {
+      object_id: objectId,
+      layer_id: layer.id,
+      changes,
+    });
+    await loadServerProject(false);
+    selectLayer(layer.id);
+    state.selectedPhysicalObjectId = objectId;
+    state.newPhysicalSpecLayerId = null;
+    renderPhysicalSpecControls();
+    showToast(t("specSaved"));
+  } catch (error) {
+    showToast(t("serverActionFailed", { detail: error.message || String(error) }));
+  }
+}
+
+async function removePhysicalSpecification() {
+  const selected = [...state.selectedIds].map(layerById).filter(Boolean);
+  const layer = selected.length === 1 ? selected[0] : null;
+  const specification = physicalSpecForLayer(layer);
+  if (!state.serverConnected || !layer || !specification) return;
+  try {
+    await postProjectAction("/api/specs/remove", { object_id: specification.id });
+    await loadServerProject(false);
+    selectLayer(layer.id);
+    state.selectedPhysicalObjectId = null;
+    state.newPhysicalSpecLayerId = null;
+    renderPhysicalSpecControls();
+    showToast(t("specRemoved"));
+  } catch (error) {
+    showToast(t("serverActionFailed", { detail: error.message || String(error) }));
+  }
+}
+
+function updateSpecificationExportControls() {
+  const pngInput = elements.specExportFormatInputs.find((input) => input.value === "png");
+  const pngSelected = Boolean(pngInput?.checked);
+  elements.specExportDpiField.hidden = !pngSelected;
+  elements.specExportDpiInput.disabled = !pngSelected;
+  if (pngInput) pngInput.setAttribute("aria-expanded", String(pngSelected));
+}
+
+async function exportPhysicalSpecificationSheet() {
+  if (!state.serverConnected) return;
+  const formats = elements.specExportFormatInputs
+    .filter((input) => input.checked)
+    .map((input) => input.value);
+  if (!formats.length) {
+    showToast(t("specExportRequired"));
+    return;
+  }
+  try {
+    const result = await postProjectAction("/api/specs/export", {
+      formats,
+      dpi: Number(elements.specExportDpiInput.value || 144),
+    });
+    showToast(t("specExported", { formats: result.formats.join(", ").toUpperCase() }));
   } catch (error) {
     showToast(t("serverActionFailed", { detail: error.message || String(error) }));
   }
@@ -2597,6 +3274,8 @@ elements.workflowButtons.forEach((button) => {
 elements.svgFileInput.addEventListener("change", () => readSvgFile(elements.svgFileInput.files[0]));
 elements.referenceFileInput.addEventListener("change", () => { void uploadReference(elements.referenceFileInput.files[0]); });
 elements.depthFileInput.addEventListener("change", () => { void uploadDepthMap(elements.depthFileInput.files[0]); });
+elements.initializeRecompose.addEventListener("click", () => { void initializeRecomposeScene(); });
+elements.registerCleanPlate.addEventListener("click", () => { void registerCleanPlate(); });
 elements.estimateDepthButton.addEventListener("click", () => { void estimateReferenceDepth(); });
 elements.savePlanningRequestButton.addEventListener("click", () => { void savePlanningRequest(); });
 elements.planningPromptInput.addEventListener("input", renderReferenceStudio);
@@ -2622,6 +3301,16 @@ elements.downloadRequestButton.addEventListener("click", downloadRequest);
 elements.copyRequestButton.addEventListener("click", copyRequest);
 elements.topExportButton.addEventListener("click", downloadRequest);
 elements.applyLayerSettings.addEventListener("click", () => saveLayerSettings());
+elements.saveSpecLayout.addEventListener("click", () => { void savePhysicalSpecificationLayout(); });
+elements.specObjectSelect.addEventListener("change", choosePhysicalSpecification);
+elements.newPhysicalSpec.addEventListener("click", beginPhysicalSpecification);
+elements.savePhysicalSpec.addEventListener("click", () => { void savePhysicalSpecification(); });
+elements.removePhysicalSpec.addEventListener("click", () => { void removePhysicalSpecification(); });
+elements.specExportFormatInputs.forEach((input) => {
+  input.addEventListener("change", updateSpecificationExportControls);
+});
+updateSpecificationExportControls();
+elements.exportPhysicalSpecs.addEventListener("click", () => { void exportPhysicalSpecificationSheet(); });
 elements.applyPresetButton.addEventListener("click", () => { void applySelectedPreset(); });
 elements.saveDesignButton.addEventListener("click", () => { void saveExpertDesign(); });
 elements.savePresetButton.addEventListener("click", () => { void saveCustomPreset(); });

@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "kind": "layered-raster-composition",
   "source_revision": "f81003718e9a",
-  "generated_at": "2026-08-11T18:58:17.117019+00:00",
+  "generated_at": "2026-08-16T23:06:30.474092+00:00",
   "artwork": "artwork.png",
   "artwork_sha256": "f05cd2ca4c891eac80983e43f22cdf1d592f0d5ffeb229da72af41e7b1b33154",
   "preview": "preview.png",
@@ -12,5 +12,7 @@
     1536,
     864
   ],
-  "resampling": "nearest"
+  "resampling": "nearest",
+  "transformed_layers": [],
+  "layer_transform_resampling": "nearest"
 }

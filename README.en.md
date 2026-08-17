@@ -17,6 +17,8 @@ It has two independent output modes:
 
 Pixel art is a first-class `raster-layered` style preset. It uses a logical pixel canvas, one limited shared palette, binary alpha, and nearest-neighbour preview scaling instead of applying a pixelation filter to ordinary artwork.
 
+A source photograph can now become a recompose-ready scene instead of a cutout stack. A binary removal mask produces a registered clean plate, objects remain transparent layers, and the compositor actually applies translation, independent scale, rotation, anchors, and z-order. Registration copies source pixels back outside the mask and validates them pixel-for-pixel, so moving an object reveals completed background without silently rewriting known evidence.
+
 v0.6 adds a References & Space workflow. Register multiple RGB inputs, pair supplied depth or optionally estimate relative depth with a Depth Anything V2 backend, then resolve source RGB + depth + prompt into 5–20 semantic layers. Artistic parameters never rewrite raw depth; the prompt controls semantic grouping, independent edit ownership, and spatial interpretation. Guided Creation keeps a small safe surface while Art Direction exposes model, RGB-D orientation, and depth flattening/exaggeration. Artwork text is forbidden by default; an intentional game-UI exception must declare its allowed text layers in the design contract.
 
 Before production, the project can generate parameterized A/B/C proofs. The built-in output is a parameter contract, deltas, a low-detail schematic, and an external render request. It becomes image-effect evidence only after scene-specific renders are registered. Selection and promotion can guide the final 8–12 layers, but do not establish artistic quality on their own.
@@ -75,7 +77,7 @@ Codex confirms mood, composition, style, palette, subject priority, and detail l
 
 Open the local editor, select layers or frame a region, export `edit-request.json`, and give it back to `$redraw-in-layers`. The patch is allowed to touch only the selected layers.
 
-## What v0.6 includes
+## What the current build includes
 
 - `$redraw-in-layers`, a Codex skill for guided vector drawing, layered image generation, and localized revision.
 - Reference intelligence for role-aware multi-RGB input, RGB-D pairing, optional monocular relative-depth estimation, immutable 16-bit depth evidence, 3–8 diagnostic bands, and prompt-directed 5–20-layer planning.
@@ -89,13 +91,29 @@ Open the local editor, select layers or frame a region, export `edit-request.jso
 - A ten-layer canal demonstration project made only from vector paths, shapes, gradients, patterns, and SVG filters.
 - Hash protection for unchanged layers, preventing a local adjustment from silently rebuilding the entire artwork.
 - `raster-layered` support for same-size RGBA PNGs, alpha and dimension checks, deterministic composition, and scoped `replace-layer-file` patches.
+- Recompose-ready photography with an immutable source, binary removal mask, verified clean plate, preserved raw candidate/provenance, and non-destructive per-layer position, scale, rotation, anchor, role, and occlusion order included in revisions and history.
 - A `pixel-art` preset with 320×240, 32 colors, and 4× nearest-neighbour preview defaults plus validation for partial alpha, layer opacity, and project-wide palette overflow.
+- A `photo-stamp-archive` mode that directly joins an unredrawn, locked photograph to warm paper and derives a compact stamp from the photographed subject. Paper, border, motif, secondary ink, wear, and finish remain separate: eight layers by default and a ninth caption layer only when the user supplies exact text.
 - Recoverable history for patches, layer settings, restores, and ORA sync, with `history`, `diff`, and reversible `undo`.
 - Lasso and brush masks stored as full-canvas binary PNGs and combined with semantic layer scope.
 - Layer controls for opacity, visibility, locks, order, bilingual labels, and six deterministic blend modes.
 - Hybrid layer metadata: every layer keeps a registered PNG render and may declare raster, pixel, or vector source with an editable SVG.
 - Ten composition-to-rhythm style parameter contracts, 2–6 candidate direction boards, layer dependencies, and separate engineering quality, plan-schema completeness, and human visual-confirmation states.
 - OpenRaster export/import for continuing in Krita and syncing manual work back into the project.
+- Physical Specification mode: `object-specs.json` binds centimetre/inch measurements, declared size systems such as XL, provenance, verification, confidence, position, rotation, three-axis pose, and visual scale to stable objects and semantic layers while keeping them separate from output-sheet size and drawing scale.
+- Specification handoff: the editor can enter these values directly. `spec-export` defaults to a separate editable SVG sheet and can add PDF, PNG, CSV, and JSON for specific recipients without adding labels to the canonical artwork.
+
+### Specification export formats
+
+| Format | Primary use | Notes |
+| --- | --- | --- |
+| SVG (default) | Manual editing, editable master | Inkscape, Illustrator, or Affinity Designer |
+| PDF | Print at the declared page size, approval | Preserves vector graphics; not the object-data source |
+| PNG | Review, markup, messaging | Selectable 72–600 DPI; not an editable master |
+| CSV | Spreadsheet and supply-chain exchange | UTF-8 measurement rows |
+| JSON | Programmatic and automation exchange | Root `object-specs.json` remains the single source of truth |
+
+Select several formats in one run. They are generated from one validated document and replace prior exports only after every selected renderer succeeds. A specification sheet is not a garment pattern, DXF/CAD file, or printer-preflight proof.
 
 The editor now saves composition settings, masks, and history restores directly. Codex still interprets artistic language: give it the exported request with `$redraw-in-layers` to create a scoped SVG patch or PNG replacement and verify unchanged layer hashes.
 
@@ -109,15 +127,28 @@ The editor now saves composition settings, masks, and history restores directly.
 
 ## Try the editor
 
-Vector mode needs only Python 3.10 or newer. Raster validation and composition additionally require Pillow; local depth estimation is a separate optional extra:
+Vector mode needs only Python 3.10 or newer. Raster validation and composition additionally require Pillow; specification PDF/PNG and local depth estimation use separate optional extras:
 
 ```powershell
 python -m pip install Pillow
+# Only when specification PDF/PNG export is needed:
+python -m pip install -r requirements-output.txt
 # Only when local depth estimation is needed:
 python -m pip install -r requirements-depth.txt
 python skills/redraw-in-layers/scripts/layered_redraw.py validate examples/canal-evening --write-manifest
 python skills/redraw-in-layers/scripts/layered_redraw.py serve examples/canal-evening --open
 ```
+
+Create an editable photo-stamp archive and continue the handwork in Krita:
+
+```powershell
+python skills/redraw-in-layers/scripts/layered_redraw.py archive-new input.jpg output/my-photo-stamp --orientation left-right --photo-side left --stamp-shape circle
+python skills/redraw-in-layers/scripts/layered_redraw.py archive-verify output/my-photo-stamp
+python skills/redraw-in-layers/scripts/layered_redraw.py export-ora output/my-photo-stamp --output output/my-photo-stamp.ora
+python skills/redraw-in-layers/scripts/layered_redraw.py serve output/my-photo-stamp --open
+```
+
+The source file is copied byte-for-byte into the project references and the displayed photo layer is locked by default. Use `archive-config` to revise paper age, stamp shape/position/scale, ink colours, and wear without rebuilding the photo layer.
 
 If the browser does not open automatically, visit `http://127.0.0.1:8765/`.
 
@@ -129,7 +160,8 @@ In the editor:
 4. Choose a visual system or expert parameters, then generate, select, lock, and promote an A/B/C proof.
 5. Select semantic layers or constrain an edit with layer click, frame, lasso, brush, or text-described scope.
 6. Adjust opacity, blend, order, and bilingual labels; compare or restore history.
-7. Describe the change, download `edit-request.json`, and give it to Codex with `$redraw-in-layers`.
+7. For measured product work, switch to Art Direction and open Physical Specification in the left panel. Enter object dimensions, size system, angle, visual scale, output size, and drawing scale. SVG is selected by default; add PDF, PNG, CSV, or JSON for the recipient.
+8. Describe the change, download `edit-request.json`, and give it to Codex with `$redraw-in-layers`.
 
 ## Invoke the skill
 
@@ -147,6 +179,13 @@ Use $redraw-in-layers to process the photo attached to this message.
 Interview me about the art direction first. After approval, create a vector-strict SVG project with 8–12 semantic layers.
 ```
 
+For a photo-stamp archive:
+
+```text
+Use $redraw-in-layers in photo-stamp-archive mode for the attached photo.
+Keep the original photograph, place warm paper on the right with a compact circular stamp derived from the subject, add no text, and export editable layers plus an ORA for Krita.
+```
+
 For layered image generation:
 
 ```text
@@ -154,6 +193,13 @@ Use $redraw-in-layers in raster-layered mode for the photo attached to this mess
 Do not output vector art. Generate 8–12 registered PNG layers, with an opaque background and transparent upper layers, and composite artwork.png.
 ```
 
+For freely movable photo objects and user-authored occlusion:
+
+```text
+Use $redraw-in-layers to create a recompose-ready raster-layered project from the attached photograph.
+First complete the background after removing every movable object and its attached shadow or reflection; keep each object as a transparent layer.
+Let me move, scale, rotate, and reorder those layers in Art Direction mode, while preserving every source pixel outside the removal mask.
+```
 For layered pixel art:
 
 ```text
@@ -174,6 +220,14 @@ For Art Direction:
 ```text
 Use $redraw-in-layers in Art Direction mode for this photo.
 Let me control crop, subject proportion, negative space, spatial flattening, shape simplification, value groups, palette, edges, and material before detailed drawing.
+```
+
+For a measured design handoff:
+
+```text
+Use $redraw-in-layers to add physical specifications to this apparel layout.
+The belt is 100 cm long. The shirt is XL in Brand CN 2026, with 48 cm shoulder width, 116 cm chest circumference, 74 cm garment length, and 62 cm sleeve length. Record waist, hip, and length for the skirt.
+Real measurements must not change when visual objects are scaled or rotated. Record output-sheet size, drawing scale, measurement source, and verification. Export SVG by default, plus a PDF for approval, a 192 DPI PNG for markup, and CSV/JSON data copies.
 ```
 
 For RGB + prompt + depth-controlled layer planning:
@@ -206,6 +260,7 @@ vector-project/                 raster-project/
 ├─ project.json                 ├─ project.json
 ├─ creative-brief.json          ├─ creative-brief.json
 ├─ design-plan.json             ├─ design-plan.json
+├─ object-specs.json            ├─ object-specs.json
 ├─ planning-request.json        ├─ planning-request.json
 ├─ layer-plan.json              ├─ layer-plan.json
 ├─ references/                  ├─ references/
@@ -214,6 +269,7 @@ vector-project/                 raster-project/
 ├─ presets/user/                ├─ presets/user/
 ├─ proofs/sets/                 ├─ proofs/sets/
 ├─ history/ and masks/          ├─ history/ and masks/
+├─ specifications/              ├─ specifications/
 ├─ directions/                  ├─ directions/
 ├─ layers/*.svg                 ├─ composition.json
 └─ patches/                     ├─ layers/index.json + *.png
@@ -260,6 +316,11 @@ python skills/redraw-in-layers/scripts/layered_redraw.py plan-resolve output/my-
 # Composite the PNG stack after accepted layers are in place
 python skills/redraw-in-layers/scripts/layered_redraw.py compose output/my-raster-project
 
+# Initialize a clean-plate task, register the result, and move a subject
+python skills/redraw-in-layers/scripts/layered_redraw.py recompose-init output/my-raster-project source.png removal-mask.png --prompt "Continue the wall and floor; add no new objects"
+python skills/redraw-in-layers/scripts/layered_redraw.py clean-plate-register output/my-raster-project clean-plate.png --model my-inpainter --seed 7
+python skills/redraw-in-layers/scripts/layered_redraw.py layer-settings output/my-raster-project layer-primary-subject --role movable-object --translate-x 120 --scale-x 1.15 --scale-y 1.15 --rotation-deg -6
+
 # Validate and refresh manifest.json
 python skills/redraw-in-layers/scripts/layered_redraw.py validate output/my-project --write-manifest
 
@@ -280,6 +341,15 @@ python skills/redraw-in-layers/scripts/layered_redraw.py undo output/my-project 
 
 # Non-destructive composition settings
 python skills/redraw-in-layers/scripts/layered_redraw.py layer-settings output/my-project layer-lighting --opacity 0.7 --blend-mode screen
+
+# Physical output size, drawing scale, and real object specifications
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-layout output/my-project --output-width 210 --output-height 297 --output-unit mm --drawing-scale 1:10
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-set output/my-project layer-primary-subject object-belt --name-zh "腰带" --name-en "Belt" --category belt --measurement length=100cm --measurement width=3.5cm --rotation-deg -12 --scale-percent 72
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-set output/my-project layer-primary-subject object-shirt --name-zh "衬衫" --name-en "Shirt" --category shirt --size-label XL --size-system "Brand CN 2026" --measurement shoulder-width=48cm --measurement chest-circumference=116cm --measurement garment-length=74cm --measurement sleeve-length=62cm
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-set output/my-project layer-primary-subject object-skirt --name-zh "裙子" --name-en "Skirt" --category skirt --size-label XL --size-system "Brand CN 2026" --measurement waist-circumference=82cm --measurement hip-circumference=106cm --measurement skirt-length=78cm
+python skills/redraw-in-layers/scripts/layered_redraw.py specs output/my-project
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-export output/my-project
+python skills/redraw-in-layers/scripts/layered_redraw.py spec-export output/my-project --format svg --format pdf --format png --format csv --format json --dpi 192
 
 # Style recipes and direction proofs
 python skills/redraw-in-layers/scripts/layered_redraw.py styles
@@ -307,7 +377,7 @@ Vector patches support `set-attributes`, `remove-attributes`, `set-text`, `repla
 
 Open `artwork.svg` in Inkscape for the safest round trip. Illustrator and Affinity Designer are also suitable, but run validation afterward because another editor may rename IDs or restructure groups. Modify objects inside a layer; preserve the top-level `layer-*` wrapper and ID.
 
-For raster projects, import `layers/*.png` into Photoshop, Affinity Photo, Krita, or Photopea in the bottom-to-top order declared by `index.json`. Preserve canvas dimensions, alpha, and filenames, then run `compose` and `validate`.
+For raster projects, import `layers/*.png` into Photoshop, Affinity Photo, Krita, or Photopea in the bottom-to-top order declared by `index.json`. Preserve canvas dimensions, alpha, and filenames, then run `compose` and `validate`. Keep the Layered Redraw project beside external editor files when arbitrary scale or rotation matters: those affine transforms live in `layers/index.json` and are not guaranteed to round-trip through every ORA or PSD tool.
 
 For the safest Krita workflow, run `export-ora`, edit the complete stack, then sync it back with `import-ora`. The import takes a recoverable snapshot and rejects canvas, layer-count, or stable-ID mismatches.
 
