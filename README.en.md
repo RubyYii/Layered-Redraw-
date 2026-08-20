@@ -19,6 +19,8 @@ Pixel art is a first-class `raster-layered` style preset. It uses a logical pixe
 
 v0.6 adds a References & Space workflow. Register multiple RGB inputs, pair supplied depth or optionally estimate relative depth with a Depth Anything V2 backend, then resolve source RGB + depth + prompt into 5–20 semantic layers. Artistic parameters never rewrite raw depth; the prompt controls semantic grouping, independent edit ownership, and spatial interpretation. Guided Creation keeps a small safe surface while Art Direction exposes model, RGB-D orientation, and depth flattening/exaggeration. Artwork text is forbidden by default; an intentional game-UI exception must declare its allowed text layers in the design contract.
 
+v0.7 adds the experimental [3D Scene Builder](apps/scene-builder/README.md). It stages screenplay, characters, props, and cameras in one continuous Three.js scene with hierarchical character roots, arc-length motion, spline cameras, semantic interaction anchors, replaceable model bindings, and a deterministic intent boundary for future intelligent characters. It incubates alongside the 2D layer format and does not present real-time blockout footage as physical simulation or final-film rendering. See [`docs/3d-scene-builder.md`](docs/3d-scene-builder.md) for architecture and boundaries.
+
 Before production, the project can generate parameterized A/B/C proofs. The built-in output is a parameter contract, deltas, a low-detail schematic, and an external render request. It becomes image-effect evidence only after scene-specific renders are registered. Selection and promotion can guide the final 8–12 layers, but do not establish artistic quality on their own.
 
 The goal is not another brush picker. A style now changes crop, scale, negative space, depth, shape grammar, and value grouping before colour and surface treatment.
@@ -75,9 +77,11 @@ Codex confirms mood, composition, style, palette, subject priority, and detail l
 
 Open the local editor, select layers or frame a region, export `edit-request.json`, and give it back to `$redraw-in-layers`. The patch is allowed to touch only the selected layers.
 
-## What v0.6 includes
+## What the current version includes
 
 - `$redraw-in-layers`, a Codex skill for guided vector drawing, layered image generation, and localized revision.
+- `$stage-in-3d`, a Codex skill that compiles screenplays, storyboards, or scene notes into editable continuous 3D blockouts, cinematic timelines, and deterministic previews.
+- An experimental 3D director with continuous scenes, cinematic timelines, fixed-step 30fps rendering, hierarchical characters, curved motion, object interaction anchors, and an auditable agent-intent contract.
 - Reference intelligence for role-aware multi-RGB input, RGB-D pairing, optional monocular relative-depth estimation, immutable 16-bit depth evidence, 3–8 diagnostic bands, and prompt-directed 5–20-layer planning.
 - Guided Creation with six composition-first presets and a small set of safe controls for faithfulness, abstraction, subject emphasis, spatial flattening, and colour intensity.
 - Art Direction with full control over balance, crop, negative space, subject scale, depth, form, value groups, palette, edge hierarchy, and material, plus reusable bilingual project presets.
@@ -130,6 +134,29 @@ In the editor:
 5. Select semantic layers or constrain an edit with layer click, frame, lasso, brush, or text-described scope.
 6. Adjust opacity, blend, order, and bilingual labels; compare or restore history.
 7. Describe the change, download `edit-request.json`, and give it to Codex with `$redraw-in-layers`.
+
+### Run the 3D Scene Builder
+
+```powershell
+cd apps/scene-builder
+npm ci
+npm run dev
+```
+
+Open the local URL printed by Vite to use blockout editing, the director timeline, and scene preview. The bundled *Window That Wasn't There* fixture can be loaded from the editor. Rebuild the fixture or render deterministic 30fps video with:
+
+```powershell
+npm run build:window-case
+npm run render:window-case:video30
+```
+
+Model replacement and intelligent characters are interface-first in this release: GLB node/animation slots, object anchors, and semantic intents are part of the project contract; the GLB loader, navigation mesh, and rigid-body solver remain follow-up work.
+
+You can also invoke the 3D skill directly:
+
+```text
+Use $stage-in-3d to stage this screenplay as one continuous 3D scene, block the characters, props, and cameras, then render a 30fps preview.
+```
 
 ## Invoke the skill
 
@@ -317,9 +344,13 @@ For pixel art, prefer Aseprite or Pixelorama. Disable anti-aliasing, use nearest
 
 ```powershell
 python -m unittest discover -s tests -v
+cd apps/scene-builder
+npm ci
+npm test
+npm run build
 ```
 
-The tests cover SVG, raster, pixel art, both design interfaces, custom presets, parameterized proofs, complete style systems, direction boards, masks, history diff/restore, hybrid sources, and OpenRaster round trips.
+The tests cover SVG, raster, pixel art, both design interfaces, custom presets, parameterized proofs, complete style systems, direction boards, masks, history diff/restore, hybrid sources, and OpenRaster round trips. The 3D application separately covers scene schema, timelines, arc-length motion, semantic interactions, and the model-intent boundary.
 
 ---
 

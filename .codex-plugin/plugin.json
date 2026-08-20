@@ -1,19 +1,19 @@
 {
   "name": "layered-redraw",
-  "version": "0.6.1",
-  "description": "Incubation prototype for non-destructive semantic-layer artwork across vector, raster, and pixel workflows; canonical runtime capabilities are upstreamed to VULCA SDK as reviewed Effect Packs.",
+  "version": "0.7.0",
+  "description": "Incubation prototype for non-destructive semantic-layer artwork and cinematic 3D scene construction; canonical runtime capabilities are upstreamed to VULCA SDK as reviewed Effect Packs.",
   "author": {
     "name": "RubyYii",
     "url": "https://github.com/RubyYii"
   },
   "homepage": "https://github.com/RubyYii/Layered-Redraw-",
   "repository": "https://github.com/RubyYii/Layered-Redraw-",
-  "keywords": ["svg", "vector-art", "raster-art", "pixel-art", "rgbd", "depth-estimation", "multi-reference", "semantic-layers", "art-direction", "design-presets", "design-proofs", "parameterized-design", "openraster", "png-layers", "non-destructive", "layered-illustration", "photo-redraw", "codex-skill"],
+  "keywords": ["svg", "vector-art", "raster-art", "pixel-art", "rgbd", "depth-estimation", "multi-reference", "semantic-layers", "art-direction", "design-presets", "design-proofs", "parameterized-design", "openraster", "png-layers", "non-destructive", "layered-illustration", "photo-redraw", "3d-scene", "cinematic-previs", "semantic-interaction", "three-js", "codex-skill"],
   "skills": "./skills/",
   "interface": {
     "displayName": "Layered Redraw",
-    "shortDescription": "Plan from RGB and depth, then redraw in editable layers.",
-    "longDescription": "Turn one or more RGB references, optional RGB-D or estimated relative depth, a planning prompt, and an art-direction conversation into artwork with 5–20 stable semantic layers. Raw reference evidence remains immutable while Guided mode offers reusable visual-system presets and Art Direction exposes composition through material. The workflow can compare RGB and depth, resolve semantic regions into a bounded layer plan, generate parameterized A/B/C proofs, and promote one locked direction before production while retaining masks, recoverable history, quality gates, hybrid sources, and OpenRaster round trips.",
+    "shortDescription": "Redraw in editable layers or stage cinematic 3D scenes.",
+    "longDescription": "Turn RGB references, optional depth, and an art-direction conversation into artwork with stable semantic layers, or stage screenplay-driven scenes in the experimental Three.js Scene Builder. Raw evidence stays immutable while the 2D workflow retains masks, recoverable history, quality gates, hybrid sources, and OpenRaster round trips. The 3D workflow adds hierarchical characters, spline cameras, arc-length motion, semantic object anchors, replaceable asset bindings, and a deterministic intent boundary for future intelligent agents.",
     "developerName": "RubyYii",
     "category": "Design",
     "capabilities": ["Interactive", "Write", "Local-first"],
@@ -28,7 +28,8 @@
       "Generate A/B/C parameterized design proofs, let me lock one, then promote it to production.",
       "Use raster-layered mode to generate editable PNG layers from this photo.",
       "Create GBA warm-narrative pixel art with editable semantic layers.",
-      "Open my layered project and change only the selected or masked layers."
+      "Open my layered project and change only the selected or masked layers.",
+      "Use $stage-in-3d to stage my screenplay with smooth cameras, continuous character motion, and semantic object interactions."
     ]
   }
 }

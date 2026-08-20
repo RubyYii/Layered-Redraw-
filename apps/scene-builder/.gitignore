@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+*.log
+.gemini-agent/
+artifacts/
+inputs/
+*.webm
