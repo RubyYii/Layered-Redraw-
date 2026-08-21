@@ -10,6 +10,7 @@
 4. **Renderer/editor** — Three.js groups preserve character hierarchy; cached camera position/look-at curves avoid rebuilding Catmull–Rom data every frame. Preview transforms bypass material work, timeline highlighting is incremental, and measured frame pacing can lower pixel ratio and temporarily simplify shadows/local lights on weak or software renderers. Fixed-step and keyframe render scripts opt into full quality so deliverables do not vary with interactive performance.
 5. **Asset runtime** — a local OBJ or self-contained GLB can replace a selected placeholder for the browser session without non-uniformly distorting the source. OBJ provides static geometry. GLB can additionally provide skins, bones, animation clips, and morph targets; the runtime reports those capabilities and infers semantic nodes, actions, rig bones, and expression slots. `AnimationMixer` crossfades between `idle`, `move`, `interact`, and `react` states supplied by the deterministic timeline.
 6. **Agent boundary** — an observation builder exposes only visible semantic affordances. The validator rejects direct model control of transforms, paths, scripts, code, or asset URLs; the planner can deterministically add a collision-aware ground path before an out-of-range interaction. `runAgentTurn` is the single callback boundary for a future provider and returns validated timeline clips rather than executing model-authored transforms.
+7. **CP02 governed mutation** — `?case=pact-cp02` loads a source-locked derivative of the collaborator room. A deterministic fixture can propose only semantic assets in authored slots. Guardian approval routes one closed ScenePatch through exact changed-ID and protected-object checks; rejection and receipt-bound undo remain first-class outcomes. The route exposes only a read-only evidence snapshot and does not write the ordinary editor autosave key.
 
 ## Incoming depth-painting bridge
 
@@ -43,11 +44,49 @@ cd apps/scene-builder
 npm ci
 npm test
 npm run build:window-case
+npm run build:window-case:cp02
 npm run build
 npm run dev
 ```
 
 The bundled `projects/window-case` fixture contains one continuous room, four non-human agents, 19 camera shots, and a 166-second director timeline. Fixed-step video rendering is available through `npm run render:window-case:video30`; generated frames and videos stay under the ignored `artifacts/` directory.
+
+### CP02 runtime and evidence gate
+
+The CP02 route is an engineering checkpoint for one reversible `Reframe`, not a
+general scene-generation system. Its fixed local sequence is proposal → Guardian
+allow/reject → semantic chair move → two exact undos → forbidden source-photo
+replacement. The source photograph, evidence objects, and stage objects remain
+locked; the table, chair, and cup are repository-authored proxies. Catalogued
+public candidates remain metadata-only and are not downloaded or displayed.
+
+Run the formal local gate on the target Apple M5 MacBook Air with visible system
+Chrome:
+
+```bash
+export BLOCKOUT_CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+npm test
+npm run build
+npm run test:cp02
+npm run render:window-case:cp02
+```
+
+`test:cp02` starts its own loopback Vite server, drives only visible UI controls,
+fails on non-local requests or browser errors, captures six 1280×720 stills and
+five receipts, times at least 20 production apply/undo cycles, retains every raw
+frame delta for a 60-second adaptive run, and preserves a separate 30-second
+`renderQuality=full` diagnostic. `render:window-case:cp02` records an uncut WebM
+of the same interaction and creates the render report. Generated evidence is
+written under ignored `artifacts/window-case-cp02/`; an existing evidence set is
+moved into its `history/` directory before a new smoke run, never deleted.
+
+The provisional runtime thresholds are median FPS ≥ 30, frame-time P95 ≤ 50 ms,
+preloaded apply and undo P95 ≤ 250 ms, and no continuous five-second interval
+below 75% adaptive quality. Headless, SwiftShader/software, non-1280×720, or
+non-target-machine evidence is `ENVIRONMENT_INVALID`, not a pass. A threshold
+miss is retained as `FAIL`. Only `PASS` can become `RUNTIME_TESTED` after archive
+verification; screenshots and controller inspection never populate the artist's
+`ARTISTICALLY_APPROVED` decision.
 
 ## Current limits
 
@@ -58,6 +97,8 @@ The bundled `projects/window-case` fixture contains one continuous room, four no
 - Semantic effectors select animation/node bindings, but full-body and hand IK are not connected yet.
 - Camera splines and procedural secondary motion improve continuity but do not replace authored animation.
 - The agent runtime validates semantic intents but does not call a language model.
+- CP02 understands only the two frozen bilingual fixture statements; Gemini, DeepSeek, and DSH are not live dependencies in this checkpoint.
+- CP02 public-asset records are discovery metadata, not downloaded models, rights clearance, or artistic approval.
 - The example is real-time stylized blockout, not photoreal final rendering.
 - The RGB-D spatial bridge is exportable from the painting editor, but its Scene Builder import adapter is not implemented yet.
 

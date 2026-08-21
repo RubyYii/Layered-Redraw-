@@ -10,9 +10,11 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "test:ui": "node scripts/smoke-test.mjs",
+    "test:cp02": "node scripts/smoke-test-cp02.mjs",
     "build:window-case": "node scripts/build-window-case-sandbox-project.mjs",
     "build:window-case:cp02": "node scripts/derive-window-case-cp02.mjs",
     "render:window-case": "npm run build:window-case && node scripts/render-window-case.mjs",
+    "render:window-case:cp02": "node scripts/render-window-case-cp02.mjs",
     "render:window-case:video": "npm run build:window-case && node scripts/render-window-case-video.mjs",
     "render:window-case:video30": "npm run build:window-case && node scripts/render-window-case-video-30fps.mjs"
   },
