@@ -150,8 +150,12 @@ const elements = {
   entityFriction: $("#entity-friction"),
   entityRestitution: $("#entity-restitution"),
   chooseAssetFile: $("#choose-asset-file"),
+  chooseSpatialBridge: $("#choose-spatial-bridge"),
+  chooseSpatialFiles: $("#choose-spatial-files"),
   clearAssetFile: $("#clear-asset-file"),
   assetFile: $("#asset-file"),
+  spatialBridgeFolder: $("#spatial-bridge-folder"),
+  spatialBridgeFiles: $("#spatial-bridge-files"),
   assetSessionTitle: $("#asset-session-title"),
   assetSessionDetail: $("#asset-session-detail"),
   assetRuntimeControls: $("#asset-runtime-controls"),
@@ -162,6 +166,7 @@ const elements = {
   assetExpressionOutput: $("#asset-expression-output"),
   clearAssetExpression: $("#clear-asset-expression"),
   assetRigDetails: $("#asset-rig-details"),
+  assetDetailSummary: $("#asset-detail-summary"),
   assetRigDetail: $("#asset-rig-detail"),
   interactionTrigger: $("#interaction-trigger"),
   interactionAction: $("#interaction-action"),
@@ -497,15 +502,22 @@ const renderInspector = (state) => {
   elements.entityFriction.disabled = directorMode === "preview";
   elements.entityRestitution.disabled = directorMode === "preview";
   const assetReport = editor.assetReport(object.id);
+  const spatialReport = assetReport?.spatialBridge ?? null;
   elements.chooseAssetFile.disabled = directorMode === "preview";
+  elements.chooseSpatialBridge.disabled = directorMode === "preview";
+  elements.chooseSpatialFiles.disabled = directorMode === "preview";
   elements.clearAssetFile.disabled = directorMode === "preview";
   elements.clearAssetFile.hidden = !assetReport;
+  elements.assetSessionTitle.closest(".asset-import-status").dataset.format = assetReport?.format ?? "placeholder";
   elements.assetSessionTitle.textContent = assetReport ? assetReport.sourceName : "使用灰模";
   elements.assetSessionDetail.textContent = assetReport
-    ? `${assetReport.format} · ${assetReport.meshCount} 网格 · ${assetReport.skinnedMeshCount} 蒙皮 · ${assetReport.boneCount} 骨骼 · ${assetReport.clipNames.length} 动作 · ${assetReport.morphTargetNames.length} Morph`
-    : "OBJ 用于静态网格；GLB 可携带骨架、动作与表情 Morph。";
-  elements.assetRuntimeControls.hidden = !assetReport;
+    ? spatialReport
+      ? `RGB-D · ${spatialReport.imageSize.join("×")} px · ${spatialReport.meshSize.join("×")} 顶点 · RGB／深度哈希已验证 · 相对 2.5D`
+      : `${assetReport.format} · ${assetReport.meshCount} 网格 · ${assetReport.skinnedMeshCount} 蒙皮 · ${assetReport.boneCount} 骨骼 · ${assetReport.clipNames.length} 动作 · ${assetReport.morphTargetNames.length} Morph`
+    : "选择 OBJ／GLB 模型，或导入含 spatial-bridge.json 的 RGB-D 工程。";
+  elements.assetRuntimeControls.hidden = !assetReport || Boolean(spatialReport);
   elements.assetRigDetails.hidden = !assetReport;
+  elements.assetDetailSummary.textContent = spatialReport ? "空间合同与边界" : "骨架与控制接口";
   if (assetReport) {
     const assetKey = `${object.id}:${assetReport.sourceName}`;
     const mappedActions = Object.entries(assetReport.animations).filter(([, name]) => name);
@@ -550,9 +562,11 @@ const renderInspector = (state) => {
     const boneBindings = Object.entries(assetReport.bones).filter(([, name]) => name)
       .map(([slot, name]) => `${slot}→${name}`).join("、") || "无";
     const expressionBindings = mappedExpressions.map(([slot, name]) => `${slot}→${name}`).join("、") || "无";
-    const rigSummary = assetReport.format === "OBJ"
-      ? "静态 OBJ：没有骨骼、蒙皮权重、动画或 Morph；如需角色控制请导出为 GLB。"
-      : `骨架映射：${boneBindings}。表情映射：${expressionBindings}。运行时接口：playAction、setExpression、setBonePose。`;
+    const rigSummary = spatialReport
+      ? `已校验 RGB 与深度预览 2 个工件；合同指纹 ${spatialReport.contractSha256.slice(0, 12)}…。近白值沿表面法线向前，但仍是相对深度，不是米制重建。载体负责位置、旋转和尺寸；表面不会自动变成碰撞体。`
+      : assetReport.format === "OBJ"
+        ? "静态 OBJ：没有骨骼、蒙皮权重、动画或 Morph；如需角色控制请导出为 GLB。"
+        : `骨架映射：${boneBindings}。表情映射：${expressionBindings}。运行时接口：playAction、setExpression、setBonePose。`;
     elements.assetRigDetail.textContent = `${rigSummary}${assetReport.warnings.length ? ` 提示：${assetReport.warnings.join("；")}` : ""}`;
   }
   elements.interactionTrigger.value = object.entity.interaction.trigger;
@@ -989,6 +1003,8 @@ elements.assetFile.addEventListener("change", async () => {
   const file = elements.assetFile.files?.[0];
   if (!object || !file) return;
   elements.chooseAssetFile.disabled = true;
+  elements.chooseSpatialBridge.disabled = true;
+  elements.chooseSpatialFiles.disabled = true;
   elements.assetSessionTitle.textContent = "正在解析模型…";
   elements.assetSessionDetail.textContent = "检查网格、比例、骨架、动作与表情 Morph，请稍候。";
   try {
@@ -1001,6 +1017,31 @@ elements.assetFile.addEventListener("change", async () => {
     renderInspector(currentState);
   }
 });
+
+elements.chooseSpatialBridge.addEventListener("click", () => elements.spatialBridgeFolder.click());
+elements.chooseSpatialFiles.addEventListener("click", () => elements.spatialBridgeFiles.click());
+const importSpatialSelection = async (input) => {
+  const object = selectedObject();
+  const files = [...(input.files ?? [])];
+  if (!object || !files.length) return;
+  elements.chooseAssetFile.disabled = true;
+  elements.chooseSpatialBridge.disabled = true;
+  elements.chooseSpatialFiles.disabled = true;
+  elements.assetSessionTitle.textContent = "正在校验 RGB-D 工程…";
+  elements.assetSessionDetail.textContent = "匹配桥接合同、RGB 与深度预览，并逐一校验 SHA-256。";
+  try {
+    const report = await editor.loadSpatialBridgeFiles(object.id, files);
+    const spatial = report.spatialBridge;
+    showToast(`已导入“${object.name}”的 RGB-D 表面：${spatial.imageSize.join("×")} · ${spatial.vertexCount} 顶点 · 2 个哈希已验证`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    input.value = "";
+    renderInspector(currentState);
+  }
+};
+elements.spatialBridgeFolder.addEventListener("change", () => importSpatialSelection(elements.spatialBridgeFolder));
+elements.spatialBridgeFiles.addEventListener("change", () => importSpatialSelection(elements.spatialBridgeFiles));
 
 elements.clearAssetFile.addEventListener("click", () => {
   const object = selectedObject();

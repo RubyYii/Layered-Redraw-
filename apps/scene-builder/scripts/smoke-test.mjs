@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
+import { deflateSync } from "node:zlib";
 import { chromium } from "playwright-core";
 
 const root = process.cwd();
@@ -83,6 +85,101 @@ const createTinyGlb = () => {
   return output;
 };
 
+const crcTable = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  return value >>> 0;
+});
+
+const pngChunk = (type, data = Buffer.alloc(0)) => {
+  const name = Buffer.from(type, "ascii");
+  const body = Buffer.concat([name, data]);
+  let crc = 0xffffffff;
+  for (const byte of body) crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  const chunk = Buffer.alloc(12 + data.length);
+  chunk.writeUInt32BE(data.length, 0);
+  name.copy(chunk, 4);
+  data.copy(chunk, 8);
+  chunk.writeUInt32BE((crc ^ 0xffffffff) >>> 0, chunk.length - 4);
+  return chunk;
+};
+
+const createTinyPng = (width, height, pixelAt) => {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
+  const scanlines = Buffer.alloc(height * (1 + width * 4));
+  for (let y = 0; y < height; y += 1) {
+    const rowStart = y * (1 + width * 4);
+    scanlines[rowStart] = 0;
+    for (let x = 0; x < width; x += 1) {
+      const [red, green, blue, alpha = 255] = pixelAt(x, y);
+      const offset = rowStart + 1 + x * 4;
+      scanlines[offset] = red;
+      scanlines[offset + 1] = green;
+      scanlines[offset + 2] = blue;
+      scanlines[offset + 3] = alpha;
+    }
+  }
+  return Buffer.concat([
+    Buffer.from("89504e470d0a1a0a", "hex"),
+    pngChunk("IHDR", header),
+    pngChunk("IDAT", deflateSync(scanlines)),
+    pngChunk("IEND"),
+  ]);
+};
+
+const createSpatialBridgeFixture = () => {
+  const rgb = createTinyPng(4, 2, (x, y) => y === 0
+    ? [232 - x * 18, 143 + x * 17, 55 + x * 26]
+    : [32 + x * 24, 70 + x * 20, 104 + x * 21]);
+  const depth = createTinyPng(4, 2, (x, y) => {
+    const nearness = 160 - Math.round(((y * 4 + x) / 7) * 65);
+    return [nearness, nearness, nearness];
+  });
+  const hash = (buffer) => createHash("sha256").update(buffer).digest("hex");
+  const bridge = {
+    kind: "layered-redraw-spatial-bridge",
+    schema_version: "1.0",
+    source: {
+      id: "smoke-rgb",
+      role: "primary-rgb",
+      label: "Smoke RGB-D",
+      width: 4,
+      height: 2,
+      rgb_artifact: "references/smoke-rgb/rgb.png",
+      rgb_sha256: hash(rgb),
+    },
+    depth: {
+      id: "smoke-depth",
+      preview_artifact: "references/smoke-rgb/depth/smoke-depth/depth-preview.png",
+      artifact_sha256: { preview: hash(depth) },
+      orientation: "near-white",
+      relative_depth: true,
+      metric_scale: false,
+    },
+    surface: {
+      representation: "rgb-depth-heightfield",
+      mesh_resolution: 24,
+      displacement: 0.65,
+      perspective: 0.58,
+      near_direction: "+surface-normal",
+      texture_fit: "preserve-aspect",
+    },
+    semantic_layers: { status: "missing", count: 0, layers: [] },
+    invariants: {
+      raw_depth_immutable: true,
+      art_direction_changes_interpretation_only: true,
+      relative_depth_must_not_be_treated_as_metres: true,
+    },
+    handoff: { target: "apps/scene-builder", contract: "depth-heightfield-v1", status: "ready-for-import" },
+    contract_sha256: "d".repeat(64),
+  };
+  return { bridge: Buffer.from(JSON.stringify(bridge)), rgb, depth };
+};
+
 const browser = await chromium.launch({
   executablePath,
   headless: true,
@@ -106,6 +203,7 @@ const tabletScreenshot = path.join(artifactDir, "blockout-studio-tablet.png");
 const referenceScreenshot = path.join(artifactDir, "blockout-studio-reference.png");
 const directorErrorScreenshot = path.join(artifactDir, "blockout-studio-director-error.png");
 const assetScreenshot = path.join(artifactDir, "blockout-studio-asset-runtime.png");
+const spatialScreenshot = path.join(artifactDir, "blockout-studio-spatial-bridge.png");
 const failureScreenshot = path.join(artifactDir, "blockout-studio-failure.png");
 
 try {
@@ -220,6 +318,35 @@ try {
   assert(await page.locator("#asset-action-preview").isDisabled(), "静态 OBJ 不应启用动作预览。");
   assert(await page.locator("#play-asset-action").isDisabled(), "静态 OBJ 不应启用动作重播。");
   await page.locator("#clear-asset-file").click();
+  await page.locator("#inspector-transform-tab").click();
+  const positionY = page.locator('[data-vector="position"] [data-axis="1"]');
+  await positionY.fill("3");
+  await positionY.press("Tab");
+  const spatialDimensions = [6, 3.375, 1];
+  for (let axis = 0; axis < spatialDimensions.length; axis += 1) {
+    const input = page.locator(`[data-vector="dimensions"] [data-axis="${axis}"]`);
+    await input.fill(String(spatialDimensions[axis]));
+    await input.press("Tab");
+  }
+  await page.locator("#inspector-entity-tab").click();
+  await page.locator("#reference-visible").uncheck();
+  await page.locator('[data-camera="perspective"]').click();
+  const spatialFixture = createSpatialBridgeFixture();
+  await page.locator("#spatial-bridge-files").setInputFiles([
+    { name: "spatial-bridge.json", mimeType: "application/json", buffer: spatialFixture.bridge },
+    { name: "rgb.png", mimeType: "image/png", buffer: spatialFixture.rgb },
+    { name: "depth-preview.png", mimeType: "image/png", buffer: spatialFixture.depth },
+  ]);
+  await page.waitForFunction(() => document.querySelector("#asset-session-title")?.textContent === "Smoke RGB-D");
+  assert((await page.locator("#asset-session-detail").textContent())?.includes("RGB／深度哈希已验证"), "RGB-D 工件哈希未显示为已验证。");
+  assert((await page.locator("#asset-session-detail").textContent())?.includes("相对 2.5D"), "RGB-D 相对尺度边界未显示。");
+  assert(await page.locator("#asset-runtime-controls").isHidden(), "RGB-D 表面不应显示角色动作／表情控制。");
+  assert((await page.locator("#asset-rig-detail").textContent())?.includes("不会自动变成碰撞体"), "RGB-D 碰撞边界没有显示。");
+  await page.locator("#asset-rig-details").evaluate((details) => { details.open = true; });
+  await page.locator("#asset-rig-details").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: spatialScreenshot, fullPage: true });
+  await page.locator("#clear-asset-file").click();
+  assert(await page.locator("#asset-session-title").textContent() === "使用灰模", "恢复灰模没有清除 RGB-D 会话表面。");
   await page.locator("#interaction-trigger").selectOption("click");
   await page.locator("#interaction-action").selectOption("pulse");
 
@@ -305,6 +432,7 @@ try {
     referenceScreenshot,
     directorErrorScreenshot,
     assetScreenshot,
+    spatialScreenshot,
     desktopScreenshot,
     tabletScreenshot,
   }, null, 2)}\n`);

@@ -37,7 +37,7 @@ For supplied RGB-D, accept only a single-channel map with exactly the same width
 
 The local editor can turn the active scene RGB and its paired near-white depth preview into an orbitable WebGL height field. RGB remains the colour texture; normalized nearness displaces vertices along the surface normal. Depth strength, mesh detail, perspective, and grid display are view parameters only. The depth-strength control runs in the vertex shader so dragging it does not resample or rewrite the depth image.
 
-This is a 2.5D spatial canvas, not reconstructed metric geometry. It is useful for judging depth rhythm, camera angle, silhouette separation, and future 3D adapter work. It does not infer hidden or back-facing surfaces, calibrated camera intrinsics, real-world scale, watertight topology, collision shapes, or character rigs.
+This is a 2.5D spatial canvas, not reconstructed metric geometry. It is useful for judging depth rhythm, camera angle, silhouette separation, and Scene Builder staging. It does not infer hidden or back-facing surfaces, calibrated camera intrinsics, real-world scale, watertight topology, collision shapes, or character rigs.
 
 `spatial-bridge.json` is the auditable handoff. It binds:
 
@@ -48,7 +48,7 @@ This is a 2.5D spatial canvas, not reconstructed metric geometry. It is useful f
 - semantic layer depth summaries only when `layer-plan.json` is current for the exact RGB/depth pair;
 - invariants that forbid treating relative depth as metres or art direction as a rewritten raw map.
 
-The bridge advertises the downstream `depth-heightfield-v1` contract. `ready-for-import-adapter` means the evidence is prepared for a Scene Builder adapter; it does not claim that an automatic importer, full mesh reconstruction, or physics simulation already exists. A downstream adapter must verify the hashes and preserve this limitation.
+The bridge advertises the downstream `depth-heightfield-v1` contract. `ready-for-import` means the RGB and relative-depth evidence can be selected as one local project folder and checked by Scene Builder's session importer. It does not claim full mesh reconstruction, hidden-surface recovery, collision geometry, or physics simulation. The importer verifies the declared RGB and depth-preview hashes and preserves those limitations.
 
 ## Prompt-directed planning
 

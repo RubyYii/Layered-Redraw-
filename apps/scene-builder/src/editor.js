@@ -499,17 +499,16 @@ export class ThreeSceneAdapter {
     this.performanceHandler = typeof handler === "function" ? handler : null;
   }
 
-  async loadAssetFile(id, file) {
+  async attachRuntimeAsset(id, createController, label) {
     const object = this.store.getState().project.objects.find((candidate) => candidate.id === id);
     const carrier = this.meshes.get(id);
     if (!object || !carrier) throw new Error("请先选择一个仍在场景中的物体。");
     const token = Symbol(id);
     this.assetLoadTokens.set(id, token);
-    const { loadModelFile } = await import("./asset-runtime.js");
-    const controller = await loadModelFile(file, object.asset ?? {});
+    const controller = await createController(object);
     if (this.assetLoadTokens.get(id) !== token || !this.meshes.has(id)) {
       controller.dispose();
-      throw new Error("模型载入期间目标物体已改变，请重新选择后导入。");
+      throw new Error(`${label}载入期间目标物体已改变，请重新选择后导入。`);
     }
     this.clearAsset(id, { resync: false });
     carrier.add(controller.root);
@@ -519,6 +518,21 @@ export class ThreeSceneAdapter {
     this.applyAssetReplacements();
     this.scene.updateMatrixWorld(true);
     return controller.report;
+  }
+
+  async loadAssetFile(id, file) {
+    return this.attachRuntimeAsset(id, async (object) => {
+      const { loadModelFile } = await import("./asset-runtime.js");
+      return loadModelFile(file, object.asset ?? {});
+    }, "模型");
+  }
+
+  async loadSpatialBridgeFiles(id, files) {
+    const selectedFiles = [...(files ?? [])];
+    return this.attachRuntimeAsset(id, async (object) => {
+      const { loadSpatialBridgeFiles } = await import("./spatial-bridge-runtime.js");
+      return loadSpatialBridgeFiles(selectedFiles, object.asset ?? {});
+    }, "RGB-D 工程");
   }
 
   clearAsset(id, { resync = true } = {}) {

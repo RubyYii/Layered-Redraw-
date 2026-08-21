@@ -2237,6 +2237,11 @@ canvas.is-director-preview {
   background: rgb(255 255 255 / 2%);
 }
 
+.asset-import-status[data-format="RGB-D"] {
+  border-color: rgb(111 159 219 / 34%);
+  background: linear-gradient(135deg, rgb(111 159 219 / 9%), rgb(127 189 118 / 5%));
+}
+
 .asset-import-status strong {
   overflow: hidden;
   color: var(--text);
@@ -2253,12 +2258,26 @@ canvas.is-director-preview {
 }
 
 .asset-import-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
 
 .asset-import-actions .text-button {
-  flex: 1;
+  min-width: 0;
+  padding-inline: 7px;
+  font-size: 11px;
+}
+
+#clear-asset-file {
+  grid-column: 1 / -1;
+}
+
+.asset-spatial-fallback {
+  grid-column: 1 / -1;
+  min-height: 27px;
+  color: var(--text-muted);
+  font-size: 9px !important;
 }
 
 .asset-runtime-controls[hidden],

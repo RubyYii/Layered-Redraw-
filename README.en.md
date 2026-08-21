@@ -21,7 +21,9 @@ v0.6 adds a References & Space workflow. Register multiple RGB inputs, pair supp
 
 v0.7 adds the experimental [3D Scene Builder](apps/scene-builder/README.md). It stages screenplay, characters, props, and cameras in one continuous Three.js scene with hierarchical character roots, arc-length motion, spline cameras, semantic interaction anchors, replaceable model bindings, and a deterministic intent boundary for future intelligent characters. It incubates alongside the 2D layer format and does not present real-time blockout footage as physical simulation or final-film rendering. See [`docs/3d-scene-builder.md`](docs/3d-scene-builder.md) for architecture and boundaries.
 
-v0.8 connects depth to the painting editor itself. The active RGB and paired relative depth form an orbitable WebGL 2.5D height field; GPU-side displacement keeps the depth slider responsive without rebuilding the mesh or rewriting 16-bit evidence. The editor and CLI export `spatial-bridge.json` with RGB/depth hashes, an explicit relative-scale declaration, semantic-layer depth summaries, and the boundary for a future Scene Builder adapter. It supports spatial composition and handoff, not metric reconstruction, hidden-surface recovery, or physical simulation.
+v0.8 connects depth to the painting editor itself. The active RGB and paired relative depth form an orbitable WebGL 2.5D height field; GPU-side displacement keeps the depth slider responsive without rebuilding the mesh or rewriting 16-bit evidence. The editor and CLI export `spatial-bridge.json` with RGB/depth hashes, an explicit relative-scale declaration, semantic-layer depth summaries, and a strict Scene Builder adapter boundary. It supports spatial composition and handoff, not metric reconstruction, hidden-surface recovery, or physical simulation.
+
+v0.9 closes the painting-to-stage loop. Scene Builder can now select a Layered Redraw project folder, read `spatial-bridge.json`, resolve and SHA-256-check the declared RGB/depth preview, then mount it as a movable, rotatable, scalable textured height field. The importer preserves the hard relative-2.5D, non-metric, no-hidden-backside, no-collision-by-default boundary and stays separate from OBJ/GLB character rigs, actions, and prop-interaction interfaces.
 
 Before production, the project can generate parameterized A/B/C proofs. The built-in output is a parameter contract, deltas, a low-detail schematic, and an external render request. It becomes image-effect evidence only after scene-specific renders are registered. Selection and promotion can guide the final 8–12 layers, but do not establish artistic quality on their own.
 
@@ -52,7 +54,7 @@ The goal is not another brush picker. A style now changes crop, scale, negative 
 
 ![Layered Redraw 3D depth canvas showing an orbitable height field generated from a pixel scene and relative depth](assets/readme/editor-spatial-3d.en.png)
 
-The active RGB supplies colour while its paired near-white relative depth displaces the surface. The canvas supports orbit, zoom, GPU-side depth, perspective and mesh-detail controls, then exports an evidence-hashed `spatial-bridge.json` with explicit scale boundaries. This is a 2.5D composition and adapter surface, not a metric scan or full-scene reconstruction.
+The active RGB supplies colour while its paired near-white relative depth displaces the surface. The canvas supports orbit, zoom, GPU-side depth, perspective and mesh-detail controls, then exports an evidence-hashed `spatial-bridge.json` with explicit scale boundaries. In Scene Builder, select a carrier, choose **RGB-D 工程**, and pick that project folder to continue camera and scene staging after the RGB/depth hashes pass. This is a 2.5D surface, not a metric scan or full-scene reconstruction.
 
 ![Layered Redraw semantic layer architecture](assets/readme/layer-stack.en.svg)
 
@@ -92,6 +94,7 @@ Open the local editor, select layers or frame a region, export `edit-request.jso
 - An experimental 3D director with continuous scenes, cinematic timelines, fixed-step 30fps rendering, hierarchical characters, curved motion, object interaction anchors, and an auditable agent-intent contract.
 - Reference intelligence for role-aware multi-RGB input, RGB-D pairing, optional monocular relative-depth estimation, immutable 16-bit depth evidence, 3–8 diagnostic bands, and prompt-directed 5–20-layer planning.
 - A 3D depth canvas that combines source texture and near-white relative depth as a WebGL height field with orbit controls, GPU displacement, mesh/perspective controls, and an auditable spatial-bridge export.
+- A painting-to-3D bridge that lets Scene Builder import `spatial-bridge.json` from a project folder, verify the RGB/depth-preview hashes and relative-scale contract, and mount a session-only textured height field through an editable carrier.
 - Guided Creation with six composition-first presets and a small set of safe controls for faithfulness, abstraction, subject emphasis, spatial flattening, and colour intensity.
 - Art Direction with full control over balance, crop, negative space, subject scale, depth, form, value groups, palette, edge hierarchy, and material, plus reusable bilingual project presets.
 - A shared `design-plan.json` whose digest participates in the project revision, making visual-direction changes traceable and recoverable.

@@ -147,6 +147,29 @@ describe("replaceable OBJ/GLB asset bindings", () => {
     controller.dispose();
   });
 
+  it("can fit a shallow spatial surface by its XY carrier without crushing depth", () => {
+    const scene = new THREE.Group();
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 0.5, 0.2),
+      new THREE.MeshBasicMaterial(),
+    );
+    scene.add(mesh);
+    const controller = createAssetController(
+      { scene, animations: [] },
+      {},
+      "spatial-bridge.json",
+      { format: "RGB-D", fitAxes: [0, 1], report: { spatialBridge: { metricScale: false } } },
+    );
+
+    controller.fitToCarrier([2, 4, 0.01]);
+    expect(controller.root.scale.toArray()).toEqual([1, 0.5, 200]);
+    expect(controller.report).toMatchObject({
+      format: "RGB-D",
+      spatialBridge: { metricScale: false },
+    });
+    controller.dispose();
+  });
+
   it("reports a bound skinned mesh as a controllable skeleton", () => {
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const vertexCount = geometry.attributes.position.count;
