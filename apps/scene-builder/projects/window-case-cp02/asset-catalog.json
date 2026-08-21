@@ -1,0 +1,74 @@
+[
+  {
+    "assetId": "CP02-TABLE-PROXY-001",
+    "semanticClass": "table",
+    "status": "PROJECT_AUTHORED_PROXY",
+    "publicDisplay": false,
+    "objectId": "cp02-memory-table",
+    "bundle": {
+      "children": [
+        {"id":"cp02-memory-table-top","type":"box","name":"PROPOSAL · bedside table top","position":[0,0,0],"dimensions":[1.05,0.12,0.68],"color":"#4b382c","render":{"roughness":0.88,"metalness":0,"edge":true}},
+        {"id":"cp02-memory-table-leg-nw","type":"box","name":"PROPOSAL · table leg","position":[-0.43,-0.36,-0.25],"dimensions":[0.08,0.72,0.08],"color":"#3a2a22","render":{"roughness":0.9,"metalness":0,"edge":true}},
+        {"id":"cp02-memory-table-leg-ne","type":"box","name":"PROPOSAL · table leg","position":[0.43,-0.36,-0.25],"dimensions":[0.08,0.72,0.08],"color":"#3a2a22","render":{"roughness":0.9,"metalness":0,"edge":true}},
+        {"id":"cp02-memory-table-leg-sw","type":"box","name":"PROPOSAL · table leg","position":[-0.43,-0.36,0.25],"dimensions":[0.08,0.72,0.08],"color":"#3a2a22","render":{"roughness":0.9,"metalness":0,"edge":true}},
+        {"id":"cp02-memory-table-leg-se","type":"box","name":"PROPOSAL · table leg","position":[0.43,-0.36,0.25],"dimensions":[0.08,0.72,0.08],"color":"#3a2a22","render":{"roughness":0.9,"metalness":0,"edge":true}}
+      ]
+    }
+  },
+  {
+    "assetId": "CP02-CHAIR-PROXY-001",
+    "semanticClass": "chair",
+    "status": "PROJECT_AUTHORED_PROXY",
+    "publicDisplay": false,
+    "objectId": "cp02-memory-chair",
+    "bundle": {
+      "children": [
+        {"id":"cp02-memory-chair-seat","type":"box","name":"PROPOSAL · chair seat","position":[0,0,0],"dimensions":[0.56,0.1,0.56],"color":"#3e4544","render":{"roughness":0.82,"metalness":0.04,"edge":true}},
+        {"id":"cp02-memory-chair-back","type":"box","name":"PROPOSAL · chair back","position":[0,0.46,0.24],"dimensions":[0.56,0.86,0.09],"color":"#3e4544","render":{"roughness":0.82,"metalness":0.04,"edge":true}},
+        {"id":"cp02-memory-chair-leg-nw","type":"box","name":"PROPOSAL · chair leg","position":[-0.22,-0.3,-0.21],"dimensions":[0.07,0.6,0.07],"color":"#252b2b","render":{"roughness":0.45,"metalness":0.38,"edge":true}},
+        {"id":"cp02-memory-chair-leg-ne","type":"box","name":"PROPOSAL · chair leg","position":[0.22,-0.3,-0.21],"dimensions":[0.07,0.6,0.07],"color":"#252b2b","render":{"roughness":0.45,"metalness":0.38,"edge":true}},
+        {"id":"cp02-memory-chair-leg-sw","type":"box","name":"PROPOSAL · chair leg","position":[-0.22,-0.3,0.21],"dimensions":[0.07,0.6,0.07],"color":"#252b2b","render":{"roughness":0.45,"metalness":0.38,"edge":true}},
+        {"id":"cp02-memory-chair-leg-se","type":"box","name":"PROPOSAL · chair leg","position":[0.22,-0.3,0.21],"dimensions":[0.07,0.6,0.07],"color":"#252b2b","render":{"roughness":0.45,"metalness":0.38,"edge":true}}
+      ]
+    }
+  },
+  {
+    "assetId": "CP02-CUP-PROXY-001",
+    "semanticClass": "cup",
+    "status": "PROJECT_AUTHORED_PROXY",
+    "publicDisplay": false,
+    "objectId": "cp02-memory-cup",
+    "bundle": {
+      "children": [
+        {"id":"cp02-memory-cup-body","type":"cylinder","name":"PROPOSAL · old cup body","position":[0,0,0],"dimensions":[0.26,0.34,0.26],"color":"#d4d0c2","render":{"roughness":0.72,"metalness":0.08,"edge":true}},
+        {"id":"cp02-memory-cup-handle-top","type":"box","name":"PROPOSAL · cup handle","position":[0.18,0.09,0],"dimensions":[0.16,0.045,0.06],"color":"#d4d0c2","render":{"roughness":0.72,"metalness":0.08,"edge":true}},
+        {"id":"cp02-memory-cup-handle-side","type":"box","name":"PROPOSAL · cup handle","position":[0.25,0,0],"dimensions":[0.045,0.2,0.06],"color":"#d4d0c2","render":{"roughness":0.72,"metalness":0.08,"edge":true}},
+        {"id":"cp02-memory-cup-handle-bottom","type":"box","name":"PROPOSAL · cup handle","position":[0.18,-0.09,0],"dimensions":[0.16,0.045,0.06],"color":"#d4d0c2","render":{"roughness":0.72,"metalness":0.08,"edge":true}}
+      ]
+    }
+  },
+  {
+    "assetId": "PH-TABLE-WOODEN-001",
+    "sourceAssetId": "WoodenTable_01",
+    "filesHash": "acee43a6468dd85f1da716a4c6d77793e6c7c02f",
+    "semanticClass": "table",
+    "status": "DISCOVERED_CANDIDATE",
+    "publicDisplay": false
+  },
+  {
+    "assetId": "PH-CHAIR-SCHOOL-001",
+    "sourceAssetId": "SchoolChair_01",
+    "filesHash": "f78668ddf3cabcf60afe57e8df1e1982a482617c",
+    "semanticClass": "chair",
+    "status": "DISCOVERED_CANDIDATE",
+    "publicDisplay": false
+  },
+  {
+    "assetId": "PH-MUG-MATERIAL-001",
+    "sourceAssetId": "modified_thermos",
+    "filesHash": "b54fc17f8886546ef664c28796bfcc96a6bc69a5",
+    "semanticClass": "cup",
+    "status": "DISCOVERED_CANDIDATE",
+    "publicDisplay": false
+  }
+]

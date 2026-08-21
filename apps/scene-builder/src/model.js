@@ -1,3 +1,5 @@
+import { normalizeCp02Metadata, normalizeGovernance } from "./scene-governance.js";
+
 export const SCHEMA_VERSION = 3;
 
 export const OBJECT_TYPES = Object.freeze(["box", "sphere", "cylinder", "cone", "plane", "group"]);
@@ -295,7 +297,7 @@ export function createSceneObject(type = "box", overrides = {}) {
   const fallbackPosition = safeType === "group" ? [0, 0, 0] : [0, dimensions[1] / 2, 0];
   const requestedRole = overrides.entity?.role ?? overrides.role ?? inferRole(safeType);
 
-  return {
+  const object = {
     id: String(overrides.id || makeId(safeType)),
     type: safeType,
     name: cleanName(overrides.name, TYPE_LABELS[safeType]),
@@ -314,6 +316,8 @@ export function createSceneObject(type = "box", overrides = {}) {
     interactionSpec: normalizeInteractionSpec(overrides.interactionSpec),
     entity: createEntityConfig(requestedRole, overrides.entity ?? {}),
   };
+  if (Object.hasOwn(overrides, "governance")) object.governance = normalizeGovernance(overrides.governance);
+  return object;
 }
 
 const normalizeIssue = (value) => {
@@ -440,7 +444,7 @@ export function normalizeProject(input = {}) {
     return item;
   });
 
-  return {
+  const project = {
     schemaVersion: SCHEMA_VERSION,
     id: String(input.id || makeId("project")),
     name: cleanName(input.name, "未命名场景"),
@@ -452,6 +456,8 @@ export function normalizeProject(input = {}) {
     objects,
     director: normalizeDirector(input.director, objectIds),
   };
+  if (Object.hasOwn(input, "cp02")) project.cp02 = normalizeCp02Metadata(input.cp02, objectIds);
+  return project;
 }
 
 export function createEmptyProject(name = "未命名场景") {

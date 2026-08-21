@@ -1,0 +1,26 @@
+[
+  {
+    "id": "memory-table-bedside",
+    "semanticClass": "table",
+    "position": [1.25, 0.74, -1.85],
+    "rotation": [0, 0, 0]
+  },
+  {
+    "id": "memory-chair-near",
+    "semanticClass": "chair",
+    "position": [0.55, 0.5, -0.55],
+    "rotation": [0, 32, 0]
+  },
+  {
+    "id": "memory-chair-withdrawn",
+    "semanticClass": "chair",
+    "position": [0.2, 0.5, 1.15],
+    "rotation": [0, 152, 0]
+  },
+  {
+    "id": "memory-cup-on-table",
+    "semanticClass": "cup",
+    "position": [1.25, 1.2, -1.85],
+    "rotation": [0, 0, 0]
+  }
+]

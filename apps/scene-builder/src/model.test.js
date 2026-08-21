@@ -4,12 +4,58 @@ import {
   SceneStore,
   createEmptyProject,
   createSceneObject,
+  createStarterProject,
   normalizeProject,
   parseProject,
   serializeProject,
 } from "./model.js";
 
 describe("scene schema", () => {
+  it("preserves governance through project serialization", () => {
+    const object = createSceneObject("box", {
+      governance: { state: "SOURCE_LOCKED", sourceId: "B2-SOURCE-001" },
+    });
+    const parsed = parseProject(serializeProject({ ...createStarterProject(), objects: [object] }));
+
+    expect(parsed.objects[0].governance.state).toBe("SOURCE_LOCKED");
+    expect(parsed.objects[0].governance.sourceId).toBe("B2-SOURCE-001");
+  });
+
+  it("preserves validated CP02 source metadata through project serialization", () => {
+    const project = {
+      ...createStarterProject(),
+      cp02: {
+        sourceRuntimeCommit: "24b4c3b4c6c287378eb20d8b586e5064b59df256",
+        sourceProjectSha256: "2b16245c4dfa07a2e689610eac94adb096a9c7c1ffc7d04329228f5419262368",
+        sourcePhotoSha256: "c597660e245b599dadb5ecdc9d73720357cc81c75c2c5404376a9a01d36c8dec",
+        evidenceObjectIds: ["sandbox-photo_image"],
+      },
+    };
+    project.objects.push(createSceneObject("plane", { id: "sandbox-photo_image" }));
+    const parsed = parseProject(serializeProject(project));
+
+    expect(parsed.cp02).toEqual(project.cp02);
+  });
+
+  it("does not add synthetic governance or CP02 metadata to legacy projects", () => {
+    const project = normalizeProject({ objects: [{ id: "legacy", type: "box" }] });
+
+    expect(project.objects[0]).not.toHaveProperty("governance");
+    expect(project).not.toHaveProperty("cp02");
+  });
+
+  it("rejects CP02 evidence IDs that are absent from the project", () => {
+    expect(() => normalizeProject({
+      objects: [],
+      cp02: {
+        sourceRuntimeCommit: "24b4c3b4c6c287378eb20d8b586e5064b59df256",
+        sourceProjectSha256: "2b16245c4dfa07a2e689610eac94adb096a9c7c1ffc7d04329228f5419262368",
+        sourcePhotoSha256: "c597660e245b599dadb5ecdc9d73720357cc81c75c2c5404376a9a01d36c8dec",
+        evidenceObjectIds: ["missing-evidence"],
+      },
+    })).toThrow(/does not exist/);
+  });
+
   it("normalizes unsafe object values", () => {
     const object = createSceneObject("sphere", {
       name: "",
