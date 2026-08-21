@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "runtimeCommit": "24b4c3b4c6c287378eb20d8b586e5064b59df256",
+  "baseProject": {
+    "path": "../window-case/window-that-wasnt-there.blockout.json",
+    "sha256": "2b16245c4dfa07a2e689610eac94adb096a9c7c1ffc7d04329228f5419262368",
+    "objectCount": 200,
+    "durationSeconds": 166
+  },
+  "shotManifest": {
+    "path": "../window-case/shot-manifest.json",
+    "sha256": "80804c2bd5e5494ef8b2e51a01898655f2e62d7ccd72c591ac2e6d4f0e1e7a35"
+  },
+  "b2Source": {
+    "path": "../window-case/source/b2-photograph-closed-wall.png",
+    "sha256": "c597660e245b599dadb5ecdc9d73720357cc81c75c2c5404376a9a01d36c8dec",
+    "objectId": "sandbox-photo_image"
+  },
+  "evidenceObjectIds": [
+    "sandbox-photo_frame",
+    "sandbox-photo_image",
+    "sandbox-table_top",
+    "sandbox-cup_body",
+    "sandbox-recorder",
+    "sandbox-bed_mattress",
+    "sandbox-bed_blanket"
+  ]
+}
