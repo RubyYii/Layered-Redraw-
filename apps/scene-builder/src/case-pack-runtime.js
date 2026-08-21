@@ -11,6 +11,8 @@ const CP02_APPROVED_CATALOG = Object.freeze({
   "PH-TABLE-WOODEN-001": Object.freeze({
     sourceAssetId: "WoodenTable_01",
     filename: "WoodenTable_01.glb",
+    bytes: 1_823_744,
+    sha256: "cd8807b19ac0db16e2c29564634bfb949b175c51eb7dfda5c0aa4cb94af3fe2b",
     placement: Object.freeze({
       mode: "REPLACE_PROXY",
       semanticClass: "table",
@@ -22,6 +24,8 @@ const CP02_APPROVED_CATALOG = Object.freeze({
   "PH-CHAIR-SCHOOL-001": Object.freeze({
     sourceAssetId: "SchoolChair_01",
     filename: "SchoolChair_01.glb",
+    bytes: 1_551_900,
+    sha256: "dc51916c7595a4d99da181b885981b13ac12264851936e520045cfa4713728f4",
     placement: Object.freeze({
       mode: "REPLACE_PROXY",
       semanticClass: "chair",
@@ -33,6 +37,8 @@ const CP02_APPROVED_CATALOG = Object.freeze({
   "PH-MUG-MATERIAL-001": Object.freeze({
     sourceAssetId: "modified_thermos",
     filename: "modified_thermos.glb",
+    bytes: 7_159_640,
+    sha256: "f92b05260ea0075b8095a36dac23e457bc22489b3c1cb5240178796d3b705562",
     placement: Object.freeze({
       mode: "ADDITIVE_ONLY",
       semanticClass: "thermos",
@@ -129,6 +135,9 @@ export function validateCasePackManifest(input) {
     if (typeof rawAsset.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(rawAsset.sha256)) {
       throw new Error(`Case Pack asset ${assetId} SHA-256 无效。`);
     }
+    if (rawAsset.bytes !== approved.bytes || rawAsset.sha256 !== approved.sha256) {
+      throw new Error(`Case Pack asset ${assetId} bytes/SHA-256 与批准 catalog 不一致。`);
+    }
     for (const [field, expected] of Object.entries(APPROVED_STATUSES)) {
       if (rawAsset[field] !== expected) {
         throw new Error(`Case Pack asset ${assetId} ${field} status 未批准。`);
@@ -200,13 +209,11 @@ export async function loadCasePack(rootUrl, manifestInput, options = {}) {
   if (typeof fetchImpl !== "function") throw new Error("当前运行时没有可用的同源 fetch。 ");
   if (typeof loadGlbBytesImpl !== "function") throw new Error("当前运行时没有可用的 GLB loader。 ");
   const byId = new Map(manifest.assets.map((asset) => [asset.assetId, asset]));
+  const verifiedBytesById = new Map();
 
-  return {
-    casePackId: manifest.casePackId,
-    manifest,
-    async asset(assetId) {
-      const record = byId.get(assetId);
-      if (!record) throw new Error(`Unknown or unapproved Case Pack asset：${assetId}`);
+  const verifiedBytesFor = (record) => {
+    if (verifiedBytesById.has(record.assetId)) return verifiedBytesById.get(record.assetId);
+    const pending = (async () => {
       const assetUrl = new URL(record.path, root);
       if (assetUrl.origin !== root.origin || !assetUrl.pathname.startsWith(root.pathname)) {
         throw new Error(`Case Pack asset 路径越出批准根目录：${record.path}`);
@@ -225,7 +232,23 @@ export async function loadCasePack(rootUrl, manifestInput, options = {}) {
       }
       const digest = await sha256Hex(bytes);
       if (digest !== record.sha256) throw new Error(`Case Pack asset ${record.assetId} SHA-256 不匹配。`);
-      return loadGlbBytesImpl(bytes, record.filename, record.binding);
+      return bytes.slice();
+    })();
+    verifiedBytesById.set(record.assetId, pending);
+    pending.catch(() => {
+      if (verifiedBytesById.get(record.assetId) === pending) verifiedBytesById.delete(record.assetId);
+    });
+    return pending;
+  };
+
+  return {
+    casePackId: manifest.casePackId,
+    manifest,
+    async asset(assetId) {
+      const record = byId.get(assetId);
+      if (!record) throw new Error(`Unknown or unapproved Case Pack asset：${assetId}`);
+      const bytes = await verifiedBytesFor(record);
+      return loadGlbBytesImpl(bytes.slice(), record.filename, record.binding);
     },
   };
 }

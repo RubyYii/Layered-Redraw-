@@ -22,7 +22,30 @@ export const projectPath = path.join(
 );
 export const catalogPath = path.join(projectRoot, "projects", "window-case-cp02", "asset-catalog.json");
 export const sourceLockPath = path.join(projectRoot, "projects", "window-case-cp02", "source-lock.json");
+export const casePackManifestPath = path.join(projectRoot, "public", "case-packs", "pact-cp02", "case-pack.json");
 export const viewport = Object.freeze({ width: 1280, height: 720 });
+
+const expectedCasePack = Object.freeze({
+  casePackId: "pact-cp02-v1",
+  manifestSha256: "fdadb009e237731533142dad6339b8ed8c699ae48db7997ac45cd77c2e911d80",
+  assets: Object.freeze({
+    "PH-TABLE-WOODEN-001": Object.freeze({
+      carrierId: "cp02-memory-table",
+      bytes: 1_823_744,
+      sha256: "cd8807b19ac0db16e2c29564634bfb949b175c51eb7dfda5c0aa4cb94af3fe2b",
+    }),
+    "PH-CHAIR-SCHOOL-001": Object.freeze({
+      carrierId: "cp02-memory-chair",
+      bytes: 1_551_900,
+      sha256: "dc51916c7595a4d99da181b885981b13ac12264851936e520045cfa4713728f4",
+    }),
+    "PH-MUG-MATERIAL-001": Object.freeze({
+      carrierId: "cp02-memory-thermos",
+      bytes: 7_159_640,
+      sha256: "f92b05260ea0075b8095a36dac23e457bc22489b3c1cb5240178796d3b705562",
+    }),
+  }),
+});
 
 const exactTarget = Object.freeze({ modelName: "MacBook Air", chip: "Apple M5" });
 const softwareRendererPattern = /swiftshader|llvmpipe|software renderer|mesa offscreen/i;
@@ -79,7 +102,9 @@ export function longestLowQualityInterval(samples, threshold = 0.75) {
 export function isLocalRequest(rawUrl) {
   try {
     const url = new URL(rawUrl);
-    return ["127.0.0.1", "localhost"].includes(url.hostname);
+    const effective = url.protocol === "blob:" ? new URL(url.pathname) : url;
+    return ["http:", "https:"].includes(effective.protocol)
+      && ["127.0.0.1", "localhost"].includes(effective.hostname);
   } catch {
     return false;
   }
@@ -282,9 +307,43 @@ const assertExactIds = (actual, expected, label) => {
 const expectedPatchIds = () => {
   const catalog = readJson(catalogPath).filter((asset) => asset.status === "PROJECT_AUTHORED_PROXY");
   const idsFor = (asset) => [asset.objectId, ...asset.bundle.children.map((child) => child.id)];
-  const initial = catalog.flatMap(idsFor);
+  const initial = catalog.filter((asset) => ["table", "chair", "cup"].includes(asset.semanticClass)).flatMap(idsFor);
   const chair = idsFor(catalog.find((asset) => asset.semanticClass === "chair"));
-  return { initial, chair };
+  const thermos = idsFor(catalog.find((asset) => asset.semanticClass === "thermos"));
+  return { initial, chair, thermos };
+};
+
+const assertCasePackEvidence = (state) => {
+  assert(state.casePack?.status === "VERIFIED", "CP02 Case Pack must be VERIFIED before interaction");
+  assert(state.casePack.casePackId === expectedCasePack.casePackId, "CP02 Case Pack ID mismatch");
+  assert(state.casePack.manifestSha256 === expectedCasePack.manifestSha256, "CP02 Case Pack manifest hash mismatch");
+  assert(state.casePack.publicReleaseAuthorized === false, "Local Case Pack must not claim public release");
+  const records = Object.fromEntries(state.casePack.assets.map((asset) => [asset.assetId, asset]));
+  assertExactIds(Object.keys(records), Object.keys(expectedCasePack.assets), "Case Pack asset catalog");
+  for (const [assetId, expected] of Object.entries(expectedCasePack.assets)) {
+    assert(records[assetId]?.bytes === expected.bytes, `Case Pack ${assetId} byte count mismatch`);
+    assert(records[assetId]?.sha256 === expected.sha256, `Case Pack ${assetId} hash mismatch`);
+    assert(records[assetId]?.publicDisplay === false, `Case Pack ${assetId} must remain local-only`);
+  }
+};
+
+const assertMaterialized = (state, assetIds, label) => {
+  const records = Object.fromEntries(state.materializedAssets.map((asset) => [asset.assetId, asset]));
+  assertExactIds(Object.keys(records), assetIds, `${label} materialized assets`);
+  for (const assetId of assetIds) {
+    const expected = expectedCasePack.assets[assetId];
+    assert(records[assetId]?.carrierId === expected.carrierId, `${label} ${assetId} carrier mismatch`);
+    assert(records[assetId]?.sha256 === expected.sha256, `${label} ${assetId} materialized hash mismatch`);
+    assert(records[assetId]?.status === "MATERIALIZED", `${label} ${assetId} is not materialized`);
+    assert(records[assetId]?.report?.format === "GLB", `${label} ${assetId} did not report GLB format`);
+    assert(records[assetId]?.report?.meshCount > 0, `${label} ${assetId} has no rendered mesh`);
+    assert(records[assetId]?.report?.preserveAspect === true, `${label} ${assetId} lost aspect-preserving fit`);
+    assert(
+      records[assetId]?.report?.bounds?.length === 3
+        && records[assetId].report.bounds.every((value) => Number.isFinite(value) && value > 0),
+      `${label} ${assetId} has invalid source bounds`,
+    );
+  }
 };
 
 const waitForReady = (page) => page.waitForFunction(
@@ -310,6 +369,8 @@ export async function runInteractionSequence(page, { stillsDir = null, pauseMs =
 
   await waitForReady(page);
   const initial = await snapshot(page);
+  assertCasePackEvidence(initial);
+  assertMaterialized(initial, [], "Initial state");
   assert(initial.objectCount === 200, `CP02 initial object count must be 200, got ${initial.objectCount}`);
   assert(initial.governanceCounts.SOURCE_LOCKED === 1, "CP02 must contain exactly one SOURCE_LOCKED object");
   await maybeScreenshot("01-establishing.png");
@@ -333,7 +394,8 @@ export async function runInteractionSequence(page, { stillsDir = null, pauseMs =
     const state = window.__PACT_CP02_EVIDENCE__.snapshot();
     return state.appliedPatchDepth === 1
       && state.latestReceipt?.outcome === "APPLIED"
-      && state.projectHash === state.latestReceipt.resultHash;
+      && state.projectHash === state.latestReceipt.resultHash
+      && state.materializedAssets.length === 2;
   });
   const authorised = await snapshot(page);
   receipts.initialApply = authorised.latestReceipt;
@@ -341,7 +403,59 @@ export async function runInteractionSequence(page, { stillsDir = null, pauseMs =
   assert(receipts.initialApply.protectedPreconditionHash === receipts.initialApply.protectedResultHash, "Initial patch changed protected objects");
   assertExactIds(receipts.initialApply.expectedChangedObjectIds, expected.initial, "Initial patch");
   assert(authorised.objectCount === 218, `Authorised room must contain 218 objects, got ${authorised.objectCount}`);
+  assertMaterialized(authorised, ["PH-TABLE-WOODEN-001", "PH-CHAIR-SCHOOL-001"], "Initial allow");
   await maybeScreenshot("04-authorised.png");
+  await maybePause();
+
+  await page.locator("#cp02-propose-thermos").click();
+  await page.waitForFunction(() => {
+    const state = window.__PACT_CP02_EVIDENCE__.snapshot();
+    return state.outcome === "PROPOSED" && state.currentPatch?.patchId === "CP02-REFRAME-THERMOS-001";
+  });
+  const thermosProposed = await snapshot(page);
+  assert(thermosProposed.projectHash === authorised.projectHash, "Thermos proposal mutated SceneStore");
+  assert(thermosProposed.proposalPrimitiveCount === 1, "Thermos proposal must use one ephemeral carrier primitive");
+  await maybeScreenshot("05-thermos-proposed.png");
+  await maybePause();
+
+  await page.locator("#cp02-guardian-allow").click();
+  await page.waitForFunction(() => {
+    const state = window.__PACT_CP02_EVIDENCE__.snapshot();
+    return state.appliedPatchDepth === 2
+      && state.latestReceipt?.patchId === "CP02-REFRAME-THERMOS-001"
+      && state.latestReceipt?.outcome === "APPLIED"
+      && state.projectHash === state.latestReceipt.resultHash
+      && state.materializedAssets.length === 3;
+  });
+  const thermosAuthorised = await snapshot(page);
+  receipts.thermosApply = thermosAuthorised.latestReceipt;
+  assertExactIds(receipts.thermosApply.expectedChangedObjectIds, expected.thermos, "Thermos patch");
+  assert(thermosAuthorised.objectCount === 220, `Thermos room must contain 220 objects, got ${thermosAuthorised.objectCount}`);
+  assert(thermosAuthorised.authorisedObjectIds.includes("cp02-memory-cup"), "Existing cup disappeared after thermos add");
+  assert(thermosAuthorised.authorisedObjectIds.includes("cp02-memory-thermos"), "Thermos carrier is absent after allow");
+  assertMaterialized(
+    thermosAuthorised,
+    ["PH-TABLE-WOODEN-001", "PH-CHAIR-SCHOOL-001", "PH-MUG-MATERIAL-001"],
+    "Thermos allow",
+  );
+  await maybeScreenshot("06-cup-and-thermos.png");
+  await maybePause();
+
+  await page.locator("#cp02-undo").click();
+  await page.waitForFunction(() => {
+    const state = window.__PACT_CP02_EVIDENCE__.snapshot();
+    return state.appliedPatchDepth === 1
+      && state.latestReceipt?.outcome === "UNDONE"
+      && state.projectHash === state.latestReceipt.resultHash
+      && state.materializedAssets.length === 2;
+  });
+  const thermosUndone = await snapshot(page);
+  receipts.undoThermos = thermosUndone.latestReceipt;
+  assert(thermosUndone.projectHash === authorised.projectHash, "Thermos undo did not restore furniture state");
+  assert(thermosUndone.authorisedObjectIds.includes("cp02-memory-cup"), "Thermos undo removed the existing cup");
+  assert(!thermosUndone.authorisedObjectIds.includes("cp02-memory-thermos"), "Thermos undo left its carrier in SceneStore");
+  assertMaterialized(thermosUndone, ["PH-TABLE-WOODEN-001", "PH-CHAIR-SCHOOL-001"], "Thermos undo");
+  await maybeScreenshot("07-thermos-undone.png");
   await maybePause();
 
   await page.locator("#cp02-move-chair").click();
@@ -379,7 +493,8 @@ export async function runInteractionSequence(page, { stillsDir = null, pauseMs =
   receipts.undoInitial = undone.latestReceipt;
   assert(undone.projectHash === initial.projectHash, "Two exact undos did not restore the initial project hash");
   assert(undone.objectCount === 200, "Two exact undos did not restore the initial object count");
-  await maybeScreenshot("05-undone.png");
+  assertMaterialized(undone, [], "Full undo");
+  await maybeScreenshot("08-undone.png");
   await maybePause();
 
   const beforeSourceAttemptHash = undone.projectHash;
@@ -395,13 +510,16 @@ export async function runInteractionSequence(page, { stillsDir = null, pauseMs =
   assert(rejected.projectHash === beforeSourceAttemptHash, "Rejected source-photo patch changed the project hash");
   assert(receipts.sourceRejected.reasonCode === "SCENE_PATCH_REJECTED", "Source-photo patch did not use ScenePatch rejection");
   assert(rejected.governanceCounts.SOURCE_LOCKED === 1, "Source-photo rejection lost SOURCE_LOCKED state");
-  await maybeScreenshot("06-rejected.png");
+  await maybeScreenshot("09-rejected.png");
   await maybePause();
 
   return {
     initial,
     proposed,
     authorised,
+    thermosProposed,
+    thermosAuthorised,
+    thermosUndone,
     moved,
     undone,
     rejected,
@@ -437,6 +555,7 @@ export async function benchmarkPatchCycles(page, cycles = 20) {
     assert(applied.latestReceipt.preconditionHash === baseline.projectHash, `Benchmark apply ${index + 1} precondition mismatch`);
     assert(applied.latestReceipt.protectedPreconditionHash === applied.latestReceipt.protectedResultHash, `Benchmark apply ${index + 1} changed protected objects`);
     assertExactIds(applied.latestReceipt.expectedChangedObjectIds, expected.initial, `Benchmark apply ${index + 1}`);
+    assertMaterialized(applied, ["PH-TABLE-WOODEN-001", "PH-CHAIR-SCHOOL-001"], `Benchmark apply ${index + 1}`);
 
     const receiptCountBeforeUndo = applied.receipts.length;
     const undoStartedAt = await page.evaluate(() => performance.now());
@@ -453,6 +572,7 @@ export async function benchmarkPatchCycles(page, cycles = 20) {
     assert(restored.projectHash === baseline.projectHash, `Benchmark undo ${index + 1} did not restore precondition`);
     assert(restored.latestReceipt.protectedPreconditionHash === applied.latestReceipt.protectedResultHash, `Benchmark undo ${index + 1} protected precondition mismatch`);
     assert(restored.latestReceipt.protectedResultHash === applied.latestReceipt.protectedPreconditionHash, `Benchmark undo ${index + 1} protected result mismatch`);
+    assertMaterialized(restored, [], `Benchmark undo ${index + 1}`);
   }
 
   return { cycles, applyMs, undoMs, apply: summarizeSeries(applyMs), undo: summarizeSeries(undoMs) };
@@ -527,16 +647,18 @@ const prepareEvidenceDirectories = (runId) => {
 const writeReceipts = (receiptsDir, receipts) => {
   const names = {
     initialApply: "01-initial-apply.json",
-    chairMove: "02-chair-move.json",
-    undoChair: "03-undo-chair.json",
-    undoInitial: "04-undo-initial.json",
-    sourceRejected: "05-source-rejected.json",
+    thermosApply: "02-thermos-apply.json",
+    undoThermos: "03-undo-thermos.json",
+    chairMove: "04-chair-move.json",
+    undoChair: "05-undo-chair.json",
+    undoInitial: "06-undo-initial.json",
+    sourceRejected: "07-source-rejected.json",
   };
   for (const [key, filename] of Object.entries(names)) writeJson(path.join(receiptsDir, filename), receipts[key]);
 };
 
 export async function runSmokeEvidence() {
-  for (const required of [projectPath, catalogPath, sourceLockPath]) {
+  for (const required of [projectPath, catalogPath, sourceLockPath, casePackManifestPath]) {
     assert(fs.existsSync(required), `Missing CP02 evidence input: ${required}`);
   }
   const runId = safeTimestamp();
@@ -628,6 +750,11 @@ export async function runSmokeEvidence() {
         finalProjectHash: interaction.rejected.projectHash,
         exactUndoRestored: interaction.rejected.projectHash === interaction.initial.projectHash,
         sourcePhotoRejected: interaction.receipts.sourceRejected.outcome === "WITHHELD",
+        realTableAndChairMaterialized: interaction.authorised.materializedAssets.length === 2,
+        cupAndThermosCoexisted: interaction.thermosAuthorised.authorisedObjectIds.includes("cp02-memory-cup")
+          && interaction.thermosAuthorised.authorisedObjectIds.includes("cp02-memory-thermos"),
+        thermosUndoPreservedCup: interaction.thermosUndone.authorisedObjectIds.includes("cp02-memory-cup")
+          && !interaction.thermosUndone.authorisedObjectIds.includes("cp02-memory-thermos"),
       },
       operationBenchmark,
       adaptive,

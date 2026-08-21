@@ -243,6 +243,25 @@
               </div>
             </dl>
 
+            <dl class="cp02-source-lock cp02-case-pack-lock">
+              <div>
+                <dt>本地 Case Pack</dt>
+                <dd id="cp02-case-pack-id">LOADING</dd>
+              </div>
+              <div>
+                <dt>manifest SHA-256</dt>
+                <dd id="cp02-case-pack-hash">LOADING</dd>
+              </div>
+              <div>
+                <dt>已材质化</dt>
+                <dd id="cp02-materialized-count">0 / 3</dd>
+              </div>
+            </dl>
+
+            <ul id="cp02-case-pack-assets" class="cp02-case-pack-assets" aria-label="固定本地 GLB 哈希">
+              <li>正在核验固定本地 GLB…</li>
+            </ul>
+
             <label class="cp02-prompt" for="cp02-utterance">
               <span>观众记忆陈述</span>
               <textarea id="cp02-utterance" rows="3" spellcheck="false">我记得床边有一张小桌子、一把椅子，桌上放着一个旧杯子。</textarea>
@@ -260,7 +279,8 @@
             </div>
 
             <div class="cp02-secondary-actions">
-              <button id="cp02-move-chair" class="cp02-action" type="button" disabled>03 · 椅子退出亲近位置</button>
+              <button id="cp02-propose-thermos" class="cp02-action" type="button" disabled>03 · 再提出旧保温杯（保留杯子）</button>
+              <button id="cp02-move-chair" class="cp02-action" type="button" disabled>04 · 椅子退出亲近位置</button>
               <button id="cp02-undo" class="cp02-action" type="button" disabled>撤销上一补丁</button>
             </div>
 

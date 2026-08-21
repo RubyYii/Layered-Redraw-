@@ -22,5 +22,11 @@
     "semanticClass": "cup",
     "position": [1.25, 1.2, -1.85],
     "rotation": [0, 0, 0]
+  },
+  {
+    "id": "memory-thermos-on-table",
+    "semanticClass": "thermos",
+    "position": [1.52, 1.28, -2.05],
+    "rotation": [0, -12, 0]
   }
 ]

@@ -7,6 +7,7 @@ import { SceneStore, normalizeProject, serializeProject } from "./model.js";
 import {
   applyScenePatch,
   hashProject,
+  serializeProjectForHash,
   undoScenePatch,
   validateScenePatch,
 } from "./scene-patch-runtime.js";
@@ -49,6 +50,42 @@ describe("transactional CP02 ScenePatch", () => {
 
   beforeEach(() => {
     project = normalizeProject(projectFixture);
+  });
+
+  it("binds large inline evidence bytes without reserializing them into every project hash payload", async () => {
+    const fullSerialization = serializeProject(project);
+    const compactPayload = await serializeProjectForHash(project);
+    const changed = structuredClone(project);
+    const photo = changed.objects.find((object) => object.id === "sandbox-photo_image");
+    const replacement = photo.render.textureDataUrl.endsWith("A") ? "B" : "A";
+    photo.render.textureDataUrl = `${photo.render.textureDataUrl.slice(0, -1)}${replacement}`;
+
+    expect(compactPayload.length).toBeLessThan(fullSerialization.length / 10);
+    expect(await serializeProjectForHash(changed)).not.toBe(compactPayload);
+    expect(await hashProject(changed)).not.toBe(await hashProject(project));
+  });
+
+  it("validates a patch without structured-cloning large inline evidence bytes", async () => {
+    const patch = await validReframePatch(project);
+    const originalStructuredClone = globalThis.structuredClone;
+    let failure;
+
+    globalThis.structuredClone = (value, options) => {
+      const containsLargeInlineEvidence = value?.objects?.some(
+        (object) => object.render?.textureDataUrl?.length > 1_000_000,
+      );
+      if (containsLargeInlineEvidence) throw new Error("large inline evidence reached structuredClone");
+      return originalStructuredClone(value, options);
+    };
+    try {
+      await validateScenePatch({ project, catalog, slots, patch, mode: "engineering-evidence" });
+    } catch (error) {
+      failure = error;
+    } finally {
+      globalThis.structuredClone = originalStructuredClone;
+    }
+
+    expect(failure).toBeUndefined();
   });
 
   it("rejects any patch that targets the source photograph", async () => {
@@ -168,6 +205,58 @@ describe("transactional CP02 ScenePatch", () => {
     await undoScenePatch({ store, receipt: moveReceipt });
     expect(store.getState().project.objects.find((object) => object.id === "cp02-memory-chair").governance.slotId)
       .toBe("memory-chair-near");
+    await undoScenePatch({ store, receipt: firstReceipt });
+    expect(await hashProject(store.getState().project)).toBe(originalHash);
+  });
+
+  it("adds the thermos on a sized carrier, keeps the cup, and undoes only the follow-up first", async () => {
+    const store = new SceneStore(project);
+    const originalHash = await hashProject(store.getState().project);
+    const firstReceipt = await applyScenePatch({
+      store,
+      catalog,
+      slots,
+      patch: await validReframePatch(store.getState().project),
+      guardianDecision: "ALLOW",
+      mode: "engineering-evidence",
+    });
+    const afterFurnitureHash = await hashProject(store.getState().project);
+    const thermosIds = idsFor("CP02-THERMOS-CARRIER-001");
+    const thermosPatch = {
+      schemaVersion: 1,
+      patchId: "CP02-REFRAME-THERMOS-001",
+      caseAction: "Reframe",
+      provider: "deterministic-cp02-fixture-v1",
+      reason: "Participant adds a thermos while preserving the existing cup.",
+      preconditionHash: afterFurnitureHash,
+      expectedChangedObjectIds: thermosIds,
+      forbiddenChangedObjectIds: protectedIds,
+      operations: [{
+        kind: "add",
+        assetId: "CP02-THERMOS-CARRIER-001",
+        slotId: "memory-thermos-on-table",
+      }],
+    };
+    const thermosReceipt = await applyScenePatch({
+      store,
+      catalog,
+      slots,
+      patch: thermosPatch,
+      guardianDecision: "ALLOW",
+      mode: "engineering-evidence",
+    });
+
+    const afterThermos = store.getState().project;
+    expect(thermosReceipt.outcome).toBe("APPLIED");
+    expect(afterThermos.objects.some((object) => object.id === "cp02-memory-cup")).toBe(true);
+    expect(afterThermos.objects.find((object) => object.id === "cp02-memory-thermos")?.dimensions)
+      .toEqual([0.22, 0.34, 0.22]);
+
+    await undoScenePatch({ store, receipt: thermosReceipt });
+    expect(await hashProject(store.getState().project)).toBe(afterFurnitureHash);
+    expect(store.getState().project.objects.some((object) => object.id === "cp02-memory-cup")).toBe(true);
+    expect(store.getState().project.objects.some((object) => object.id === "cp02-memory-thermos")).toBe(false);
+
     await undoScenePatch({ store, receipt: firstReceipt });
     expect(await hashProject(store.getState().project)).toBe(originalHash);
   });

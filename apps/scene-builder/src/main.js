@@ -25,6 +25,7 @@ import {
   hashProject,
   undoScenePatch,
 } from "./scene-patch-runtime.js";
+import { loadCasePack } from "./case-pack-runtime.js";
 import cp02AssetCatalog from "../projects/window-case-cp02/asset-catalog.json";
 import cp02SceneSlots from "../projects/window-case-cp02/scene-slots.json";
 
@@ -37,6 +38,23 @@ const cp02ProjectUrl = new URL(
   "../projects/window-case-cp02/cp02-mutable-room.blockout.json",
   import.meta.url,
 ).href;
+const cp02CasePackRoot = "/case-packs/pact-cp02/";
+const cp02InitialUtterance = "我记得床边有一张小桌子、一把椅子，桌上放着一个旧杯子。";
+const cp02ThermosUtterance = "桌上还应该有一个旧保温杯，但不要替换那个杯子。";
+const cp02MaterializationBindings = Object.freeze({
+  "CP02-TABLE-PROXY-001": Object.freeze({
+    carrierId: "cp02-memory-table",
+    casePackAssetId: "PH-TABLE-WOODEN-001",
+  }),
+  "CP02-CHAIR-PROXY-001": Object.freeze({
+    carrierId: "cp02-memory-chair",
+    casePackAssetId: "PH-CHAIR-SCHOOL-001",
+  }),
+  "CP02-THERMOS-CARRIER-001": Object.freeze({
+    carrierId: "cp02-memory-thermos",
+    casePackAssetId: "PH-MUG-MATERIAL-001",
+  }),
+});
 
 const $ = (selector) => {
   const element = document.querySelector(selector);
@@ -208,6 +226,7 @@ const elements = {
   cp02Preview: $("#cp02-preview"),
   cp02GuardianAllow: $("#cp02-guardian-allow"),
   cp02GuardianReject: $("#cp02-guardian-reject"),
+  cp02ProposeThermos: $("#cp02-propose-thermos"),
   cp02MoveChair: $("#cp02-move-chair"),
   cp02Undo: $("#cp02-undo"),
   cp02AttemptSourceRewrite: $("#cp02-attempt-source-rewrite"),
@@ -216,6 +235,10 @@ const elements = {
   cp02SourceHash: $("#cp02-source-hash"),
   cp02PatchId: $("#cp02-patch-id"),
   cp02Outcome: $("#cp02-outcome"),
+  cp02CasePackId: $("#cp02-case-pack-id"),
+  cp02CasePackHash: $("#cp02-case-pack-hash"),
+  cp02MaterializedCount: $("#cp02-materialized-count"),
+  cp02CasePackAssets: $("#cp02-case-pack-assets"),
   cp02PatchPreview: $("#cp02-patch-preview"),
   cp02Phase: $("#cp02-phase"),
   toast: $("#toast"),
@@ -236,9 +259,11 @@ let lastTimelineUiTime = -Infinity;
 let lastDialogueClipId = null;
 let cp02LastHashedProject = null;
 let cp02HashSequence = 0;
+let cp02RuntimeCasePack = null;
 
 const cp02Evidence = {
   ready: false,
+  sceneReady: false,
   busy: false,
   phase: "READY",
   outcome: "READY",
@@ -249,6 +274,15 @@ const cp02Evidence = {
   latestReceipt: null,
   receipts: [],
   appliedReceipts: [],
+  casePack: {
+    status: "LOADING",
+    casePackId: null,
+    manifestSha256: null,
+    publicReleaseAuthorized: false,
+    assets: [],
+  },
+  materializedAssets: {},
+  materializationErrors: [],
   latestPerformanceReport: null,
 };
 
@@ -293,6 +327,51 @@ const cp02ProposalPositions = (patch) => (patch?.operations ?? [])
   .map((operation) => cp02SceneSlots.find((slot) => slot.id === operation.slotId)?.position)
   .filter(Boolean);
 
+const cp02MaterializedAssetList = () => Object.values(cp02Evidence.materializedAssets)
+  .sort((left, right) => left.assetId.localeCompare(right.assetId));
+
+const updateCp02Ready = () => {
+  cp02Evidence.ready = cp02Evidence.sceneReady && cp02Evidence.casePack.status === "VERIFIED";
+  if (cp02Evidence.ready && !cp02Evidence.busy) {
+    cp02Evidence.phase = "本地场景与 hash-bound Case Pack 已就绪；等待观众提出记忆。";
+  }
+};
+
+const sha256Text = async (value) => {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((entry) => entry.toString(16).padStart(2, "0")).join("");
+};
+
+const casePackAssetRecord = (assetId) => cp02Evidence.casePack.assets
+  .find((asset) => asset.assetId === assetId);
+
+const reconcileCp02MaterializedAssets = () => {
+  const objectIds = new Set(currentState.project.objects.map((object) => object.id));
+  for (const [assetId, record] of Object.entries(cp02Evidence.materializedAssets)) {
+    if (!objectIds.has(record.carrierId) || !editor.assetReport(record.carrierId)) {
+      delete cp02Evidence.materializedAssets[assetId];
+    }
+  }
+};
+
+const renderCp02CasePack = () => {
+  const pack = cp02Evidence.casePack;
+  elements.cp02CasePackId.textContent = pack.casePackId ?? pack.status;
+  elements.cp02CasePackHash.textContent = pack.manifestSha256
+    ? `${pack.manifestSha256.slice(0, 10)}…${pack.manifestSha256.slice(-6)}`
+    : pack.status;
+  elements.cp02CasePackHash.title = pack.manifestSha256 ?? pack.status;
+  elements.cp02MaterializedCount.textContent = `${cp02MaterializedAssetList().length} / ${pack.assets.length || 3}`;
+  elements.cp02CasePackAssets.replaceChildren(...pack.assets.map((asset) => {
+    const item = document.createElement("li");
+    const materialized = cp02Evidence.materializedAssets[asset.assetId];
+    item.dataset.status = materialized ? "MATERIALIZED" : "VERIFIED";
+    item.textContent = `${materialized ? "●" : "○"} ${asset.assetId} · ${asset.sha256.slice(0, 8)}…${asset.sha256.slice(-6)}`;
+    item.title = `${asset.filename}\nbytes=${asset.bytes}\nsha256=${asset.sha256}\npublicDisplay=false`;
+    return item;
+  }));
+};
+
 const renderCp02PatchList = () => {
   elements.cp02PatchPreview.replaceChildren();
   const patch = cp02Evidence.currentPatch;
@@ -336,15 +415,24 @@ const renderCp02Surface = () => {
   elements.cp02Phase.textContent = cp02Evidence.phase;
 
   const chair = project.objects.find((object) => object.id === "cp02-memory-chair");
+  const hasInitialFurniture = project.objects.some((object) => object.id === "cp02-memory-table")
+    && project.objects.some((object) => object.id === "cp02-memory-cup");
+  const hasThermos = project.objects.some((object) => object.id === "cp02-memory-thermos");
   const canMoveChair = chair?.governance?.state === "AUTHORISED"
     && chair.governance.slotId === "memory-chair-near";
   elements.cp02Preview.disabled = !cp02Evidence.ready || cp02Evidence.busy || cp02Evidence.appliedReceipts.length > 0;
   elements.cp02GuardianAllow.disabled = cp02Evidence.busy || !cp02Evidence.currentPatch;
   elements.cp02GuardianReject.disabled = cp02Evidence.busy || !cp02Evidence.currentPatch;
+  elements.cp02ProposeThermos.disabled = cp02Evidence.busy
+    || !cp02Evidence.ready
+    || !hasInitialFurniture
+    || hasThermos
+    || Boolean(cp02Evidence.currentPatch);
   elements.cp02MoveChair.disabled = cp02Evidence.busy || !canMoveChair || Boolean(cp02Evidence.currentPatch);
   elements.cp02Undo.disabled = cp02Evidence.busy || cp02Evidence.appliedReceipts.length === 0;
   elements.cp02AttemptSourceRewrite.disabled = !cp02Evidence.ready || cp02Evidence.busy;
   elements.cp02DownloadReceipt.disabled = !cp02Evidence.latestReceipt;
+  renderCp02CasePack();
   renderCp02PatchList();
 };
 
@@ -357,10 +445,12 @@ const refreshCp02ProjectHash = async (project) => {
     if (sequence !== cp02HashSequence) return;
     cp02Evidence.projectHash = projectHash;
     cp02Evidence.initialProjectHash ??= projectHash;
-    cp02Evidence.ready = true;
+    cp02Evidence.sceneReady = true;
+    updateCp02Ready();
     renderCp02Surface();
   } catch (error) {
     cp02Evidence.ready = false;
+    cp02Evidence.sceneReady = false;
     cp02Evidence.phase = `哈希校验失败：${error.message}`;
     renderCp02Surface();
   }
@@ -389,10 +479,12 @@ const runCp02Action = async (pendingLabel, action) => {
   }
 };
 
-const previewCp02Reframe = () => runCp02Action("正在将记忆陈述转为受限意图…", async () => {
+const previewCp02Reframe = (participantText = elements.cp02Utterance.value) => runCp02Action(
+  "正在将记忆陈述转为受限意图…",
+  async () => {
   const turn = await runSceneCompositionTurn({
     project: currentState.project,
-    text: elements.cp02Utterance.value,
+    text: participantText,
     decide: decideCp02ReframeIntent,
     catalog: cp02AssetCatalog,
     slots: cp02SceneSlots,
@@ -414,7 +506,60 @@ const previewCp02Reframe = () => runCp02Action("正在将记忆陈述转为受�
     slots: cp02SceneSlots,
     patch: turn.patchPreview,
   });
-});
+  },
+);
+
+const previewCp02Thermos = () => {
+  elements.cp02Utterance.value = cp02ThermosUtterance;
+  return previewCp02Reframe(cp02ThermosUtterance);
+};
+
+const materializeCp02PatchAssets = async (patch) => {
+  if (!cp02RuntimeCasePack || cp02Evidence.casePack.status !== "VERIFIED") {
+    throw new Error("本地 Case Pack 尚未通过固定 catalog 与 hash 校验");
+  }
+  const bindings = [...new Map((patch.operations ?? [])
+    .map((operation) => cp02MaterializationBindings[operation.assetId])
+    .filter(Boolean)
+    .map((binding) => [binding.casePackAssetId, binding])).values()];
+  const loaded = [];
+  try {
+    for (const binding of bindings) {
+      const source = casePackAssetRecord(binding.casePackAssetId);
+      if (!source) throw new Error(`Case Pack 缺少批准资产：${binding.casePackAssetId}`);
+      const report = await editor.loadCasePackAsset(
+        binding.carrierId,
+        cp02RuntimeCasePack,
+        binding.casePackAssetId,
+      );
+      loaded.push({
+        assetId: binding.casePackAssetId,
+        carrierId: binding.carrierId,
+        bytes: source.bytes,
+        sha256: source.sha256,
+        status: "MATERIALIZED",
+        report: {
+          format: report.format,
+          meshCount: report.meshCount,
+          boneCount: report.boneCount,
+          clipNames: report.clipNames,
+          bounds: report.bounds,
+          unitBounds: report.unitBounds,
+          preserveAspect: report.preserveAspect,
+        },
+      });
+    }
+  } catch (error) {
+    for (const record of loaded) editor.clearAsset(record.carrierId);
+    cp02Evidence.materializationErrors.push({
+      patchId: patch.patchId,
+      message: error.message,
+    });
+    throw error;
+  }
+  for (const record of loaded) cp02Evidence.materializedAssets[record.assetId] = record;
+  return loaded;
+};
 
 const decideCp02Patch = (guardianDecision) => runCp02Action(
   guardianDecision === "ALLOW" ? "Guardian 正在核验并执行补丁…" : "Guardian 正在拒绝补丁…",
@@ -430,14 +575,25 @@ const decideCp02Patch = (guardianDecision) => runCp02Action(
       guardianDecision,
       mode: "engineering-evidence",
     });
-    if (receipt.outcome === "APPLIED") cp02Evidence.appliedReceipts.push(structuredClone(receipt));
+    if (receipt.outcome === "APPLIED") {
+      try {
+        await materializeCp02PatchAssets(patch);
+      } catch (error) {
+        recordCp02Receipt(receipt);
+        const rollback = await undoScenePatch({ store, receipt });
+        reconcileCp02MaterializedAssets();
+        recordCp02Receipt(rollback);
+        throw new Error(`真实本地资产材质化失败，ScenePatch 已回滚：${error.message}`);
+      }
+      cp02Evidence.appliedReceipts.push(structuredClone(receipt));
+    }
     recordCp02Receipt(receipt);
     cp02Evidence.currentPatch = null;
     cp02Evidence.currentTurn = null;
     editor.clearCp02ProposalPreview();
     editor.showCp02DecisionPressure({ positions, outcome: receipt.outcome, durationMs: 1800 });
     cp02Evidence.phase = receipt.outcome === "APPLIED"
-      ? `补丁已应用：${receipt.expectedChangedObjectIds.length} 个稳定对象 ID 发生预期改变。`
+      ? `补丁已应用并材质化：${receipt.expectedChangedObjectIds.length} 个稳定对象 ID 发生预期改变。`
       : "Guardian 已拒绝；房间状态与源图均未改变。";
   },
 );
@@ -485,6 +641,7 @@ const undoLatestCp02Patch = () => runCp02Action("正在核验回执并精确撤�
   if (!applied) throw new Error("没有可撤销的已应用补丁");
   const receipt = await undoScenePatch({ store, receipt: applied });
   cp02Evidence.appliedReceipts.pop();
+  reconcileCp02MaterializedAssets();
   recordCp02Receipt(receipt);
   cp02Evidence.currentPatch = null;
   cp02Evidence.currentTurn = null;
@@ -493,6 +650,7 @@ const undoLatestCp02Patch = () => runCp02Action("正在核验回执并精确撤�
   cp02Evidence.phase = cp02Evidence.appliedReceipts.length
     ? "上一补丁已精确撤销；初始家具改写仍在场景中。"
     : "补丁序列已全部撤销；房间恢复到 CP02 初始哈希。";
+  if (!cp02Evidence.appliedReceipts.length) elements.cp02Utterance.value = cp02InitialUtterance;
 });
 
 const attemptCp02SourceRewrite = () => runCp02Action("正在验证 SOURCE_LOCKED 拒绝路径…", async () => {
@@ -1217,8 +1375,59 @@ editor.setPreviewInteractionHandler((id) => {
   }
 });
 
+const loadCp02LocalCasePack = async () => {
+  cp02Evidence.casePack.status = "LOADING";
+  updateCp02Ready();
+  renderCp02Surface();
+  try {
+    const manifestUrl = new URL("case-pack.json", new URL(cp02CasePackRoot, window.location.href));
+    const response = await fetch(manifestUrl, {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`Case Pack manifest 请求失败（HTTP ${response.status}）`);
+    const manifestText = await response.text();
+    const manifestInput = JSON.parse(manifestText);
+    const casePack = await loadCasePack(cp02CasePackRoot, manifestInput);
+    const expectedIds = Object.values(cp02MaterializationBindings)
+      .map((binding) => binding.casePackAssetId)
+      .sort();
+    const actualIds = casePack.manifest.assets.map((asset) => asset.assetId).sort();
+    if (actualIds.length !== expectedIds.length || actualIds.some((assetId, index) => assetId !== expectedIds[index])) {
+      throw new Error("Case Pack 资产集合与 CP02 固定 materialization catalog 不一致");
+    }
+    cp02RuntimeCasePack = casePack;
+    cp02Evidence.casePack = {
+      status: "VERIFIED",
+      casePackId: casePack.casePackId,
+      manifestSha256: await sha256Text(manifestText),
+      publicReleaseAuthorized: casePack.manifest.publicReleaseAuthorized,
+      assets: casePack.manifest.assets.map((asset) => ({
+        assetId: asset.assetId,
+        filename: asset.filename,
+        bytes: asset.bytes,
+        sha256: asset.sha256,
+        publicDisplay: asset.publicDisplay,
+        placement: structuredClone(asset.placement),
+      })),
+    };
+    updateCp02Ready();
+    if (!cp02Evidence.ready) cp02Evidence.phase = "Case Pack 已核验；等待 CP02 场景哈希。";
+    renderCp02Surface();
+  } catch (error) {
+    cp02RuntimeCasePack = null;
+    cp02Evidence.ready = false;
+    cp02Evidence.casePack.status = "ERROR";
+    cp02Evidence.outcome = "ERROR";
+    cp02Evidence.phase = `CP02 Case Pack 载入失败：${error.message}`;
+    renderCp02Surface();
+  }
+};
+
 const loadCp02LocalProject = async () => {
   cp02Evidence.ready = false;
+  cp02Evidence.sceneReady = false;
   cp02Evidence.phase = "正在载入仓库内 CP02 固定场景…";
   renderCp02Surface();
   try {
@@ -1227,10 +1436,11 @@ const loadCp02LocalProject = async () => {
     const project = ensureInitialTimeline(await response.json());
     store.replaceProject(project);
     editor.setCameraPreset("perspective");
-    cp02Evidence.phase = "本地确定性运行时已就绪；等待观众提出记忆。";
     await refreshCp02ProjectHash(store.getState().project);
+    if (!cp02Evidence.ready) cp02Evidence.phase = "CP02 场景哈希已核验；等待本地 Case Pack。";
   } catch (error) {
     cp02Evidence.ready = false;
+    cp02Evidence.sceneReady = false;
     cp02Evidence.outcome = "ERROR";
     cp02Evidence.phase = `CP02 场景载入失败：${error.message}`;
     renderCp02Surface();
@@ -1247,6 +1457,7 @@ const setupCp02Case = () => {
   elements.cp02Preview.addEventListener("click", () => void previewCp02Reframe());
   elements.cp02GuardianAllow.addEventListener("click", () => void decideCp02Patch("ALLOW"));
   elements.cp02GuardianReject.addEventListener("click", () => void decideCp02Patch("REJECT"));
+  elements.cp02ProposeThermos.addEventListener("click", () => void previewCp02Thermos());
   elements.cp02MoveChair.addEventListener("click", () => void moveCp02Chair());
   elements.cp02Undo.addEventListener("click", () => void undoLatestCp02Patch());
   elements.cp02AttemptSourceRewrite.addEventListener("click", () => void attemptCp02SourceRewrite());
@@ -1266,6 +1477,10 @@ const setupCp02Case = () => {
       projectHash: cp02Evidence.projectHash,
       objectCount: currentState.project.objects.length,
       governanceCounts: cp02GovernanceCounts(currentState.project),
+      authorisedObjectIds: currentState.project.objects
+        .filter((object) => object.governance?.state === "AUTHORISED")
+        .map((object) => object.id)
+        .sort(),
       currentPatch: cp02Evidence.currentPatch,
       latestReceipt: cp02Evidence.latestReceipt,
       receipts: cp02Evidence.receipts,
@@ -1276,6 +1491,9 @@ const setupCp02Case = () => {
         0,
       ) ?? 0,
       performance: cp02Evidence.latestPerformanceReport,
+      casePack: cp02Evidence.casePack,
+      materializedAssets: cp02MaterializedAssetList(),
+      materializationErrors: cp02Evidence.materializationErrors,
       executionMode: "engineering-evidence",
       networkPolicy: "local-only",
       publicAssetDisplay: false,
@@ -1285,8 +1503,10 @@ const setupCp02Case = () => {
   runtime?.stop();
   setDirectorMode("preview");
   cp02Evidence.phase = "正在载入仓库内 CP02 固定场景…";
+  elements.cp02Utterance.value = cp02InitialUtterance;
   renderCp02Surface();
   void loadCp02LocalProject();
+  void loadCp02LocalCasePack();
 };
 
 SCREENPLAY_SYNTAX.forEach((syntax) => {

@@ -84,7 +84,7 @@ describe("CP02 scene governance", () => {
     )).toThrow(/curated-public/i);
   });
 
-  it("validates the frozen four slots, three proxies, and three discovered candidates", () => {
+  it("validates five authored slots, four proxy carriers, and three fixed local candidates", () => {
     const slots = validateSceneSlots(slotFixture);
     const catalog = validateAssetCatalog(catalogFixture);
     const proxies = catalog.filter((record) => record.status === "PROJECT_AUTHORED_PROXY");
@@ -95,13 +95,37 @@ describe("CP02 scene governance", () => {
       "memory-chair-near",
       "memory-chair-withdrawn",
       "memory-cup-on-table",
+      "memory-thermos-on-table",
     ]);
     expect(proxies.map((record) => record.assetId)).toEqual([
       "CP02-TABLE-PROXY-001",
       "CP02-CHAIR-PROXY-001",
       "CP02-CUP-PROXY-001",
+      "CP02-THERMOS-CARRIER-001",
     ]);
     expect(candidates).toHaveLength(3);
     expect(candidates.every((record) => record.publicDisplay === false)).toBe(true);
+    expect(candidates.find((record) => record.assetId === "PH-MUG-MATERIAL-001")?.semanticClass)
+      .toBe("thermos");
+  });
+
+  it("preserves deterministic carrier dimensions for aspect-preserving GLB fit", () => {
+    const slots = validateSceneSlots(slotFixture);
+    const catalog = validateAssetCatalog(catalogFixture);
+    const resolvedTable = resolveAssetForSlot(
+      catalog,
+      slots,
+      "CP02-TABLE-PROXY-001",
+      "memory-table-bedside",
+    );
+    const resolvedThermos = resolveAssetForSlot(
+      catalog,
+      slots,
+      "CP02-THERMOS-CARRIER-001",
+      "memory-thermos-on-table",
+    );
+
+    expect(resolvedTable.asset.carrierDimensions).toEqual([1.65, 0.72, 0.72]);
+    expect(resolvedThermos.asset.carrierDimensions).toEqual([0.22, 0.34, 0.22]);
   });
 });

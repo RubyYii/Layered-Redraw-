@@ -81,6 +81,10 @@ describe("CP02 browser evidence statistics", () => {
   it("accepts only loopback browser requests", () => {
     expect(isLocalRequest("http://127.0.0.1:5173/src/main.js")).toBe(true);
     expect(isLocalRequest("http://localhost:5173/favicon.svg")).toBe(true);
+    expect(isLocalRequest("blob:http://127.0.0.1:5173/embedded-texture-id")).toBe(true);
+    expect(isLocalRequest("blob:http://localhost:5173/embedded-texture-id")).toBe(true);
+    expect(isLocalRequest("blob:https://example.com/remote-id")).toBe(false);
+    expect(isLocalRequest("data:image/png;base64,AAAA")).toBe(false);
     expect(isLocalRequest("https://example.com/model.glb")).toBe(false);
   });
 });

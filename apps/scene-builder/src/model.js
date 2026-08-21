@@ -76,6 +76,28 @@ const TIMELINE_TYPES = new Set(["move", "rotate", "scale", "visibility", "dialog
 const TIMELINE_TRACKS = new Set(["camera", "character", "prop", "environment", "dialogue"]);
 
 const clone = (value) => structuredClone(value);
+const cloneProjectValue = (value) => {
+  if (Array.isArray(value)) return value.map(cloneProjectValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, cloneProjectValue(entry)]));
+  }
+  return value;
+};
+
+const sameProjectValue = (left, right) => {
+  if (Object.is(left, right)) return true;
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left)
+      && Array.isArray(right)
+      && left.length === right.length
+      && left.every((entry, index) => sameProjectValue(entry, right[index]));
+  }
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key) => Object.hasOwn(right, key) && sameProjectValue(left[key], right[key]));
+};
 const now = () => new Date().toISOString();
 
 const finite = (value, fallback = 0) => {
@@ -566,7 +588,7 @@ export class SceneStore {
     this.selectionId = null;
     this.tool = "translate";
     this.listeners = new Set();
-    this.history = [clone(this.project)];
+    this.history = [cloneProjectValue(this.project)];
     this.historyIndex = 0;
   }
 
@@ -593,16 +615,16 @@ export class SceneStore {
 
   checkpoint() {
     const previous = this.history[this.historyIndex];
-    if (JSON.stringify(previous) === JSON.stringify(this.project)) return false;
+    if (sameProjectValue(previous, this.project)) return false;
     this.history = this.history.slice(0, this.historyIndex + 1);
-    this.history.push(clone(this.project));
+    this.history.push(cloneProjectValue(this.project));
     this.historyIndex = this.history.length - 1;
     this.emit();
     return true;
   }
 
   mutate(mutator, { history = true } = {}) {
-    const draft = clone(this.project);
+    const draft = cloneProjectValue(this.project);
     mutator(draft);
     draft.updatedAt = now();
     this.project = normalizeProject(draft);
@@ -817,7 +839,7 @@ export class SceneStore {
   replaceProject(project) {
     this.project = normalizeProject(project);
     this.selectionId = null;
-    this.history = [clone(this.project)];
+    this.history = [cloneProjectValue(this.project)];
     this.historyIndex = 0;
     this.emit();
   }
@@ -825,7 +847,7 @@ export class SceneStore {
   undo() {
     if (this.historyIndex <= 0) return false;
     this.historyIndex -= 1;
-    this.project = clone(this.history[this.historyIndex]);
+    this.project = cloneProjectValue(this.history[this.historyIndex]);
     if (!this.project.objects.some((object) => object.id === this.selectionId)) this.selectionId = null;
     this.emit();
     return true;
@@ -834,7 +856,7 @@ export class SceneStore {
   redo() {
     if (this.historyIndex >= this.history.length - 1) return false;
     this.historyIndex += 1;
-    this.project = clone(this.history[this.historyIndex]);
+    this.project = cloneProjectValue(this.history[this.historyIndex]);
     if (!this.project.objects.some((object) => object.id === this.selectionId)) this.selectionId = null;
     this.emit();
     return true;

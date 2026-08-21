@@ -76,6 +76,9 @@ export class ThreeSceneAdapter {
     this.assetControllers = new Map();
     this.assetLoadTokens = new Map();
     this.assetReplacementRootById = new Map();
+    this.casePackControllerCache = new Map();
+    this.casePackAssetIdByCarrier = new Map();
+    this.scenePatchMeshCache = new Map();
     this.timelineInteractionObjectIds = new Set();
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, 1.75);
     this.framePacing = new FramePacingMonitor();
@@ -293,6 +296,35 @@ export class ThreeSceneAdapter {
     });
   }
 
+  retainScenePatchMesh(id, mesh) {
+    if (
+      mesh.userData.governanceState !== "AUTHORISED"
+      || !mesh.userData.governanceAssetId
+    ) return false;
+    mesh.removeFromParent();
+    const previous = this.scenePatchMeshCache.get(id);
+    if (previous && previous !== mesh) this.disposeMesh(previous);
+    this.scenePatchMeshCache.set(id, mesh);
+    return true;
+  }
+
+  restoreScenePatchMesh(object) {
+    if (object.governance?.state !== "AUTHORISED" || !object.governance.assetId) return null;
+    const mesh = this.scenePatchMeshCache.get(object.id);
+    if (!mesh) return null;
+    this.scenePatchMeshCache.delete(object.id);
+    if (
+      mesh.userData.objectType !== object.type
+      || mesh.userData.governanceAssetId !== object.governance.assetId
+    ) {
+      this.disposeMesh(mesh);
+      return null;
+    }
+    this.scene.add(mesh);
+    this.meshes.set(object.id, mesh);
+    return mesh;
+  }
+
   sync(state) {
     this.lastState = state;
     const activeIds = new Set(state.project.objects.map((object) => object.id));
@@ -300,13 +332,13 @@ export class ThreeSceneAdapter {
       if (!activeIds.has(id)) {
         if (this.transformControls.object === mesh) this.transformControls.detach();
         this.clearAsset(id, { resync: false });
-        this.disposeMesh(mesh);
+        if (!this.retainScenePatchMesh(id, mesh)) this.disposeMesh(mesh);
         this.meshes.delete(id);
       }
     }
 
     for (const object of state.project.objects) {
-      if (!this.meshes.has(object.id)) this.createMesh(object);
+      if (!this.meshes.has(object.id)) this.restoreScenePatchMesh(object) ?? this.createMesh(object);
     }
     for (const object of state.project.objects) {
       const mesh = this.meshes.get(object.id);
@@ -366,6 +398,7 @@ export class ThreeSceneAdapter {
     mesh.userData.dimensions = [...object.dimensions];
     mesh.userData.entityRole = object.entity?.role ?? "prop";
     mesh.userData.governanceState = governanceState;
+    mesh.userData.governanceAssetId = object.governance?.assetId ?? null;
 
     if (this.mode === "preview" || !(this.isDragging && object.id === selectionId)) {
       mesh.position.fromArray(object.position);
@@ -665,12 +698,47 @@ export class ThreeSceneAdapter {
     return controller.report;
   }
 
+  async loadCasePackAsset(id, casePack, assetId) {
+    const object = this.store.getState().project.objects.find((candidate) => candidate.id === id);
+    const carrier = this.meshes.get(id);
+    if (!object || !carrier) throw new Error("Case Pack 目标载体不在当前场景中。");
+    if (!casePack || typeof casePack.asset !== "function") throw new Error("Case Pack 尚未通过本地校验。");
+    const token = Symbol(id);
+    this.assetLoadTokens.set(id, token);
+    const cachedController = this.casePackControllerCache.get(assetId);
+    if (cachedController) this.casePackControllerCache.delete(assetId);
+    const controller = cachedController ?? await casePack.asset(assetId);
+    if (this.assetLoadTokens.get(id) !== token || !this.meshes.has(id)) {
+      if (cachedController) this.casePackControllerCache.set(assetId, controller);
+      else controller.dispose();
+      throw new Error("Case Pack 载入期间目标载体已改变。");
+    }
+    this.clearAsset(id, { resync: false });
+    carrier.add(controller.root);
+    controller.fitToCarrier(carrier.scale);
+    this.assetControllers.set(id, controller);
+    this.casePackAssetIdByCarrier.set(id, assetId);
+    this.rebuildAssetReplacementMap();
+    this.applyAssetReplacements();
+    this.scene.updateMatrixWorld(true);
+    return controller.report;
+  }
+
   clearAsset(id, { resync = true } = {}) {
     this.assetLoadTokens.delete(id);
     const controller = this.assetControllers.get(id);
     if (!controller) return false;
-    controller.dispose();
+    const casePackAssetId = this.casePackAssetIdByCarrier.get(id);
+    if (casePackAssetId) {
+      controller.root.removeFromParent();
+      const previous = this.casePackControllerCache.get(casePackAssetId);
+      if (previous && previous !== controller) previous.dispose();
+      this.casePackControllerCache.set(casePackAssetId, controller);
+    } else {
+      controller.dispose();
+    }
     this.assetControllers.delete(id);
+    this.casePackAssetIdByCarrier.delete(id);
     const carrier = this.meshes.get(id);
     if (carrier?.material) carrier.material.visible = true;
     this.rebuildAssetReplacementMap();
@@ -1174,6 +1242,9 @@ export class ThreeSceneAdapter {
     cancelAnimationFrame(this.animationFrame);
     this.assetControllers.forEach((controller) => controller.dispose());
     this.assetControllers.clear();
+    this.casePackControllerCache.forEach((controller) => controller.dispose());
+    this.casePackControllerCache.clear();
+    this.casePackAssetIdByCarrier.clear();
     this.unsubscribe?.();
     this.resizeObserver.disconnect();
     this.renderer.domElement.removeEventListener("pointerdown", this.onPointerDown);
@@ -1194,6 +1265,8 @@ export class ThreeSceneAdapter {
     this.orbitControls.dispose();
     this.meshes.forEach((mesh) => this.disposeMesh(mesh));
     this.meshes.clear();
+    this.scenePatchMeshCache.forEach((mesh) => this.disposeMesh(mesh));
+    this.scenePatchMeshCache.clear();
     this.textureCache.forEach((texture) => texture.dispose?.());
     this.textureCache.clear();
     this.renderer.dispose();

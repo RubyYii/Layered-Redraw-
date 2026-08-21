@@ -12,7 +12,7 @@ export const GOVERNANCE_STATES = Object.freeze([
   "WITHHELD",
 ]);
 
-export const SEMANTIC_CLASSES = Object.freeze(["table", "chair", "cup"]);
+export const SEMANTIC_CLASSES = Object.freeze(["table", "chair", "cup", "thermos"]);
 
 export const ASSET_STATUSES = Object.freeze([
   "DISCOVERED_CANDIDATE",
@@ -147,6 +147,9 @@ export function validateAssetCatalog(value) {
 
     if (raw.status === "PROJECT_AUTHORED_PROXY") {
       record.objectId = requireIdentifier(raw.objectId, `asset ${assetId} root object ID`);
+      record.carrierDimensions = raw.carrierDimensions === undefined
+        ? [1, 1, 1]
+        : requireVector(raw.carrierDimensions, `asset ${assetId} carrier dimensions`, { positive: true });
       if (objectIds.has(record.objectId)) throw new Error(`Duplicate catalog object ID: ${record.objectId}`);
       objectIds.add(record.objectId);
       if (!raw.bundle || !Array.isArray(raw.bundle.children) || raw.bundle.children.length === 0) {

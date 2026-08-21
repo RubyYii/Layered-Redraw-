@@ -2716,6 +2716,30 @@ canvas.is-director-preview {
   white-space: nowrap;
 }
 
+.cp02-case-pack-lock {
+  margin-top: -11px;
+  grid-template-columns: 1.15fr 1.15fr 0.7fr;
+  border-top: 0;
+}
+
+.cp02-case-pack-assets {
+  display: grid;
+  gap: 2px;
+  margin: -5px 0 0;
+  padding: 5px 8px;
+  border-left: 1px solid rgb(105 214 202 / 34%);
+  background: rgb(105 214 202 / 2.5%);
+  color: #87938e;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 7px;
+  line-height: 1.45;
+  list-style: none;
+}
+
+.cp02-case-pack-assets li[data-status="MATERIALIZED"] {
+  color: #83d7cd;
+}
+
 #cp02-outcome[data-outcome="PROPOSED"] { color: #65d8e8; }
 #cp02-outcome[data-outcome="APPLIED"],
 #cp02-outcome[data-outcome="UNDONE"] { color: #69d6ca; }
@@ -2794,7 +2818,7 @@ canvas.is-director-preview {
 
 .cp02-secondary-actions {
   display: grid;
-  grid-template-columns: 1.35fr 1fr;
+  grid-template-columns: 1fr;
   gap: 6px;
 }
 

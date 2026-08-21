@@ -158,6 +158,31 @@ describe("offline CP02 composition boundary", () => {
     expect(result.patchPreview.operations.every((operation) => !Object.hasOwn(operation, "position"))).toBe(true);
   });
 
+  it("maps the fixed thermos follow-up to one additive request without replacing the cup", async () => {
+    const result = await runSceneCompositionTurn({
+      project,
+      text: "桌上还应该有一个旧保温杯，但不要替换那个杯子。",
+      decide: decideCp02ReframeIntent,
+      catalog: catalogFixture,
+      slots: slotFixture,
+    });
+
+    expect(result.intent.requests).toEqual([{
+      operation: "add",
+      semanticClass: "thermos",
+      slotId: "memory-thermos-on-table",
+    }]);
+    expect(result.patchPreview).toMatchObject({
+      patchId: "CP02-REFRAME-THERMOS-001",
+      operations: [{
+        kind: "add",
+        assetId: "CP02-THERMOS-CARRIER-001",
+        slotId: "memory-thermos-on-table",
+      }],
+    });
+    expect(result.patchPreview.operations.some((operation) => operation.kind === "replace")).toBe(false);
+  });
+
   it.each(["position", "rotation", "scale", "path", "url", "code", "script"])(
     "rejects provider-authored %s",
     (field) => {
@@ -211,6 +236,7 @@ describe("offline CP02 composition boundary", () => {
       { id: "memory-chair-near", semanticClass: "chair" },
       { id: "memory-chair-withdrawn", semanticClass: "chair" },
       { id: "memory-cup-on-table", semanticClass: "cup" },
+      { id: "memory-thermos-on-table", semanticClass: "thermos" },
     ]);
   });
 });

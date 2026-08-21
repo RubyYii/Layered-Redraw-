@@ -14,5 +14,20 @@
       {"operation":"add","semanticClass":"cup","slotId":"memory-cup-on-table"}
     ],
     "reason": "Participant proposes furniture outside the source photograph."
-  }
+  },
+  "followUps": [
+    {
+      "utterances": [
+        "桌上还应该有一个旧保温杯，但不要替换那个杯子。"
+      ],
+      "intent": {
+        "kind": "compose",
+        "caseAction": "Reframe",
+        "requests": [
+          {"operation":"add","semanticClass":"thermos","slotId":"memory-thermos-on-table"}
+        ],
+        "reason": "Participant adds a thermos while explicitly preserving the existing cup."
+      }
+    }
+  ]
 }

@@ -358,11 +358,16 @@ export function validateAssetIntent(rawIntent, slots) {
 
 export async function decideCp02ReframeIntent(observation) {
   const utterance = normalizeWhitespace(observation?.participantText);
-  const supported = cp02IntentFixture.utterances.map(normalizeWhitespace);
-  if (!supported.includes(utterance)) {
-    return { kind: "withhold", code: "unsupported_fixture_utterance" };
+  const fixtures = [
+    { utterances: cp02IntentFixture.utterances, intent: cp02IntentFixture.intent },
+    ...(cp02IntentFixture.followUps ?? []),
+  ];
+  for (const fixture of fixtures) {
+    if (fixture.utterances.map(normalizeWhitespace).includes(utterance)) {
+      return structuredClone(fixture.intent);
+    }
   }
-  return structuredClone(cp02IntentFixture.intent);
+  return { kind: "withhold", code: "unsupported_fixture_utterance" };
 }
 
 export async function runSceneCompositionTurn({ project, text, decide, catalog, slots }) {
@@ -446,7 +451,10 @@ export async function runSceneCompositionTurn({ project, text, decide, catalog, 
     .sort();
   const patchPreview = {
     schemaVersion: 1,
-    patchId: "CP02-REFRAME-INITIAL-001",
+    patchId: validation.intent.requests.length === 1
+      && validation.intent.requests[0].semanticClass === "thermos"
+      ? "CP02-REFRAME-THERMOS-001"
+      : "CP02-REFRAME-INITIAL-001",
     caseAction: validation.intent.caseAction,
     provider: cp02IntentFixture.provider,
     reason: validation.intent.reason,

@@ -1,7 +1,7 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -13,9 +13,13 @@ import {
 import { syncCasePack } from "../scripts/sync-pact-cp02-case-pack.mjs";
 
 const temporaryRoots = [];
-const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
+const approvedTablePath = fileURLToPath(new URL(
+  "../public/case-packs/pact-cp02/assets/WoodenTable_01.glb",
+  import.meta.url,
+));
+const approvedTableBytes = () => fs.readFileSync(approvedTablePath);
 
-const approvedManifest = (bytes = Buffer.from("self-contained glb fixture")) => ({
+const approvedManifest = () => ({
   schemaVersion: 1,
   casePackId: "pact-cp02-v1",
   createdAt: "2026-08-21T15:21:33Z",
@@ -26,8 +30,8 @@ const approvedManifest = (bytes = Buffer.from("self-contained glb fixture")) => 
     sourceAssetId: "WoodenTable_01",
     filename: "WoodenTable_01.glb",
     path: "assets/WoodenTable_01.glb",
-    bytes: bytes.length,
-    sha256: sha256(bytes),
+    bytes: 1_823_744,
+    sha256: "cd8807b19ac0db16e2c29564634bfb949b175c51eb7dfda5c0aa4cb94af3fe2b",
     sourceStatus: "SOURCE_CLEARED",
     technicalStatus: "TECHNICALLY_VALIDATED",
     artisticStatus: "ARTISTICALLY_APPROVED",
@@ -44,7 +48,7 @@ const approvedManifest = (bytes = Buffer.from("self-contained glb fixture")) => 
   }],
 });
 
-const makeSourceDirectory = (manifest, bytes = Buffer.from("self-contained glb fixture")) => {
+const makeSourceDirectory = (manifest, bytes = approvedTableBytes()) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pact-case-pack-source-"));
   temporaryRoots.push(root);
   fs.mkdirSync(path.join(root, "assets"));
@@ -83,6 +87,8 @@ describe("hash-bound local Case Pack runtime", () => {
       sourceAssetId: "modified_thermos",
       filename: "modified_thermos.glb",
       path: "assets/modified_thermos.glb",
+      bytes: 7_159_640,
+      sha256: "f92b05260ea0075b8095a36dac23e457bc22489b3c1cb5240178796d3b705562",
       placement: {
         mode: "ADDITIVE_ONLY",
         semanticClass: "thermos",
@@ -101,6 +107,16 @@ describe("hash-bound local Case Pack runtime", () => {
 
     manifest.assets[0].placement.replacesAssetId = "CP02-CUP-PROXY-001";
     expect(() => validateCasePackManifest(manifest)).toThrow(/additive|replace|新增|替换/i);
+  });
+
+  it.each([
+    ["bytes", 1_823_745],
+    ["sha256", "0".repeat(64)],
+  ])("rejects manifest self-report drift in approved GLB %s", (field, value) => {
+    const manifest = approvedManifest();
+    manifest.assets[0][field] = value;
+
+    expect(() => validateCasePackManifest(manifest)).toThrow(/catalog|allowlist|登记|批准/i);
   });
 
   it.each([
@@ -160,12 +176,16 @@ describe("hash-bound local Case Pack runtime", () => {
   });
 
   it("verifies size and SHA-256 before passing bytes to the GLB loader", async () => {
-    const bytes = Buffer.from("self-contained glb fixture");
-    const manifest = approvedManifest(bytes);
+    const bytes = approvedTableBytes();
+    const manifest = approvedManifest();
     const calls = [];
+    let fetchCalls = 0;
     const pack = await loadCasePack("/case-packs/pact-cp02/", manifest, {
       locationHref: "http://127.0.0.1:5173/?case=pact-cp02",
-      fetchImpl: async () => ({ ok: true, arrayBuffer: async () => bytes }),
+      fetchImpl: async () => {
+        fetchCalls += 1;
+        return { ok: true, arrayBuffer: async () => bytes };
+      },
       loadGlbBytesImpl: async (...args) => {
         calls.push(args);
         return { loaded: true };
@@ -176,6 +196,9 @@ describe("hash-bound local Case Pack runtime", () => {
     expect(calls).toHaveLength(1);
     expect(Buffer.from(calls[0][0])).toEqual(bytes);
     expect(calls[0][1]).toBe("WoodenTable_01.glb");
+    await expect(pack.asset("PH-TABLE-WOODEN-001")).resolves.toEqual({ loaded: true });
+    expect(fetchCalls).toBe(1);
+    expect(calls).toHaveLength(2);
     await expect(pack.asset("UNKNOWN-ASSET")).rejects.toThrow(/approved|批准|unknown/i);
 
     const badPack = await loadCasePack("/case-packs/pact-cp02/", manifest, {
@@ -187,8 +210,8 @@ describe("hash-bound local Case Pack runtime", () => {
   });
 
   it("copies an exact verified pack and rejects extra GLBs, missing files, hash drift, and symlinks", async () => {
-    const bytes = Buffer.from("self-contained glb fixture");
-    const manifest = approvedManifest(bytes);
+    const bytes = approvedTableBytes();
+    const manifest = approvedManifest();
     const cleanSource = makeSourceDirectory(manifest, bytes);
     const target = makeTargetDirectory();
 

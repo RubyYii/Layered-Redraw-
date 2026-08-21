@@ -1,4 +1,4 @@
-import { createSceneObject, normalizeProject, serializeProject } from "./model.js";
+import { createSceneObject, normalizeProject } from "./model.js";
 import { resolveAssetForSlot, validateAssetCatalog, validateSceneSlots } from "./scene-governance.js";
 
 const LOCKED_STATES = new Set(["SOURCE_LOCKED", "EVIDENCE_LOCKED", "STAGE_LOCKED"]);
@@ -40,8 +40,64 @@ async function sha256Text(value) {
   return [...new Uint8Array(digest)].map((entry) => entry.toString(16).padStart(2, "0")).join("");
 }
 
+const inlineDataDigestCache = new Map();
+const inlineDataUrlPattern = /^data:image\/(?:png|jpe?g|webp);base64,/i;
+
+const digestInlineData = (value) => {
+  if (inlineDataDigestCache.has(value)) return inlineDataDigestCache.get(value);
+  const pending = sha256Text(value);
+  inlineDataDigestCache.set(value, pending);
+  if (inlineDataDigestCache.size > 16) {
+    const oldest = inlineDataDigestCache.keys().next().value;
+    if (oldest !== value) inlineDataDigestCache.delete(oldest);
+  }
+  return pending;
+};
+
+const collectInlineData = (value, result) => {
+  if (typeof value === "string") {
+    if (inlineDataUrlPattern.test(value)) result.add(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectInlineData(entry, result));
+    return;
+  }
+  if (value && typeof value === "object") {
+    Object.values(value).forEach((entry) => collectInlineData(entry, result));
+  }
+};
+
+const compactInlineData = (value, digests) => {
+  if (typeof value === "string" && digests.has(value)) {
+    return {
+      type: "INLINE_IMAGE_SHA256",
+      length: value.length,
+      sha256: digests.get(value),
+    };
+  }
+  if (Array.isArray(value)) return value.map((entry) => compactInlineData(entry, digests));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, compactInlineData(entry, digests)]));
+  }
+  return value;
+};
+
+const serializeValueForHash = async (value, { sortKeys = false } = {}) => {
+  const inlineData = new Set();
+  collectInlineData(value, inlineData);
+  const digests = new Map(await Promise.all([...inlineData].map(async (entry) => [entry, await digestInlineData(entry)])));
+  const compacted = compactInlineData(value, digests);
+  return JSON.stringify(sortKeys ? canonicalize(compacted) : compacted);
+};
+
+export async function serializeProjectForHash(project) {
+  const normalized = normalizeProject(project);
+  return serializeValueForHash(normalized);
+}
+
 export async function hashProject(project) {
-  return sha256Text(serializeProject(project));
+  return sha256Text(await serializeProjectForHash(project));
 }
 
 export async function hashGovernedObjects(project, objectIds) {
@@ -52,7 +108,7 @@ export async function hashGovernedObjects(project, objectIds) {
     if (!object) throw new Error(`Cannot hash missing governed object: ${id}`);
     return object;
   });
-  return sha256Text(JSON.stringify(canonicalize(objects)));
+  return sha256Text(await serializeValueForHash(objects, { sortKeys: true }));
 }
 
 function requireIdentifier(value, label) {
@@ -205,6 +261,7 @@ function createBundleObjects(asset, slot) {
     name: `AUTHORISED · ${asset.semanticClass}`,
     position: slot.position,
     rotation: slot.rotation,
+    dimensions: asset.carrierDimensions,
     locked: true,
     governance,
   });
@@ -241,13 +298,26 @@ function applyResolvedOperation(project, operation) {
   project.director.timeline.compiledScript = "";
 }
 
+const sameValue = (left, right) => {
+  if (Object.is(left, right)) return true;
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left)
+      && Array.isArray(right)
+      && left.length === right.length
+      && left.every((entry, index) => sameValue(entry, right[index]));
+  }
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length
+    && leftKeys.every((key) => Object.hasOwn(right, key) && sameValue(left[key], right[key]));
+};
+
 function changedObjectIds(before, after) {
   const beforeById = new Map(before.objects.map((object) => [object.id, object]));
   const afterById = new Map(after.objects.map((object) => [object.id, object]));
   const ids = new Set([...beforeById.keys(), ...afterById.keys()]);
-  return [...ids].filter((id) => (
-    JSON.stringify(canonicalize(beforeById.get(id))) !== JSON.stringify(canonicalize(afterById.get(id)))
-  )).sort();
+  return [...ids].filter((id) => !sameValue(beforeById.get(id), afterById.get(id))).sort();
 }
 
 function publicOperation(operation) {
@@ -300,7 +370,7 @@ export async function validateScenePatch({ project, catalog, slots, patch, mode 
 
   const normalizedCatalog = validateAssetCatalog(catalog);
   const normalizedSlots = validateSceneSlots(slots);
-  const simulation = structuredClone(normalizedProject);
+  const simulation = normalizeProject(normalizedProject);
   const operations = [];
   for (const operation of patch.operations) {
     const resolved = resolveOperation({

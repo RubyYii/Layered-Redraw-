@@ -21,16 +21,21 @@ const expectedStills = [
   "02-before.png",
   "03-preview.png",
   "04-authorised.png",
-  "05-undone.png",
-  "06-rejected.png",
+  "05-thermos-proposed.png",
+  "06-cup-and-thermos.png",
+  "07-thermos-undone.png",
+  "08-undone.png",
+  "09-rejected.png",
 ];
 
 const expectedReceipts = [
   "01-initial-apply.json",
-  "02-chair-move.json",
-  "03-undo-chair.json",
-  "04-undo-initial.json",
-  "05-source-rejected.json",
+  "02-thermos-apply.json",
+  "03-undo-thermos.json",
+  "04-chair-move.json",
+  "05-undo-chair.json",
+  "06-undo-initial.json",
+  "07-source-rejected.json",
 ];
 
 const readJson = (filePath) => JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -174,9 +179,13 @@ export async function renderCp02Evidence() {
       artistDecision: "PENDING_HUMAN_REVIEW",
       artisticallyApproved: false,
     },
-    publicAssets: {
-      displayed: false,
-      status: "ENGINEERING_PROXIES_ONLY",
+    casePack: interaction.initial.casePack,
+    localAssetDisplay: {
+      materializedDuringCheckpoint: true,
+      publicReleaseAuthorized: interaction.initial.casePack.publicReleaseAuthorized,
+      status: "LOCAL_CASE_PACK_MATERIALIZED",
+      initialMaterializedAssets: interaction.authorised.materializedAssets,
+      additiveMaterializedAssets: interaction.thermosAuthorised.materializedAssets,
     },
     preservedPreviousInteraction: archivedInteraction,
   };

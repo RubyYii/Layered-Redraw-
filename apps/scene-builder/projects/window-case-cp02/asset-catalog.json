@@ -5,6 +5,7 @@
     "status": "PROJECT_AUTHORED_PROXY",
     "publicDisplay": false,
     "objectId": "cp02-memory-table",
+    "carrierDimensions": [1.65, 0.72, 0.72],
     "bundle": {
       "children": [
         {"id":"cp02-memory-table-top","type":"box","name":"PROPOSAL · bedside table top","position":[0,0,0],"dimensions":[1.05,0.12,0.68],"color":"#4b382c","render":{"roughness":0.88,"metalness":0,"edge":true}},
@@ -21,6 +22,7 @@
     "status": "PROJECT_AUTHORED_PROXY",
     "publicDisplay": false,
     "objectId": "cp02-memory-chair",
+    "carrierDimensions": [0.7, 1.05, 0.7],
     "bundle": {
       "children": [
         {"id":"cp02-memory-chair-seat","type":"box","name":"PROPOSAL · chair seat","position":[0,0,0],"dimensions":[0.56,0.1,0.56],"color":"#3e4544","render":{"roughness":0.82,"metalness":0.04,"edge":true}},
@@ -48,6 +50,19 @@
     }
   },
   {
+    "assetId": "CP02-THERMOS-CARRIER-001",
+    "semanticClass": "thermos",
+    "status": "PROJECT_AUTHORED_PROXY",
+    "publicDisplay": false,
+    "objectId": "cp02-memory-thermos",
+    "carrierDimensions": [0.22, 0.34, 0.22],
+    "bundle": {
+      "children": [
+        {"id":"cp02-memory-thermos-body","type":"cylinder","name":"PROPOSAL · old thermos","position":[0,0,0],"dimensions":[0.22,0.34,0.22],"color":"#a7a397","render":{"roughness":0.58,"metalness":0.24,"edge":true}}
+      ]
+    }
+  },
+  {
     "assetId": "PH-TABLE-WOODEN-001",
     "sourceAssetId": "WoodenTable_01",
     "filesHash": "acee43a6468dd85f1da716a4c6d77793e6c7c02f",
@@ -67,7 +82,7 @@
     "assetId": "PH-MUG-MATERIAL-001",
     "sourceAssetId": "modified_thermos",
     "filesHash": "b54fc17f8886546ef664c28796bfcc96a6bc69a5",
-    "semanticClass": "cup",
+    "semanticClass": "thermos",
     "status": "DISCOVERED_CANDIDATE",
     "publicDisplay": false
   }

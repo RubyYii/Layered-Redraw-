@@ -238,6 +238,52 @@ describe("scene schema", () => {
 });
 
 describe("SceneStore history", () => {
+  it("checkpoints large inline evidence without serializing or structured-cloning its bytes", () => {
+    const project = createEmptyProject();
+    const inlineEvidence = `data:image/png;base64,${"A".repeat(2_000_000)}`;
+    project.reference = {
+      dataUrl: inlineEvidence,
+      name: "large-evidence.png",
+      width: 1280,
+      height: 720,
+      opacity: 0.36,
+      visible: true,
+      prompt: "",
+    };
+    const store = new SceneStore(project);
+    const originalStructuredClone = globalThis.structuredClone;
+    const originalStringify = JSON.stringify;
+    let failure;
+
+    globalThis.structuredClone = (value, options) => {
+      if (value?.reference?.dataUrl === inlineEvidence) {
+        throw new Error("large inline evidence reached structuredClone");
+      }
+      return originalStructuredClone(value, options);
+    };
+    JSON.stringify = (value, replacer, space) => {
+      if (value?.reference?.dataUrl === inlineEvidence) {
+        throw new Error("large inline evidence reached JSON.stringify");
+      }
+      return originalStringify(value, replacer, space);
+    };
+
+    try {
+      store.mutate((draft) => {
+        draft.name = "history without large-byte copying";
+      });
+      store.undo();
+    } catch (error) {
+      failure = error;
+    } finally {
+      globalThis.structuredClone = originalStructuredClone;
+      JSON.stringify = originalStringify;
+    }
+
+    expect(failure).toBeUndefined();
+    expect(store.getState().project.reference.dataUrl).toBe(inlineEvidence);
+  });
+
   it("reports whether a mutation created a history checkpoint", () => {
     const store = new SceneStore(createEmptyProject());
 
