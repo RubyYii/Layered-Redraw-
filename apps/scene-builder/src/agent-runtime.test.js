@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
+import catalogFixture from "../projects/window-case-cp02/asset-catalog.json" with { type: "json" };
+import cp02ProjectFixture from "../projects/window-case-cp02/cp02-mutable-room.blockout.json" with { type: "json" };
+import slotFixture from "../projects/window-case-cp02/scene-slots.json" with { type: "json" };
 import {
   buildAgentObservation,
   compileAgentPlan,
+  decideCp02ReframeIntent,
   planAgentIntent,
   runAgentTurn,
+  runSceneCompositionTurn,
+  validateAssetIntent,
   validateAgentIntent,
 } from "./agent-runtime.js";
 import { createEntityConfig, normalizeProject } from "./model.js";
@@ -124,5 +130,87 @@ describe("LLM agent intent boundary", () => {
     expect(result.plan).toMatchObject({ ok: true, requiresNavigation: false });
     expect(result.clips).toHaveLength(1);
     expect(result.clips[0].type).toBe("interaction");
+  });
+});
+
+describe("offline CP02 composition boundary", () => {
+  const project = normalizeProject(cp02ProjectFixture);
+
+  it.each([
+    "我记得床边有一张小桌子、一把椅子，桌上放着一个旧杯子。",
+    "I remember a small table and chair by the bed, with an old cup on the table.",
+  ])("maps the frozen CP02 sentence to one bounded Reframe intent", async (text) => {
+    const result = await runSceneCompositionTurn({
+      project,
+      text,
+      decide: decideCp02ReframeIntent,
+      catalog: catalogFixture,
+      slots: slotFixture,
+    });
+
+    expect(result.intent.caseAction).toBe("Reframe");
+    expect(result.intent.requests.map((item) => item.slotId)).toEqual([
+      "memory-table-bedside",
+      "memory-chair-near",
+      "memory-cup-on-table",
+    ]);
+    expect(result.patchPreview.provider).toBe("deterministic-cp02-fixture-v1");
+    expect(result.patchPreview.operations.every((operation) => !Object.hasOwn(operation, "position"))).toBe(true);
+  });
+
+  it.each(["position", "rotation", "scale", "path", "url", "code", "script"])(
+    "rejects provider-authored %s",
+    (field) => {
+      const raw = {
+        kind: "compose",
+        caseAction: "Reframe",
+        requests: [
+          { operation: "add", semanticClass: "table", slotId: "memory-table-bedside" },
+        ],
+        reason: "bounded fixture",
+        [field]: field === "url" ? "https://example.com/a.glb" : [1, 2, 3],
+      };
+
+      expect(validateAssetIntent(raw, slotFixture)).toMatchObject({
+        ok: false,
+        code: "direct_scene_control_forbidden",
+      });
+    },
+  );
+
+  it("withholds unsupported language instead of pretending to understand it", async () => {
+    const result = await runSceneCompositionTurn({
+      project,
+      text: "Please redesign the whole room however you like.",
+      decide: decideCp02ReframeIntent,
+      catalog: catalogFixture,
+      slots: slotFixture,
+    });
+
+    expect(result.intent).toEqual({ kind: "withhold", code: "unsupported_fixture_utterance" });
+    expect(result.patchPreview).toMatchObject({ outcome: "WITHHELD", provider: "deterministic-cp02-fixture-v1" });
+  });
+
+  it("does not expose transforms, local paths, URLs, or credentials to the decision provider", async () => {
+    let observed;
+    await runSceneCompositionTurn({
+      project,
+      text: "unsupported",
+      decide: async (observation) => {
+        observed = observation;
+        return { kind: "withhold", code: "inspection_only" };
+      },
+      catalog: catalogFixture,
+      slots: slotFixture,
+    });
+
+    const serialized = JSON.stringify(observed);
+    expect(serialized).not.toMatch(/position|rotation|\/Users\/|https?:\/\/|credential|token/i);
+    expect(observed.authoredSlots).toEqual([
+      { id: "memory-table-bedside", semanticClass: "table" },
+      { id: "memory-chair-near", semanticClass: "chair" },
+      { id: "memory-chair-withdrawn", semanticClass: "chair" },
+      { id: "memory-cup-on-table", semanticClass: "cup" },
+    ]);
   });
 });

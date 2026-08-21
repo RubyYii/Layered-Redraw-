@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "provider": "deterministic-cp02-fixture-v1",
+  "utterances": [
+    "我记得床边有一张小桌子、一把椅子，桌上放着一个旧杯子。",
+    "I remember a small table and chair by the bed, with an old cup on the table."
+  ],
+  "intent": {
+    "kind": "compose",
+    "caseAction": "Reframe",
+    "requests": [
+      {"operation":"add","semanticClass":"table","slotId":"memory-table-bedside"},
+      {"operation":"add","semanticClass":"chair","slotId":"memory-chair-near"},
+      {"operation":"add","semanticClass":"cup","slotId":"memory-cup-on-table"}
+    ],
+    "reason": "Participant proposes furniture outside the source photograph."
+  }
+}
