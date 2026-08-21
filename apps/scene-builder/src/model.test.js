@@ -154,6 +154,8 @@ describe("scene schema", () => {
         forwardAxis: "+Z",
         nodes: { effector: "RightHand" },
         animations: { interact: "Use" },
+        bones: { head: "HeadBone", rightHand: "RightHandBone" },
+        expressions: { smile: "Smile", mouthOpen: "JawOpen" },
       },
       motion: { kind: "hover", hoverAmplitude: 0.04, bankDegrees: 8 },
       interactionSpec: {
@@ -176,6 +178,8 @@ describe("scene schema", () => {
       forwardAxis: "+Z",
       nodes: { effector: "RightHand" },
       animations: { interact: "Use" },
+      bones: { head: "HeadBone", rightHand: "RightHandBone" },
+      expressions: { smile: "Smile", mouthOpen: "JawOpen" },
     });
     expect(object.motion).toMatchObject({ kind: "hover", hoverAmplitude: 0.04, bankDegrees: 8 });
     expect(object.interactionSpec.affordances.inspect).toMatchObject({

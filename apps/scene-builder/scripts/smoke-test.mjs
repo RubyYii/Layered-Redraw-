@@ -20,6 +20,69 @@ const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 
+const createTinyGlb = () => {
+  const binary = Buffer.alloc(96);
+  [
+    -0.5, -0.5, 0,
+    0.5, -0.5, 0,
+    0, 0.5, 0,
+  ].forEach((value, index) => binary.writeFloatLE(value, index * 4));
+  [0, 1, 2].forEach((value, index) => binary.writeUInt16LE(value, 36 + index * 2));
+  [
+    0, 0, 0,
+    0, 0, 0,
+    0, 0.25, 0,
+  ].forEach((value, index) => binary.writeFloatLE(value, 44 + index * 4));
+  [0, 1].forEach((value, index) => binary.writeFloatLE(value, 80 + index * 4));
+  [0, 1].forEach((value, index) => binary.writeFloatLE(value, 88 + index * 4));
+  const json = {
+    asset: { version: "2.0", generator: "Blockout Studio smoke test" },
+    scene: 0,
+    scenes: [{ nodes: [0] }],
+    nodes: [{ name: "Root", mesh: 0 }],
+    meshes: [{
+      weights: [0],
+      extras: { targetNames: ["Smile"] },
+      primitives: [{ attributes: { POSITION: 0 }, indices: 1, targets: [{ POSITION: 2 }] }],
+    }],
+    animations: [{
+      name: "Idle",
+      samplers: [{ input: 3, output: 4, interpolation: "LINEAR" }],
+      channels: [{ sampler: 0, target: { node: 0, path: "weights" } }],
+    }],
+    accessors: [
+      { bufferView: 0, componentType: 5126, count: 3, type: "VEC3", min: [-0.5, -0.5, 0], max: [0.5, 0.5, 0] },
+      { bufferView: 1, componentType: 5123, count: 3, type: "SCALAR" },
+      { bufferView: 2, componentType: 5126, count: 3, type: "VEC3" },
+      { bufferView: 3, componentType: 5126, count: 2, type: "SCALAR", min: [0], max: [1] },
+      { bufferView: 4, componentType: 5126, count: 2, type: "SCALAR" },
+    ],
+    bufferViews: [
+      { buffer: 0, byteOffset: 0, byteLength: 36, target: 34962 },
+      { buffer: 0, byteOffset: 36, byteLength: 6, target: 34963 },
+      { buffer: 0, byteOffset: 44, byteLength: 36, target: 34962 },
+      { buffer: 0, byteOffset: 80, byteLength: 8 },
+      { buffer: 0, byteOffset: 88, byteLength: 8 },
+    ],
+    buffers: [{ byteLength: binary.length }],
+  };
+  const rawJson = Buffer.from(JSON.stringify(json));
+  const jsonPadding = (4 - (rawJson.length % 4)) % 4;
+  const jsonChunk = Buffer.concat([rawJson, Buffer.alloc(jsonPadding, 0x20)]);
+  const output = Buffer.alloc(12 + 8 + jsonChunk.length + 8 + binary.length);
+  output.writeUInt32LE(0x46546c67, 0);
+  output.writeUInt32LE(2, 4);
+  output.writeUInt32LE(output.length, 8);
+  output.writeUInt32LE(jsonChunk.length, 12);
+  output.writeUInt32LE(0x4e4f534a, 16);
+  jsonChunk.copy(output, 20);
+  const binaryHeader = 20 + jsonChunk.length;
+  output.writeUInt32LE(binary.length, binaryHeader);
+  output.writeUInt32LE(0x004e4942, binaryHeader + 4);
+  binary.copy(output, binaryHeader + 8);
+  return output;
+};
+
 const browser = await chromium.launch({
   executablePath,
   headless: true,
@@ -42,6 +105,7 @@ const desktopScreenshot = path.join(artifactDir, "blockout-studio-desktop.png");
 const tabletScreenshot = path.join(artifactDir, "blockout-studio-tablet.png");
 const referenceScreenshot = path.join(artifactDir, "blockout-studio-reference.png");
 const directorErrorScreenshot = path.join(artifactDir, "blockout-studio-director-error.png");
+const assetScreenshot = path.join(artifactDir, "blockout-studio-asset-runtime.png");
 const failureScreenshot = path.join(artifactDir, "blockout-studio-failure.png");
 
 try {
@@ -120,6 +184,42 @@ try {
   await page.locator("#inspector-entity-tab").click();
   await page.locator("#entity-role").selectOption("character");
   assert(await page.locator("#entity-role-badge").textContent() === "角色", "实体类型未更新为角色。");
+  await page.locator("#asset-file").setInputFiles({
+    name: "smoke-agent.glb",
+    mimeType: "model/gltf-binary",
+    buffer: createTinyGlb(),
+  });
+  await page.waitForFunction(() => document.querySelector("#asset-session-title")?.textContent === "smoke-agent.glb");
+  assert((await page.locator("#asset-session-detail").textContent())?.includes("1 网格"), "GLB 模型绑定报告未显示。");
+  assert((await page.locator("#asset-session-detail").textContent())?.includes("GLB"), "GLB 格式能力没有显示。");
+  assert((await page.locator("#asset-rig-detail").textContent())?.includes("setBonePose"), "骨架控制接口没有显示。");
+  assert(!await page.locator("#asset-action-preview").isDisabled(), "GLB 动作预览没有启用。");
+  assert(!await page.locator("#play-asset-action").isDisabled(), "GLB 动作重播按钮没有启用。");
+  assert(!await page.locator("#asset-expression-preview").isDisabled(), "GLB 表情预览没有启用。");
+  await page.locator("#play-asset-action").click();
+  assert((await page.locator("#toast").textContent())?.includes("重播动作"), "动作重播没有进入运行时。");
+  await page.locator("#asset-expression-weight").evaluate((input) => {
+    input.value = "0.65";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  assert(await page.locator("#asset-expression-output").textContent() === "65%", "表情权重没有进入运行时。");
+  await page.locator("#asset-rig-details").evaluate((details) => { details.open = true; });
+  await page.locator("#asset-rig-details").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: assetScreenshot, fullPage: true });
+  await page.locator("#clear-asset-file").click();
+  assert(await page.locator("#asset-session-title").textContent() === "使用灰模", "恢复灰模没有清除会话模型。");
+  const tinyObj = "v -0.5 0 0\nv 0.5 0 0\nv 0 1 0\nf 1 2 3\n";
+  await page.locator("#asset-file").setInputFiles({
+    name: "smoke-static.obj",
+    mimeType: "model/obj",
+    buffer: Buffer.from(tinyObj),
+  });
+  await page.waitForFunction(() => document.querySelector("#asset-session-title")?.textContent === "smoke-static.obj");
+  assert((await page.locator("#asset-session-detail").textContent())?.includes("OBJ"), "OBJ 格式能力没有显示。");
+  assert((await page.locator("#asset-rig-detail").textContent())?.includes("静态 OBJ"), "OBJ 静态限制没有显示。");
+  assert(await page.locator("#asset-action-preview").isDisabled(), "静态 OBJ 不应启用动作预览。");
+  assert(await page.locator("#play-asset-action").isDisabled(), "静态 OBJ 不应启用动作重播。");
+  await page.locator("#clear-asset-file").click();
   await page.locator("#interaction-trigger").selectOption("click");
   await page.locator("#interaction-action").selectOption("pulse");
 
@@ -151,6 +251,7 @@ try {
 
   await page.locator('[data-director-mode="preview"]').click();
   assert(await page.locator("#preview-indicator").isVisible(), "导演预览模式未开启。");
+  assert(await page.locator("#performance-indicator").isVisible(), "预览性能监测没有显示。");
   assert(await page.locator('[data-tool="translate"]').isDisabled(), "预览模式仍允许编辑变换。");
   await page.locator("#timeline-scrubber").evaluate((input) => {
     input.value = String(Number(input.max) * 0.55);
@@ -176,7 +277,14 @@ try {
   assert(saved.objects.some((object) => object.name === "测试细节物体" && object.entity.role === "character"), "实体组件未进入项目数据。");
   assert(saved.director?.timeline?.clips?.length >= 7, "编译后的时间线未进入项目数据。");
 
+  await page.waitForTimeout(2400);
   await page.locator("#timeline-play").focus();
+  const performanceState = {
+    fps: await page.locator("#performance-fps").textContent(),
+    quality: await page.locator("#performance-quality").textContent(),
+  };
+  assert(performanceState.fps?.includes("FPS"), "性能监测没有产出帧率。");
+  assert(performanceState.quality?.includes("P95"), "性能监测没有产出帧时分位数。");
   await page.screenshot({ path: desktopScreenshot, fullPage: true });
 
   await page.setViewportSize({ width: 820, height: 820 });
@@ -192,9 +300,11 @@ try {
     ok: true,
     executablePath,
     canvasState,
+    performanceState,
     objectCount: await page.locator(".hierarchy-row").count(),
     referenceScreenshot,
     directorErrorScreenshot,
+    assetScreenshot,
     desktopScreenshot,
     tabletScreenshot,
   }, null, 2)}\n`);

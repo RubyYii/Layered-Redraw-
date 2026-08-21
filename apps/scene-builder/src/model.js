@@ -148,6 +148,8 @@ const normalizeAsset = (value) => {
     forwardAxis: ["-Z", "+Z", "-X", "+X"].includes(value.forwardAxis) ? value.forwardAxis : "-Z",
     nodes: normalizeStringMap(value.nodes),
     animations: normalizeStringMap(value.animations),
+    bones: normalizeStringMap(value.bones),
+    expressions: normalizeStringMap(value.expressions),
   };
 };
 

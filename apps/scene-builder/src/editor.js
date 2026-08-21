@@ -1,12 +1,30 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
+import { FramePacingMonitor } from "./frame-pacing.js";
+import { proceduralInteractionPose } from "./interaction-runtime.js";
 
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
 
 const round = (value, precision = 4) => Number(value.toFixed(precision));
 const clamp01 = (value) => Math.min(1, Math.max(0, value));
+const sameVector = (left, right) => left?.length === right?.length && left.every((value, index) => value === right[index]);
+const cameraCurveCache = new WeakMap();
+
+const cameraCurveFor = (path) => {
+  let curve = cameraCurveCache.get(path);
+  if (curve) return curve;
+  curve = new THREE.CatmullRomCurve3(
+    path.map((point) => new THREE.Vector3().fromArray(point)),
+    false,
+    "centripetal",
+  );
+  curve.arcLengthDivisions = 96;
+  curve.updateArcLengths();
+  cameraCurveCache.set(path, curve);
+  return curve;
+};
 
 const geometryForType = (type) => {
   switch (type) {
@@ -44,6 +62,18 @@ export class ThreeSceneAdapter {
     this.interactionEffects = new Map();
     this.interactionVisibility = new Map();
     this.textureCache = new Map();
+    this.assetControllers = new Map();
+    this.assetLoadTokens = new Map();
+    this.assetReplacementRootById = new Map();
+    this.timelineInteractionObjectIds = new Set();
+    this.basePixelRatio = Math.min(window.devicePixelRatio || 1, 1.75);
+    this.framePacing = new FramePacingMonitor();
+    this.performanceHandler = null;
+    this.lastPerformanceReportAt = 0;
+    this.lastAnimationTimestamp = null;
+    this.previewShadowsEnabled = true;
+    this.previewObjectLightsEnabled = true;
+    this.performanceAdaptationEnabled = new URLSearchParams(window.location.search).get("renderQuality") !== "full";
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x070909);
@@ -51,12 +81,12 @@ export class ThreeSceneAdapter {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
     this.renderer.setClearColor(0x070909, 1);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    this.renderer.setPixelRatio(this.basePixelRatio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.12;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.domElement.setAttribute("aria-label", "可交互三维场景");
     this.container.appendChild(this.renderer.domElement);
 
@@ -113,7 +143,7 @@ export class ThreeSceneAdapter {
     const keyLight = new THREE.DirectionalLight(0xffdfb3, 2.65);
     keyLight.position.set(8, 13, 7);
     keyLight.castShadow = true;
-    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.mapSize.set(1024, 1024);
     keyLight.shadow.camera.left = -18;
     keyLight.shadow.camera.right = 18;
     keyLight.shadow.camera.top = 18;
@@ -252,6 +282,7 @@ export class ThreeSceneAdapter {
     for (const [id, mesh] of this.meshes) {
       if (!activeIds.has(id)) {
         if (this.transformControls.object === mesh) this.transformControls.detach();
+        this.clearAsset(id, { resync: false });
         this.disposeMesh(mesh);
         this.meshes.delete(id);
       }
@@ -271,6 +302,8 @@ export class ThreeSceneAdapter {
       const previewObject = this.mode === "preview" ? this.directorFrame?.objects?.[object.id] : null;
       this.syncMesh(mesh, previewObject ? { ...object, ...previewObject } : object, state.selectionId);
     }
+    this.rebuildAssetReplacementMap();
+    this.applyAssetReplacements();
     this.scene.updateMatrixWorld(true);
 
     this.syncSelection(state);
@@ -294,6 +327,7 @@ export class ThreeSceneAdapter {
     mesh.children.forEach((child) => {
       if (child.userData.isEdgeOverlay) child.visible = this.mode === "edit" && render.edge !== false;
       if (child.userData.isObjectLight && render.light) {
+        child.visible = this.mode !== "preview" || this.previewObjectLightsEnabled;
         child.color.set(render.light.color);
         child.intensity = render.light.intensity;
         child.distance = render.light.distance;
@@ -318,6 +352,9 @@ export class ThreeSceneAdapter {
       );
       mesh.updateMatrixWorld(true);
     }
+    const assetController = this.assetControllers.get(object.id);
+    assetController?.fitToCarrier(mesh.scale);
+    assetController?.setState(this.mode === "preview" ? object.animationState : "idle");
   }
 
   syncSelection(state) {
@@ -382,13 +419,23 @@ export class ThreeSceneAdapter {
     this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.activeCamera);
-    const hits = this.raycaster.intersectObjects([...this.meshes.values()], false);
-    const hit = hits.find((candidate) => candidate.object.visible);
+    const hits = this.raycaster.intersectObjects([...this.meshes.values()], true);
+    const hit = hits.find((candidate) => {
+      const materials = Array.isArray(candidate.object.material)
+        ? candidate.object.material
+        : [candidate.object.material];
+      return candidate.object.visible
+        && !candidate.object.userData.isEdgeOverlay
+        && materials.some((material) => !material || material.visible !== false);
+    });
+    let hitObject = hit?.object ?? null;
+    while (hitObject && !hitObject.userData.objectId) hitObject = hitObject.parent;
+    const hitId = hitObject?.userData.objectId ?? null;
     if (this.mode === "preview") {
-      if (hit) this.previewInteractionHandler?.(hit.object.userData.objectId);
+      if (hitId) this.previewInteractionHandler?.(hitId);
       return;
     }
-    this.store.setSelection(hit?.object.userData.objectId ?? null);
+    this.store.setSelection(hitId);
   }
 
   getSceneBounds() {
@@ -448,6 +495,103 @@ export class ThreeSceneAdapter {
     this.previewInteractionHandler = typeof handler === "function" ? handler : null;
   }
 
+  setPerformanceHandler(handler) {
+    this.performanceHandler = typeof handler === "function" ? handler : null;
+  }
+
+  async loadAssetFile(id, file) {
+    const object = this.store.getState().project.objects.find((candidate) => candidate.id === id);
+    const carrier = this.meshes.get(id);
+    if (!object || !carrier) throw new Error("请先选择一个仍在场景中的物体。");
+    const token = Symbol(id);
+    this.assetLoadTokens.set(id, token);
+    const { loadModelFile } = await import("./asset-runtime.js");
+    const controller = await loadModelFile(file, object.asset ?? {});
+    if (this.assetLoadTokens.get(id) !== token || !this.meshes.has(id)) {
+      controller.dispose();
+      throw new Error("模型载入期间目标物体已改变，请重新选择后导入。");
+    }
+    this.clearAsset(id, { resync: false });
+    carrier.add(controller.root);
+    controller.fitToCarrier(carrier.scale);
+    this.assetControllers.set(id, controller);
+    this.rebuildAssetReplacementMap();
+    this.applyAssetReplacements();
+    this.scene.updateMatrixWorld(true);
+    return controller.report;
+  }
+
+  clearAsset(id, { resync = true } = {}) {
+    this.assetLoadTokens.delete(id);
+    const controller = this.assetControllers.get(id);
+    if (!controller) return false;
+    controller.dispose();
+    this.assetControllers.delete(id);
+    const carrier = this.meshes.get(id);
+    if (carrier?.material) carrier.material.visible = true;
+    this.rebuildAssetReplacementMap();
+    if (resync && this.lastState) this.sync(this.lastState);
+    return true;
+  }
+
+  assetReport(id) {
+    const controller = this.assetControllers.get(id);
+    return controller ? { ...controller.report, runtime: controller.getState() } : null;
+  }
+
+  playAssetAction(id, actionName) {
+    return this.assetControllers.get(id)?.playAction(actionName, { restart: true }) ?? false;
+  }
+
+  setAssetExpression(id, expressionName, weight, options = {}) {
+    return this.assetControllers.get(id)?.setExpression(expressionName, weight, options) ?? false;
+  }
+
+  clearAssetExpressions(id) {
+    const controller = this.assetControllers.get(id);
+    if (!controller) return false;
+    controller.clearExpressions();
+    return true;
+  }
+
+  setAssetBonePose(id, boneName, pose) {
+    return this.assetControllers.get(id)?.setBonePose(boneName, pose) ?? false;
+  }
+
+  clearAssetBonePose(id, boneName) {
+    return this.assetControllers.get(id)?.clearBonePose(boneName) ?? false;
+  }
+
+  rebuildAssetReplacementMap() {
+    const objects = this.lastState?.project.objects ?? [];
+    const rootById = new Map([...this.assetControllers.keys()].map((id) => [id, id]));
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const object of objects) {
+        if (rootById.has(object.id) || !rootById.has(object.parentId)) continue;
+        rootById.set(object.id, rootById.get(object.parentId));
+        changed = true;
+      }
+    }
+    this.assetReplacementRootById = rootById;
+  }
+
+  applyAssetReplacements() {
+    for (const [id, rootId] of this.assetReplacementRootById) {
+      const mesh = this.meshes.get(id);
+      if (!mesh) continue;
+      if (id !== rootId) {
+        mesh.visible = false;
+        continue;
+      }
+      if (mesh.material) mesh.material.visible = false;
+      mesh.children.forEach((child) => {
+        if (child.userData.isEdgeOverlay) child.visible = false;
+      });
+    }
+  }
+
   setDirectorMode(mode) {
     const nextMode = mode === "preview" ? "preview" : "edit";
     if (nextMode === this.mode) return;
@@ -468,13 +612,21 @@ export class ThreeSceneAdapter {
       this.mode = "preview";
       this.grid.visible = false;
       this.axes.visible = false;
-      this.meshes.forEach((mesh) => mesh.children.forEach((child) => {
-        if (child.userData.isEdgeOverlay) child.visible = false;
-      }));
+      this.meshes.forEach((mesh) => {
+        delete mesh.userData.previewState;
+        delete mesh.userData.previewBase;
+        mesh.children.forEach((child) => {
+          if (child.userData.isEdgeOverlay) child.visible = false;
+        });
+      });
       this.transformControls.detach();
       if (this.selectionHelper) this.selectionHelper.visible = false;
       this.orbitControls.enabled = false;
       this.renderer.domElement.classList.add("is-director-preview");
+      this.framePacing.qualityScale = 1;
+      this.framePacing.reset(performance.now());
+      this.renderer.setPixelRatio(this.basePixelRatio);
+      this.setPreviewEffects(true);
       return;
     }
 
@@ -502,6 +654,10 @@ export class ThreeSceneAdapter {
     }
     this.previewSnapshot = null;
     this.orbitControls.enabled = true;
+    this.framePacing.qualityScale = 1;
+    this.framePacing.reset(performance.now());
+    this.renderer.setPixelRatio(this.basePixelRatio);
+    this.setPreviewEffects(true);
     if (this.lastState) this.sync(this.lastState);
     this.orbitControls.update();
     this.resize();
@@ -551,14 +707,10 @@ export class ThreeSceneAdapter {
       const fromLookAt = new THREE.Vector3().fromArray(camera.fromLookAt ?? camera.toLookAt);
       const toLookAt = new THREE.Vector3().fromArray(camera.toLookAt);
       const sampleCurve = (path, fallbackFrom, fallbackTo) => {
-        if (!Array.isArray(path) || path.length < 3) return fallbackFrom.lerp(fallbackTo, camera.progress);
-        const curve = new THREE.CatmullRomCurve3(
-          path.map((point) => new THREE.Vector3().fromArray(point)),
-          false,
-          "centripetal",
-        );
-        curve.arcLengthDivisions = 96;
-        return curve.getPointAt(camera.progress);
+        if (!Array.isArray(path) || path.length < 3) {
+          return fallbackFrom.clone().lerp(fallbackTo, camera.progress);
+        }
+        return cameraCurveFor(path).getPointAt(camera.progress);
       };
       const target = sampleCurve(camera.lookAtPath, fromLookAt, toLookAt);
       this.activeCamera = this.perspectiveCamera;
@@ -618,24 +770,142 @@ export class ThreeSceneAdapter {
   applyDirectorFrame(frame) {
     if (this.mode !== "preview" || !this.lastState) return;
     this.directorFrame = frame;
+    this.resetTimelineInteractionPoses();
     for (const object of this.lastState.project.objects) {
       const mesh = this.meshes.get(object.id);
       if (!mesh) continue;
       const override = frame.objects?.[object.id];
-      this.syncMesh(mesh, override ? { ...object, ...override } : object, null);
+      const transformChanged = this.syncPreviewMesh(mesh, override ?? object, object);
       if (this.interactionVisibility.has(object.id)) {
         mesh.visible = this.interactionVisibility.get(object.id);
       }
-      mesh.userData.previewBase = {
-        position: mesh.position.clone(),
-        rotation: mesh.rotation.clone(),
-        scale: mesh.scale.clone(),
-        visible: mesh.visible,
+      const hadPreviewBase = Boolean(mesh.userData.previewBase);
+      const previewBase = mesh.userData.previewBase ?? {
+        position: new THREE.Vector3(),
+        rotation: new THREE.Euler(),
+        scale: new THREE.Vector3(),
+        visible: true,
       };
+      if (transformChanged || !hadPreviewBase) {
+        previewBase.position.copy(mesh.position);
+        previewBase.rotation.copy(mesh.rotation);
+        previewBase.scale.copy(mesh.scale);
+      }
+      previewBase.visible = mesh.visible;
+      mesh.userData.previewBase = previewBase;
     }
+    this.applyAssetReplacements();
+    this.scene.updateMatrixWorld(true);
+    this.applyTimelineInteractionPoses(frame.interactions);
     this.scene.updateMatrixWorld(true);
     this.applyDirectorCamera(frame.camera);
     this.applyInteractionEffects(performance.now());
+  }
+
+  syncPreviewMesh(mesh, frameObject, sourceObject) {
+    const previous = mesh.userData.previewState;
+    const nextVisible = frameObject.visible;
+    const nextPosition = frameObject.position;
+    const nextRotation = frameObject.rotation;
+    const nextScale = frameObject.scale;
+    const changed = !previous
+      || previous.visible !== nextVisible
+      || !sameVector(previous.position, nextPosition)
+      || !sameVector(previous.rotation, nextRotation)
+      || !sameVector(previous.scale, nextScale);
+    const assetController = this.assetControllers.get(sourceObject.id);
+    assetController?.setState(frameObject.animationState ?? "idle");
+    if (!changed) return false;
+
+    mesh.visible = frameObject.visible;
+    mesh.position.fromArray(frameObject.position);
+    mesh.rotation.set(
+      frameObject.rotation[0] * DEG_TO_RAD,
+      frameObject.rotation[1] * DEG_TO_RAD,
+      frameObject.rotation[2] * DEG_TO_RAD,
+    );
+    mesh.scale.set(
+      sourceObject.dimensions[0] * frameObject.scale[0],
+      sourceObject.dimensions[1] * frameObject.scale[1],
+      sourceObject.dimensions[2] * frameObject.scale[2],
+    );
+    assetController?.fitToCarrier(mesh.scale);
+    mesh.userData.previewState = {
+      visible: nextVisible,
+      position: [...nextPosition],
+      rotation: [...nextRotation],
+      scale: [...nextScale],
+    };
+    return true;
+  }
+
+  resetTimelineInteractionPoses() {
+    for (const id of this.timelineInteractionObjectIds) {
+      const mesh = this.meshes.get(id);
+      const base = mesh?.userData.previewBase;
+      if (!mesh || !base) continue;
+      mesh.position.copy(base.position);
+      mesh.rotation.copy(base.rotation);
+      mesh.scale.copy(base.scale);
+    }
+    this.timelineInteractionObjectIds.clear();
+  }
+
+  applyTimelineInteractionPoses(interactions = []) {
+    if (!Array.isArray(interactions) || !interactions.length) return;
+    const objects = this.lastState?.project.objects ?? [];
+    const sourceById = new Map(objects.map((object) => [object.id, object]));
+    const isDescendantOf = (object, rootId) => {
+      let cursor = object;
+      while (cursor?.parentId) {
+        if (cursor.parentId === rootId) return true;
+        cursor = sourceById.get(cursor.parentId);
+      }
+      return false;
+    };
+    const setWorldOffset = (mesh, offset) => {
+      const world = mesh.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3().fromArray(offset));
+      mesh.position.copy(mesh.parent ? mesh.parent.worldToLocal(world) : world);
+      if (mesh.userData.objectId) this.timelineInteractionObjectIds.add(mesh.userData.objectId);
+    };
+
+    for (const interaction of interactions) {
+      const actorMesh = this.meshes.get(interaction.actorId);
+      const targetMesh = this.meshes.get(interaction.targetId);
+      const actorSource = sourceById.get(interaction.actorId);
+      const targetSource = sourceById.get(interaction.targetId);
+      if (!actorMesh || !targetMesh || !actorSource || !targetSource) continue;
+
+      const actorWorld = actorMesh.getWorldPosition(new THREE.Vector3());
+      const targetWorld = targetMesh.getWorldPosition(new THREE.Vector3());
+      const targetQuaternion = targetMesh.getWorldQuaternion(new THREE.Quaternion());
+      const anchor = targetSource.interactionSpec?.anchors?.[interaction.targetAnchor] ?? [0, 0, 0];
+      targetWorld.add(new THREE.Vector3().fromArray(anchor).applyQuaternion(targetQuaternion));
+      const pose = proceduralInteractionPose(actorWorld.toArray(), targetWorld.toArray(), interaction.phase);
+
+      setWorldOffset(actorMesh, pose.actorOffset);
+      setWorldOffset(targetMesh, pose.targetOffset);
+      targetMesh.scale.multiplyScalar(pose.targetScale);
+      this.timelineInteractionObjectIds.add(targetSource.id);
+      this.scene.updateMatrixWorld(true);
+
+      if (this.assetControllers.has(actorSource.id) || pose.effectorWeight <= 0) continue;
+      const configuredRole = String(actorSource.asset?.nodes?.[interaction.actorNode] ?? "").toLowerCase();
+      const roleCandidates = new Set([
+        String(interaction.actorNode ?? "").toLowerCase(),
+        configuredRole,
+      ].filter(Boolean));
+      const effectorSource = objects.find((object) => (
+        isDescendantOf(object, actorSource.id)
+        && roleCandidates.has(String(object.nodeRole ?? "").toLowerCase())
+      ));
+      const effectorMesh = effectorSource ? this.meshes.get(effectorSource.id) : null;
+      const effectorBase = effectorMesh?.userData.previewBase;
+      if (!effectorMesh || !effectorBase) continue;
+      const reachedWorld = effectorMesh.getWorldPosition(new THREE.Vector3()).lerp(targetWorld, pose.effectorWeight);
+      effectorMesh.position.copy(effectorMesh.parent ? effectorMesh.parent.worldToLocal(reachedWorld) : reachedWorld);
+      this.timelineInteractionObjectIds.add(effectorSource.id);
+    }
   }
 
   triggerInteraction(id, interaction) {
@@ -707,18 +977,57 @@ export class ThreeSceneAdapter {
     this.updateOrthoProjection();
   }
 
-  animate = () => {
+  animate = (timestamp) => {
     if (this.disposed) return;
     this.animationFrame = requestAnimationFrame(this.animate);
+    const deltaSeconds = this.lastAnimationTimestamp === null || !Number.isFinite(timestamp)
+      ? 0
+      : Math.min(0.1, Math.max(0, (timestamp - this.lastAnimationTimestamp) / 1000));
+    this.lastAnimationTimestamp = Number.isFinite(timestamp) ? timestamp : this.lastAnimationTimestamp;
+    this.assetControllers.forEach((controller) => controller.update(deltaSeconds));
+    const report = this.framePacing.sample(timestamp);
+    if (report?.qualityChanged && this.mode === "preview" && this.performanceAdaptationEnabled) {
+      const pixelRatio = Math.max(0.5, this.basePixelRatio * report.qualityScale);
+      this.renderer.setPixelRatio(pixelRatio);
+      this.resize();
+    }
+    if (report && this.mode === "preview" && this.performanceAdaptationEnabled) {
+      const shouldDisableShadows = report.averageMs > 40 || report.p95Ms > 60 || report.qualityScale <= 0.7;
+      const shouldRestoreShadows = report.qualityScale >= 0.95 && report.averageMs < 19 && report.p95Ms < 24;
+      if (shouldDisableShadows) this.setPreviewEffects(false);
+      else if (shouldRestoreShadows) this.setPreviewEffects(true);
+    }
+    if (report && timestamp - this.lastPerformanceReportAt >= 500) {
+      this.lastPerformanceReportAt = timestamp;
+      this.performanceHandler?.({
+        ...report,
+        pixelRatio: this.renderer.getPixelRatio(),
+        shadowsEnabled: this.previewShadowsEnabled,
+        objectLightsEnabled: this.previewObjectLightsEnabled,
+        adaptationEnabled: this.performanceAdaptationEnabled,
+      });
+    }
     if (this.mode === "edit") this.orbitControls.update();
-    if (this.mode === "preview" && this.interactionEffects.size) this.applyInteractionEffects(performance.now());
+    if (this.mode === "preview" && this.interactionEffects.size) this.applyInteractionEffects(timestamp);
     this.selectionHelper?.update();
     this.renderer.render(this.scene, this.activeCamera);
   };
 
+  setPreviewEffects(enabled) {
+    const next = Boolean(enabled);
+    this.previewShadowsEnabled = next;
+    this.previewObjectLightsEnabled = next;
+    this.renderer.shadowMap.enabled = next;
+    this.meshes.forEach((mesh) => mesh.children.forEach((child) => {
+      if (child.userData.isObjectLight) child.visible = next;
+    }));
+  }
+
   dispose() {
     this.disposed = true;
     cancelAnimationFrame(this.animationFrame);
+    this.assetControllers.forEach((controller) => controller.dispose());
+    this.assetControllers.clear();
     this.unsubscribe?.();
     this.resizeObserver.disconnect();
     this.renderer.domElement.removeEventListener("pointerdown", this.onPointerDown);

@@ -149,6 +149,23 @@ describe("timeline evaluation", () => {
     expect(frame.objects.core.position).toEqual([3.65, 1.8, 2]);
   });
 
+  it("rotates a carried prop offset with its holder", () => {
+    const project = createDirectorProject();
+    project.director.timeline = {
+      duration: 1,
+      clips: [
+        { id: "turn", type: "rotate", track: "character", start: 0, duration: 0.1, targetId: "actor", from: [0, 0, 0], to: [0, 90, 0] },
+        { id: "carry", type: "attach", track: "prop", start: 0.1, duration: 0.1, targetId: "core", secondaryTargetId: "actor", offset: [1, 0, 0] },
+      ],
+      issues: [], compiledScript: "", compiledAt: null,
+    };
+
+    const frame = evaluateTimeline(project, 1);
+
+    expect(frame.objects.core.position[0]).toBeCloseTo(frame.objects.actor.position[0], 6);
+    expect(frame.objects.core.position[2]).toBeCloseTo(frame.objects.actor.position[2] - 1, 6);
+  });
+
   it("exposes active semantic interactions and commits their resulting state", () => {
     const project = normalizeProject({
       objects: [
@@ -201,6 +218,9 @@ describe("timeline evaluation", () => {
       actorNode: "effector",
     });
     expect(active.objects.recorder.semanticState).toBe("idle");
+    expect(active.objects.actor.animationState).toBe("interact");
+    expect(active.objects.recorder.animationState).toBe("react");
+    expect(active.interactions[0].phase.name).toBe("contact");
     expect(completed.interactions).toEqual([]);
     expect(completed.objects.recorder.semanticState).toBe("muted");
   });

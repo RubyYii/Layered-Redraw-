@@ -1,3 +1,6 @@
+import { rotateLocalOffset } from "./interaction-runtime.js";
+import { planGroundPath } from "./navigation-runtime.js";
+
 const FORBIDDEN_INTENT_FIELDS = Object.freeze([
   "position",
   "rotation",
@@ -17,6 +20,7 @@ const stateFor = (project, frame, objectId) => {
   return {
     source,
     position: runtime?.position ?? source.position,
+    rotation: runtime?.rotation ?? source.rotation,
     visible: runtime?.visible ?? source.visible,
     semanticState: runtime?.semanticState ?? source.entity?.state ?? "默认",
   };
@@ -24,7 +28,8 @@ const stateFor = (project, frame, objectId) => {
 
 const anchorPositionFor = (targetState, anchorName) => {
   const anchor = targetState.source.interactionSpec?.anchors?.[anchorName] ?? [0, 0, 0];
-  return targetState.position.map((value, axis) => value + anchor[axis]);
+  const rotated = rotateLocalOffset(anchor, targetState.rotation);
+  return targetState.position.map((value, axis) => value + rotated[axis]);
 };
 
 const groundDistance = (from, to) => Math.hypot(to[0] - from[0], to[2] - from[2]);
@@ -156,5 +161,109 @@ export function validateAgentIntent(project, frame, rawIntent) {
       resultingState: affordance.resultingState,
       reason: String(rawIntent.reason ?? "").trim().slice(0, 240),
     },
+  };
+}
+
+export function planAgentIntent(project, frame, rawIntent, navigationOptions = {}) {
+  const validation = validateAgentIntent(project, frame, rawIntent);
+  if (validation.ok) return { ok: true, requiresNavigation: false, steps: [{ kind: "interact", intent: validation.intent }] };
+  if (validation.code !== "out_of_range") return validation;
+
+  const actorId = String(rawIntent.actorId ?? "");
+  const targetId = String(rawIntent.targetId ?? "");
+  const affordanceName = String(rawIntent.affordance ?? "");
+  const actor = stateFor(project, frame, actorId);
+  const target = stateFor(project, frame, targetId);
+  const affordance = target?.source.interactionSpec?.affordances?.[affordanceName];
+  if (!actor || !target || !affordance) return validation;
+
+  const anchor = anchorPositionFor(target, affordance.targetAnchor);
+  const dx = actor.position[0] - anchor[0];
+  const dz = actor.position[2] - anchor[2];
+  const length = Math.max(0.0001, Math.hypot(dx, dz));
+  const standOff = Math.max(0.15, affordance.maxDistance * 0.72);
+  const approach = [
+    anchor[0] + (dx / length) * standOff,
+    actor.position[1],
+    anchor[2] + (dz / length) * standOff,
+  ];
+  const navigation = planGroundPath(project, actor.position, approach, {
+    ...navigationOptions,
+    ignoreIds: [...new Set([...(navigationOptions.ignoreIds ?? []), actorId, targetId])],
+  });
+  if (!navigation.ok) {
+    return { ok: false, code: navigation.code, recoverable: true, message: "导航系统没有找到安全接近目标的路径。" };
+  }
+
+  const simulatedFrame = {
+    ...frame,
+    objects: {
+      ...(frame?.objects ?? {}),
+      [actorId]: { ...(frame?.objects?.[actorId] ?? {}), position: approach },
+    },
+  };
+  const atGoal = validateAgentIntent(project, simulatedFrame, rawIntent);
+  if (!atGoal.ok) return atGoal;
+  return {
+    ok: true,
+    requiresNavigation: true,
+    steps: [
+      { kind: "navigate", actorId, path: navigation.path, distance: navigation.distance },
+      { kind: "interact", intent: atGoal.intent },
+    ],
+  };
+}
+
+export function compileAgentPlan(plan, frameTime = 0, { speed = 1.4, interactionDuration = 1.1 } = {}) {
+  if (!plan?.ok || !Array.isArray(plan.steps)) return [];
+  let cursor = Math.max(0, Number(frameTime) || 0);
+  const clips = [];
+  const planKey = plan.steps.map((step) => [
+    step.actorId ?? step.intent?.actorId ?? "actor",
+    step.intent?.targetId,
+    step.intent?.affordance,
+  ].filter(Boolean).join("-")).join("-").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 96);
+  const timeKey = Math.round(cursor * 1000);
+  for (const [index, step] of plan.steps.entries()) {
+    if (step.kind === "navigate" && step.path.length >= 2) {
+      const duration = Math.max(0.2, step.distance / Math.max(0.2, speed));
+      clips.push({
+        id: `agent-${planKey}-${timeKey}-${index}-move`, type: "move", track: "character",
+        label: "智能体安全接近", start: cursor, duration, targetId: step.actorId,
+        from: step.path[0], to: step.path.at(-1), path: step.path,
+        motion: { easing: "minimumJerk", orientToPath: true, turnPortion: 0.22 },
+      });
+      cursor += duration;
+    } else if (step.kind === "interact") {
+      clips.push({
+        id: `agent-${planKey}-${timeKey}-${index}-interaction`, type: "interaction", track: "character",
+        label: `智能体交互 · ${step.intent.action}`, start: cursor, duration: interactionDuration,
+        targetId: step.intent.targetId, secondaryTargetId: step.intent.actorId,
+        action: step.intent.action, actorNode: step.intent.actorNode,
+        targetAnchor: step.intent.targetAnchor, resultingState: step.intent.resultingState,
+        motion: { easing: "minimumJerk" },
+      });
+      cursor += interactionDuration;
+    }
+  }
+  return clips;
+}
+
+export async function runAgentTurn({
+  project,
+  frame,
+  actorId,
+  decide,
+  navigationOptions = {},
+  motionOptions = {},
+}) {
+  if (typeof decide !== "function") throw new Error("智能体适配器必须提供 decide(observation) 函数。");
+  const observation = buildAgentObservation(project, frame, actorId);
+  const rawIntent = await decide(structuredClone(observation));
+  const plan = planAgentIntent(project, frame, rawIntent, navigationOptions);
+  return {
+    observation,
+    plan,
+    clips: compileAgentPlan(plan, frame?.time ?? 0, motionOptions),
   };
 }

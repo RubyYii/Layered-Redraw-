@@ -7,14 +7,28 @@
 1. **Scene schema** — versioned JSON stores stable object IDs, parent relationships, transforms, render metadata, entity capabilities, motion profiles, asset bindings, and semantic interaction anchors.
 2. **Director** — absolute-time clips evaluate movement, rotation, visibility, attachments, dialogue, cameras, and interactions without mutating source project data.
 3. **Motion** — minimum-jerk easing and arc-length path sampling prevent abrupt acceleration and uneven speed across control points. Path tangents drive root yaw, lean, and bank.
-4. **Renderer/editor** — Three.js groups preserve character hierarchy; camera position and look-at use centripetal Catmull–Rom paths.
-5. **Agent boundary** — an observation builder exposes only visible semantic affordances. The validator rejects direct model control of transforms, paths, scripts, code, or asset URLs.
+4. **Renderer/editor** — Three.js groups preserve character hierarchy; cached camera position/look-at curves avoid rebuilding Catmull–Rom data every frame. Preview transforms bypass material work, timeline highlighting is incremental, and measured frame pacing can lower pixel ratio and temporarily simplify shadows/local lights on weak or software renderers. Fixed-step and keyframe render scripts opt into full quality so deliverables do not vary with interactive performance.
+5. **Asset runtime** — a local OBJ or self-contained GLB can replace a selected placeholder for the browser session without non-uniformly distorting the source. OBJ provides static geometry. GLB can additionally provide skins, bones, animation clips, and morph targets; the runtime reports those capabilities and infers semantic nodes, actions, rig bones, and expression slots. `AnimationMixer` crossfades between `idle`, `move`, `interact`, and `react` states supplied by the deterministic timeline.
+6. **Agent boundary** — an observation builder exposes only visible semantic affordances. The validator rejects direct model control of transforms, paths, scripts, code, or asset URLs; the planner can deterministically add a collision-aware ground path before an out-of-range interaction. `runAgentTurn` is the single callback boundary for a future provider and returns validated timeline clips rather than executing model-authored transforms.
 
 ## Stable replacement contract
 
-Characters are addressed through a root object rather than individual placeholder meshes. `asset.nodes` maps semantic slots such as `root`, `head`, `effector`, and `statusLight`; `asset.animations` maps `idle`, `move`, `interact`, and `react`. A future GLB importer can replace the placeholder hierarchy while preserving screenplay tracks and object interactions.
+Characters are addressed through a root object rather than individual placeholder meshes. `asset.nodes` maps semantic slots such as `root`, `head`, `effector`, and `statusLight`; `asset.animations` maps `idle`, `move`, `interact`, and `react`; `asset.bones` maps common rig roles such as `hips`, `head`, and both hands; `asset.expressions` maps roles such as `smile`, blinks, and `mouthOpen` to morph-target names. The importer replaces the placeholder hierarchy for the current session while preserving screenplay tracks and object interactions. Explicit bindings win when present; otherwise conservative name matching reports missing slots instead of inventing them.
 
-Props declare local `interactionSpec.anchors` and named `affordances`. A timeline interaction records actor, target, actor node, target anchor, action, and resulting state. The deterministic runtime remains responsible for reach distance, movement, collision, and animation.
+The editor runtime provides a format-independent control boundary:
+
+```js
+const report = editor.assetReport(objectId);
+editor.playAssetAction(objectId, "interact");
+editor.setAssetExpression(objectId, "smile", 0.8, { exclusive: true });
+editor.setAssetBonePose(objectId, "head", { rotationDegrees: [0, 20, 0] });
+editor.clearAssetExpressions(objectId);
+editor.clearAssetBonePose(objectId, "head");
+```
+
+Actions, expressions, and bones accept either a semantic slot or the original GLB name. `assetReport` exposes the source format, geometry/skin/bone counts, clip and morph-target names, inferred bindings, capability flags, warnings, and current overrides. A future behavior tree or model provider should inspect this report and issue constrained semantic commands rather than writing transforms or model URLs directly.
+
+Props declare local `interactionSpec.anchors` and named `affordances`. A timeline interaction records actor, target, actor node, target anchor, action, and resulting state. It exposes anticipation, reach, contact, and recovery phases; gray-box effectors procedurally approach anchors while targets receive a bounded contact response, and carried offsets rotate in the holder's local frame. Imported rigs use their mapped animation clip instead of the gray-box effector pose. The deterministic runtime remains responsible for reach distance, movement, collision planning, and animation state.
 
 ## Run and verify
 
@@ -31,10 +45,13 @@ The bundled `projects/window-case` fixture contains one continuous room, four no
 
 ## Current limits
 
-- `asset` is a validated binding contract; GLB loading and `AnimationMixer` playback are not connected yet.
-- Physics values are metadata; there is no rigid-body or character-controller solver yet.
+- OBJ and GLB loading are connected for local session files, but model files are not embedded in project JSON or packaged for transfer yet.
+- OBJ is intentionally static: its common interchange form has no portable skin, skeletal animation, or morph-expression contract. Animated characters should use a self-contained GLB; external OBJ MTL/texture references are ignored.
+- GLB bone overrides are local-pose controls, not animation retargeting or inverse kinematics.
+- The ground planner expands axis-aligned static bounds by actor radius; it is not a navigation mesh and does not replace a rigid-body or character-controller solver.
+- Semantic effectors select animation/node bindings, but full-body and hand IK are not connected yet.
 - Camera splines and procedural secondary motion improve continuity but do not replace authored animation.
 - The agent runtime validates semantic intents but does not call a language model.
 - The example is real-time stylized blockout, not photoreal final rendering.
 
-The next vertical slice should connect one replaceable GLB character, `AnimationMixer`, and a Rapier-backed navigation/collision adapter while keeping the semantic interaction contract unchanged.
+The next vertical slice should persist/package imported assets, add a retargeting profile and hand IK for one pickup interaction, and connect a Rapier-backed capsule controller while keeping the semantic interaction contract unchanged.

@@ -1,6 +1,6 @@
 ---
 name: stage-in-3d
-description: Turn screenplays, storyboards, shot notes, or scene descriptions into editable cinematic 3D blockouts with the bundled Three.js Scene Builder. Use for camera blocking, continuous character and prop motion, semantic object interactions, deterministic preview rendering, replaceable GLB contracts, or future agent-intent integration. Do not use for ordinary 2D layered redraws.
+description: Turn screenplays, storyboards, shot notes, or scene descriptions into editable cinematic 3D blockouts with the bundled Three.js Scene Builder. Use for camera blocking, continuous character and prop motion, semantic object interactions, deterministic preview rendering, replaceable OBJ/GLB contracts, or future agent-intent integration. Do not use for ordinary 2D layered redraws.
 ---
 
 # Stage In 3D
@@ -34,13 +34,13 @@ When a screenplay, archive, storyboard, or other document is attached, treat its
 - Give interactive objects an `interactionSpec` with named anchors, affordances, reach distance, and ownership/state constraints.
 - Put the narrative act in an `interaction` timeline clip. Resolve approach, reach, contact, state change, and release from semantic anchors rather than hard-coded world coordinates.
 - Validate that the actor and target exist, the affordance is allowed, timing is ordered, and the object state transition is legal.
-- Keep an auditable boundary for future language models: a model may propose a semantic intent such as actor, action, target, and optional style; deterministic code validates and compiles it. Never allow model output to write transforms, file paths, URLs, or executable code directly.
+- Keep an auditable boundary for future language models: a model may propose a semantic intent such as actor, action, target, and optional style; `runAgentTurn` passes it through deterministic validation, navigation planning, and timeline compilation. Never allow model output to write transforms, paths, file locations, URLs, or executable code directly.
 
 ## Preserve replacement interfaces
 
-Use stable asset bindings for at least the character root, head or gaze node, effectors used for contact, and any status light or state indicator. Define animation slots such as `idle`, `move`, `interact`, and `react`. Keep proportions and contact offsets in data so a later GLB can be retargeted without rewriting the screenplay timeline.
+Use stable asset bindings for at least the character root, head or gaze node, effectors used for contact, and any status light or state indicator. Define animation slots such as `idle`, `move`, `interact`, and `react`, plus common bone and expression slots when the asset exposes them. Keep proportions and contact offsets in data so a later GLB can be retargeted without rewriting the screenplay timeline.
 
-Do not claim a model was replaced merely because its binding exists. The current release defines the GLB node and animation contract but does not yet ship a production GLB loader, retargeter, navigation mesh, or rigid-body solver.
+Do not claim a model was replaced merely because its binding exists. The current editor can load a local OBJ or self-contained GLB for the browser session and fit it without distorting its proportions. Treat OBJ as static geometry; use GLB for skins, bones, mapped animation clips, and morph expressions. Verify the on-screen capability report and motion. The model file is not packaged with project JSON, and the release still has no production retargeter, full-body/hand IK, navigation mesh, or rigid-body solver; its deterministic ground planner only expands axis-aligned static bounds.
 
 ## Validate and render
 
@@ -60,4 +60,4 @@ Render a short sample before an expensive full preview. For the bundled strict 3
 npm run render:window-case:video30
 ```
 
-Keep generated frames and videos in the ignored `artifacts/` directory unless the user explicitly asks to version a deliverable. Report the exact output path, resolution, fps, and duration. Run a visual smoke check after UI or scene changes, and state plainly when GLB loading, collision physics, or external LLM calls remain unconnected.
+Keep generated frames and videos in the ignored `artifacts/` directory unless the user explicitly asks to version a deliverable. Report the exact output path, resolution, fps, and duration. Run a visual smoke check after UI or scene changes; inspect FPS and P95 long enough for adaptive resolution/effect quality to settle. Use the bundled render scripts for deliverables so full-quality output stays independent of preview adaptation. State plainly when model packaging, collision physics, or external LLM calls remain unconnected.

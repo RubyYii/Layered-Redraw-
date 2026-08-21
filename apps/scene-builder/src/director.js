@@ -6,6 +6,7 @@ import {
   tangentForVectorPath,
   yawForDirection,
 } from "./motion.js";
+import { attachmentPosition, interactionPhaseForProgress } from "./interaction-runtime.js";
 
 const NUMBER = "-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
 const VECTOR_PATTERN = new RegExp(`[（(]\\s*(${NUMBER})\\s*[,，、\\s]+\\s*(${NUMBER})\\s*[,，、\\s]+\\s*(${NUMBER})\\s*[)）]`);
@@ -15,6 +16,15 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const round = (value, precision = 4) => Number(value.toFixed(precision));
 const cloneVector = (value) => value.map(Number);
 const lerpVector = (from, to, progress) => from.map((value, index) => value + (to[index] - value) * progress);
+const projectLookupCache = new WeakMap();
+
+const sourceLookupFor = (project) => {
+  let lookup = projectLookupCache.get(project);
+  if (lookup) return lookup;
+  lookup = new Map(project.objects.map((object) => [object.id, object]));
+  projectLookupCache.set(project, lookup);
+  return lookup;
+};
 
 const clipId = (line, index, type) => `clip-${String(line).padStart(3, "0")}-${index}-${type}`;
 const trackFor = (object) => object?.entity?.role ?? "prop";
@@ -350,6 +360,7 @@ export function compileScreenplay(screenplay, project) {
 export function evaluateTimeline(project, rawTime) {
   const timeline = project.director?.timeline ?? { duration: 0, clips: [] };
   const time = clamp(Number(rawTime) || 0, 0, timeline.duration || 0);
+  const sourceById = sourceLookupFor(project);
   const objects = Object.fromEntries(project.objects.map((object) => [object.id, {
     position: cloneVector(object.position),
     rotation: cloneVector(object.rotation),
@@ -357,6 +368,7 @@ export function evaluateTimeline(project, rawTime) {
     visible: object.visible,
     color: object.color,
     semanticState: object.entity?.state ?? "默认",
+    animationState: "idle",
   }]));
   const attachments = new Map();
   const interactions = [];
@@ -365,7 +377,7 @@ export function evaluateTimeline(project, rawTime) {
   let dialogue = null;
 
   for (const clip of timeline.clips) {
-    if (time < clip.start) continue;
+    if (time < clip.start) break;
     const progress = clamp((time - clip.start) / Math.max(clip.duration, 0.001), 0, 1);
     const eased = progressForMotion(progress, clip.motion);
     if (progress < 1) activeClipIds.push(clip.id);
@@ -392,6 +404,7 @@ export function evaluateTimeline(project, rawTime) {
         target.rotation[0] += Math.sin(progress * Math.PI * 2) * (clip.motion.leanDegrees || 0);
         target.rotation[2] += Math.sin(progress * Math.PI) * (clip.motion.bankDegrees || 0);
       }
+      if (progress < 1) target.animationState = "move";
     }
     else if (clip.type === "rotate" && target) target.rotation = lerpVector(clip.from, clip.to, eased);
     else if (clip.type === "scale" && target) target.scale = lerpVector(clip.from, clip.to, eased);
@@ -400,6 +413,9 @@ export function evaluateTimeline(project, rawTime) {
       attachments.set(clip.targetId, { holderId: clip.secondaryTargetId, offset: clip.offset });
     } else if (clip.type === "interaction" && target && clip.secondaryTargetId) {
       if (progress < 1) {
+        const actor = objects[clip.secondaryTargetId];
+        if (actor) actor.animationState = "interact";
+        target.animationState = "react";
         interactions.push({
           id: clip.id,
           actorId: clip.secondaryTargetId,
@@ -408,6 +424,7 @@ export function evaluateTimeline(project, rawTime) {
           targetAnchor: clip.targetAnchor,
           actorNode: clip.actorNode,
           progress: eased,
+          phase: interactionPhaseForProgress(eased),
         });
       } else if (clip.resultingState) {
         target.semanticState = clip.resultingState;
@@ -415,7 +432,7 @@ export function evaluateTimeline(project, rawTime) {
     } else if (clip.type === "camera") {
       camera = { ...clip, progress: eased };
     } else if (clip.type === "dialogue" && progress < 1) {
-      const speaker = project.objects.find((object) => object.id === clip.targetId);
+      const speaker = sourceById.get(clip.targetId);
       dialogue = { speaker: speaker?.name ?? "角色", text: clip.text, clipId: clip.id };
     }
   }
@@ -424,10 +441,9 @@ export function evaluateTimeline(project, rawTime) {
     const item = objects[itemId];
     const holder = objects[attachment.holderId];
     if (!item || !holder) continue;
-    item.position = holder.position.map((value, axis) => value + attachment.offset[axis]);
+    item.position = attachmentPosition(holder.position, holder.rotation, attachment.offset);
   }
 
-  const sourceById = new Map(project.objects.map((object) => [object.id, object]));
   for (const source of project.objects) {
     const state = objects[source.id];
     if (!state) continue;

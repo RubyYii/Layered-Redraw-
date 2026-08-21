@@ -149,6 +149,20 @@ const elements = {
   entityMass: $("#entity-mass"),
   entityFriction: $("#entity-friction"),
   entityRestitution: $("#entity-restitution"),
+  chooseAssetFile: $("#choose-asset-file"),
+  clearAssetFile: $("#clear-asset-file"),
+  assetFile: $("#asset-file"),
+  assetSessionTitle: $("#asset-session-title"),
+  assetSessionDetail: $("#asset-session-detail"),
+  assetRuntimeControls: $("#asset-runtime-controls"),
+  assetActionPreview: $("#asset-action-preview"),
+  playAssetAction: $("#play-asset-action"),
+  assetExpressionPreview: $("#asset-expression-preview"),
+  assetExpressionWeight: $("#asset-expression-weight"),
+  assetExpressionOutput: $("#asset-expression-output"),
+  clearAssetExpression: $("#clear-asset-expression"),
+  assetRigDetails: $("#asset-rig-details"),
+  assetRigDetail: $("#asset-rig-detail"),
   interactionTrigger: $("#interaction-trigger"),
   interactionAction: $("#interaction-action"),
   interactionAmount: $("#interaction-amount"),
@@ -165,6 +179,9 @@ const elements = {
   timelinePlayhead: $("#timeline-playhead"),
   timelineScrubber: $("#timeline-scrubber"),
   previewIndicator: $("#preview-indicator"),
+  performanceIndicator: $("#performance-indicator"),
+  performanceFps: $("#performance-fps"),
+  performanceQuality: $("#performance-quality"),
   dialogueOverlay: $("#dialogue-overlay"),
   dialogueSpeaker: $("#dialogue-speaker"),
   dialogueText: $("#dialogue-text"),
@@ -180,6 +197,10 @@ let directorMode = "edit";
 let currentFrame = null;
 let runtime = null;
 let renderedTimelineKey = "";
+let timelineClipNodes = new Map();
+let activeTimelineClipIds = new Set();
+let lastTimelineUiTime = -Infinity;
+let lastDialogueClipId = null;
 
 const selectedObject = () => currentState.project.objects.find((object) => object.id === currentState.selectionId) ?? null;
 
@@ -194,6 +215,21 @@ const showToast = (message) => {
 
 const setControlValue = (control, value) => {
   if (document.activeElement !== control) control.value = String(value);
+};
+
+const syncSelectOptions = (control, options, preferredValue = "") => {
+  const key = JSON.stringify(options);
+  if (control.dataset.optionsKey !== key) {
+    control.replaceChildren(...options.map(({ value, label }) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      return option;
+    }));
+    control.dataset.optionsKey = key;
+  }
+  const values = new Set(options.map((option) => option.value));
+  control.value = values.has(preferredValue) ? preferredValue : options[0]?.value ?? "";
 };
 
 const decodeImageFile = async (file) => {
@@ -460,6 +496,65 @@ const renderInspector = (state) => {
   elements.entityMass.disabled = directorMode === "preview" || object.entity.physics.bodyType === "static";
   elements.entityFriction.disabled = directorMode === "preview";
   elements.entityRestitution.disabled = directorMode === "preview";
+  const assetReport = editor.assetReport(object.id);
+  elements.chooseAssetFile.disabled = directorMode === "preview";
+  elements.clearAssetFile.disabled = directorMode === "preview";
+  elements.clearAssetFile.hidden = !assetReport;
+  elements.assetSessionTitle.textContent = assetReport ? assetReport.sourceName : "使用灰模";
+  elements.assetSessionDetail.textContent = assetReport
+    ? `${assetReport.format} · ${assetReport.meshCount} 网格 · ${assetReport.skinnedMeshCount} 蒙皮 · ${assetReport.boneCount} 骨骼 · ${assetReport.clipNames.length} 动作 · ${assetReport.morphTargetNames.length} Morph`
+    : "OBJ 用于静态网格；GLB 可携带骨架、动作与表情 Morph。";
+  elements.assetRuntimeControls.hidden = !assetReport;
+  elements.assetRigDetails.hidden = !assetReport;
+  if (assetReport) {
+    const assetKey = `${object.id}:${assetReport.sourceName}`;
+    const mappedActions = Object.entries(assetReport.animations).filter(([, name]) => name);
+    const mappedActionNames = new Set(mappedActions.map(([, name]) => name));
+    const actionOptions = [
+      ...mappedActions.map(([slot, name]) => ({ value: slot, label: `${slot} → ${name}` })),
+      ...assetReport.clipNames.filter((name) => !mappedActionNames.has(name)).map((name) => ({ value: name, label: name })),
+    ];
+    if (!actionOptions.length) actionOptions.push({ value: "", label: "无可用动画" });
+    const actionPreferred = elements.assetActionPreview.dataset.assetKey === assetKey
+      ? elements.assetActionPreview.value
+      : assetReport.runtime.actionSlot ?? actionOptions[0].value;
+    syncSelectOptions(elements.assetActionPreview, actionOptions, actionPreferred);
+    elements.assetActionPreview.dataset.assetKey = assetKey;
+
+    const mappedExpressions = Object.entries(assetReport.expressions).filter(([, name]) => name);
+    const mappedExpressionNames = new Set(mappedExpressions.map(([, name]) => name));
+    const expressionOptions = [
+      ...mappedExpressions.map(([slot, name]) => ({ value: slot, label: `${slot} → ${name}` })),
+      ...assetReport.morphTargetNames.filter((name) => !mappedExpressionNames.has(name)).map((name) => ({ value: name, label: name })),
+    ];
+    if (!expressionOptions.length) expressionOptions.push({ value: "", label: "无表情 Morph" });
+    const activeMorph = Object.keys(assetReport.runtime.expressions)[0] ?? null;
+    const activeExpression = mappedExpressions.find(([, name]) => name === activeMorph)?.[0] ?? activeMorph;
+    const expressionPreferred = elements.assetExpressionPreview.dataset.assetKey === assetKey
+      ? elements.assetExpressionPreview.value
+      : activeExpression ?? expressionOptions[0].value;
+    syncSelectOptions(elements.assetExpressionPreview, expressionOptions, expressionPreferred);
+    elements.assetExpressionPreview.dataset.assetKey = assetKey;
+    const selectedMorph = assetReport.expressions[elements.assetExpressionPreview.value]
+      ?? elements.assetExpressionPreview.value;
+    const expressionWeight = assetReport.runtime.expressions[selectedMorph] ?? 0;
+    setControlValue(elements.assetExpressionWeight, expressionWeight);
+    elements.assetExpressionOutput.textContent = `${Math.round(expressionWeight * 100)}%`;
+
+    const locked = directorMode === "preview";
+    elements.assetActionPreview.disabled = locked || !assetReport.capabilities.actions;
+    elements.playAssetAction.disabled = locked || !assetReport.capabilities.actions;
+    elements.assetExpressionPreview.disabled = locked || !assetReport.capabilities.expressions;
+    elements.assetExpressionWeight.disabled = locked || !assetReport.capabilities.expressions;
+    elements.clearAssetExpression.disabled = locked || !assetReport.capabilities.expressions;
+    const boneBindings = Object.entries(assetReport.bones).filter(([, name]) => name)
+      .map(([slot, name]) => `${slot}→${name}`).join("、") || "无";
+    const expressionBindings = mappedExpressions.map(([slot, name]) => `${slot}→${name}`).join("、") || "无";
+    const rigSummary = assetReport.format === "OBJ"
+      ? "静态 OBJ：没有骨骼、蒙皮权重、动画或 Morph；如需角色控制请导出为 GLB。"
+      : `骨架映射：${boneBindings}。表情映射：${expressionBindings}。运行时接口：playAction、setExpression、setBonePose。`;
+    elements.assetRigDetail.textContent = `${rigSummary}${assetReport.warnings.length ? ` 提示：${assetReport.warnings.join("；")}` : ""}`;
+  }
   elements.interactionTrigger.value = object.entity.interaction.trigger;
   elements.interactionAction.value = object.entity.interaction.action;
   setControlValue(elements.interactionAmount, object.entity.interaction.amount);
@@ -539,26 +634,36 @@ const timelineTrackFor = (track) => track === "camera"
 
 const updateTimelineFrame = (frame) => {
   currentFrame = frame;
+  if (directorMode === "preview") {
+    editor.applyDirectorFrame(frame);
+    elements.dialogueOverlay.hidden = !frame.dialogue;
+    if (frame.dialogue && frame.dialogue.clipId !== lastDialogueClipId) {
+      elements.dialogueSpeaker.textContent = frame.dialogue.speaker;
+      elements.dialogueText.textContent = frame.dialogue.text;
+    }
+    lastDialogueClipId = frame.dialogue?.clipId ?? null;
+  } else {
+    elements.dialogueOverlay.hidden = true;
+    lastDialogueClipId = null;
+  }
+
+  const uiDelta = Math.abs(frame.time - lastTimelineUiTime);
+  if (runtime?.playing && uiDelta < 1 / 30) return;
+  lastTimelineUiTime = frame.time;
   const duration = Math.max(frame.duration, 0);
   const progress = duration ? (frame.time / duration) * 100 : 0;
   elements.timelineTimecode.textContent = formatTimecode(frame.time);
   elements.timelineScrubber.value = String(frame.time);
   elements.timelinePlayhead.style.left = `${progress}%`;
-  const active = new Set(frame.activeClipIds);
-  elements.timelineTrackArea.querySelectorAll(".timeline-clip").forEach((clip) => {
-    clip.classList.toggle("is-active", active.has(clip.dataset.clipId));
-  });
 
-  if (directorMode === "preview") {
-    editor.applyDirectorFrame(frame);
-    elements.dialogueOverlay.hidden = !frame.dialogue;
-    if (frame.dialogue) {
-      elements.dialogueSpeaker.textContent = frame.dialogue.speaker;
-      elements.dialogueText.textContent = frame.dialogue.text;
-    }
-  } else {
-    elements.dialogueOverlay.hidden = true;
+  const active = new Set(frame.activeClipIds);
+  for (const id of activeTimelineClipIds) {
+    if (!active.has(id)) timelineClipNodes.get(id)?.classList.remove("is-active");
   }
+  for (const id of active) {
+    if (!activeTimelineClipIds.has(id)) timelineClipNodes.get(id)?.classList.add("is-active");
+  }
+  activeTimelineClipIds = active;
 };
 
 const updatePlaybackState = ({ playing, duration }) => {
@@ -596,6 +701,8 @@ const renderTimeline = (timeline) => {
   }
 
   document.querySelectorAll("[data-timeline-track]").forEach((track) => track.replaceChildren());
+  timelineClipNodes = new Map();
+  activeTimelineClipIds = new Set();
   const visualDuration = Math.max(timeline.duration, 1);
   timeline.clips.forEach((clip) => {
     const track = document.querySelector(`[data-timeline-track="${timelineTrackFor(clip.track)}"]`);
@@ -615,6 +722,7 @@ const renderTimeline = (timeline) => {
       seekDirector(clip.start);
     });
     track.appendChild(button);
+    timelineClipNodes.set(clip.id, button);
   });
   if (currentFrame) updateTimelineFrame(currentFrame);
 };
@@ -695,6 +803,7 @@ const setDirectorMode = (mode) => {
   });
   elements.app.classList.toggle("is-preview", directorMode === "preview");
   elements.previewIndicator.hidden = directorMode !== "preview";
+  elements.performanceIndicator.hidden = directorMode !== "preview";
   editor.setDirectorMode(directorMode);
 
   if (directorMode === "preview") runtime?.seek(runtime.time);
@@ -748,6 +857,13 @@ store.subscribe((state) => {
 });
 
 runtime = new DirectorRuntime(currentState.project, updateTimelineFrame, updatePlaybackState);
+editor.setPerformanceHandler(({ fps, qualityScale, p95Ms, shadowsEnabled, objectLightsEnabled, adaptationEnabled }) => {
+  elements.performanceFps.textContent = `${Math.round(fps)} FPS`;
+  const effectsLabel = shadowsEnabled && objectLightsEnabled ? "特效 实时" : "特效 简化";
+  const quality = adaptationEnabled ? qualityScale : 1;
+  elements.performanceQuality.textContent = `画质 ${Math.round(quality * 100)}% · ${effectsLabel} · P95 ${p95Ms.toFixed(1)}ms`;
+  elements.performanceIndicator.classList.toggle("is-slow", fps < 45 || p95Ms > 30);
+});
 editor.setPreviewInteractionHandler((id) => {
   const object = currentState.project.objects.find((candidate) => candidate.id === id);
   if (!object) return;
@@ -865,6 +981,75 @@ elements.referenceFile.addEventListener("change", async () => {
 
 elements.removeReferenceImage.addEventListener("click", () => {
   if (store.removeReference()) showToast("参考图已移除，可使用撤销恢复");
+});
+
+elements.chooseAssetFile.addEventListener("click", () => elements.assetFile.click());
+elements.assetFile.addEventListener("change", async () => {
+  const object = selectedObject();
+  const file = elements.assetFile.files?.[0];
+  if (!object || !file) return;
+  elements.chooseAssetFile.disabled = true;
+  elements.assetSessionTitle.textContent = "正在解析模型…";
+  elements.assetSessionDetail.textContent = "检查网格、比例、骨架、动作与表情 Morph，请稍候。";
+  try {
+    const report = await editor.loadAssetFile(object.id, file);
+    showToast(`已替换“${object.name}”：${report.format} · ${report.meshCount} 网格 · ${report.boneCount} 骨骼 · ${report.clipNames.length} 动作`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    elements.assetFile.value = "";
+    renderInspector(currentState);
+  }
+});
+
+elements.clearAssetFile.addEventListener("click", () => {
+  const object = selectedObject();
+  if (!object || !editor.clearAsset(object.id)) return;
+  renderInspector(currentState);
+  showToast(`“${object.name}”已恢复为灰模`);
+});
+
+elements.assetActionPreview.addEventListener("change", () => {
+  const object = selectedObject();
+  const action = elements.assetActionPreview.value;
+  if (!object || !action) return;
+  if (editor.playAssetAction(object.id, action)) showToast(`动作预览：${elements.assetActionPreview.selectedOptions[0]?.textContent ?? action}`);
+  renderInspector(currentState);
+});
+
+elements.playAssetAction.addEventListener("click", () => {
+  const object = selectedObject();
+  const action = elements.assetActionPreview.value;
+  if (!object || !action) return;
+  if (editor.playAssetAction(object.id, action)) showToast(`重播动作：${elements.assetActionPreview.selectedOptions[0]?.textContent ?? action}`);
+  renderInspector(currentState);
+});
+
+elements.assetExpressionPreview.addEventListener("change", () => {
+  const object = selectedObject();
+  if (!object) return;
+  const report = editor.assetReport(object.id);
+  const morph = report?.expressions[elements.assetExpressionPreview.value] ?? elements.assetExpressionPreview.value;
+  const weight = report?.runtime.expressions[morph] ?? 0;
+  setControlValue(elements.assetExpressionWeight, weight);
+  elements.assetExpressionOutput.textContent = `${Math.round(weight * 100)}%`;
+});
+
+elements.assetExpressionWeight.addEventListener("input", () => {
+  const object = selectedObject();
+  const expression = elements.assetExpressionPreview.value;
+  const weight = Number(elements.assetExpressionWeight.value);
+  if (!object || !expression) return;
+  editor.setAssetExpression(object.id, expression, weight, { exclusive: true });
+  elements.assetExpressionOutput.textContent = `${Math.round(weight * 100)}%`;
+});
+
+elements.clearAssetExpression.addEventListener("click", () => {
+  const object = selectedObject();
+  if (!object || !editor.clearAssetExpressions(object.id)) return;
+  setControlValue(elements.assetExpressionWeight, 0);
+  elements.assetExpressionOutput.textContent = "0%";
+  showToast("已清除表情覆盖");
 });
 
 elements.referenceVisible.addEventListener("change", () => {

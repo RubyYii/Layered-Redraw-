@@ -150,7 +150,7 @@ npm run build:window-case
 npm run render:window-case:video30
 ```
 
-Model replacement and intelligent characters are interface-first in this release: GLB node/animation slots, object anchors, and semantic intents are part of the project contract; the GLB loader, navigation mesh, and rigid-body solver remain follow-up work.
+The editor can now import OBJ or a self-contained GLB for a selected object during the browser session and fit it inside the placeholder without distorting its proportions. OBJ is treated as static geometry. A GLB additionally reports skins, bones, animation clips, and morph targets, then infers semantic nodes, `idle/move/interact/react` actions, common rig bones, and expression slots. The runtime exposes `playAssetAction`, `setAssetExpression`, and `setAssetBonePose`, so a future character swap does not have to rewrite scene tracks. Expanded static collision bounds can also produce a deterministic approach path for an out-of-range agent intent. Model files are not packaged with project JSON yet; hand IK, animation retargeting, a navigation mesh, and rigid-body solving remain follow-up work.
 
 You can also invoke the 3D skill directly:
 

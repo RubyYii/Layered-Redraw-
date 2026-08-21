@@ -2023,6 +2023,7 @@ button:disabled {
 }
 
 .preview-indicator[hidden],
+.performance-indicator[hidden],
 .dialogue-overlay[hidden] {
   display: none;
 }
@@ -2033,6 +2034,33 @@ button:disabled {
   border-radius: 50%;
   background: var(--danger);
   box-shadow: 0 0 8px rgb(239 125 113 / 80%);
+}
+
+.performance-indicator {
+  position: absolute;
+  top: 52px;
+  right: 16px;
+  z-index: 10;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 5px 8px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 4px;
+  background: rgb(17 19 19 / 74%);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(8px);
+}
+
+.performance-indicator strong {
+  color: #a9d7bd;
+  font-size: 10px;
+}
+
+.performance-indicator.is-slow strong {
+  color: var(--accent-strong);
 }
 
 .dialogue-overlay {
@@ -2123,6 +2151,7 @@ canvas.is-director-preview {
 }
 
 .entity-field small,
+.asset-fieldset > small,
 .interaction-fieldset > small,
 .entity-details p {
   margin: 0;
@@ -2132,6 +2161,7 @@ canvas.is-director-preview {
 }
 
 .capability-fieldset,
+.asset-fieldset,
 .interaction-fieldset {
   min-width: 0;
   margin: 0;
@@ -2141,10 +2171,16 @@ canvas.is-director-preview {
 }
 
 .capability-fieldset legend,
+.asset-fieldset legend,
 .interaction-fieldset legend {
   padding: 0 4px;
   color: var(--text-secondary);
   font-size: 11px;
+}
+
+.asset-fieldset {
+  display: grid;
+  gap: 7px;
 }
 
 .capability-grid {
@@ -2190,6 +2226,103 @@ canvas.is-director-preview {
   grid-template-columns: 1fr 1fr;
   gap: 7px;
   padding-bottom: 8px;
+}
+
+.asset-import-status {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 4px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.asset-import-status strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-import-status small,
+.asset-fieldset > small {
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.asset-import-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.asset-import-actions .text-button {
+  flex: 1;
+}
+
+.asset-runtime-controls[hidden],
+.asset-rig-details[hidden] {
+  display: none;
+}
+
+.asset-runtime-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 4px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.asset-runtime-controls label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.asset-expression-weight {
+  grid-column: 1 / -1;
+}
+
+.asset-expression-weight span {
+  display: flex;
+  justify-content: space-between;
+}
+
+.asset-expression-weight output {
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.asset-expression-weight input {
+  width: 100%;
+}
+
+.asset-runtime-controls .text-button {
+  min-width: 0;
+}
+
+.asset-rig-details {
+  border-top: 1px solid rgb(255 255 255 / 8%);
+  padding-top: 6px;
+}
+
+.asset-rig-details summary {
+  color: var(--text-secondary);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.asset-rig-details p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .entity-details-grid label,

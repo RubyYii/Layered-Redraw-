@@ -29,8 +29,13 @@
 - minimum-jerk 加减速、按弧长推进的样条路径、转向倾斜与悬浮次级运动
 - 显式摄影机位置／注视样条，支持连续电影运镜
 - 物品交互锚点、可执行 affordance 与可追踪 interaction 时间线片段
-- `asset.nodes`／`asset.animations` 语义绑定，为后续 GLB 与 AnimationMixer 留出稳定接口
-- 大模型意图观察器与校验器；模型不能直接写入位置、旋转、路径、脚本或资源 URL
+- 统一的会话级 OBJ／GLB 导入与灰模替换，按比例适配灰模边界；OBJ 用作静态网格，GLB 承载蒙皮、骨架、动作和 Morph 表情
+- 导入报告会列出网格、蒙皮网格、骨骼、动画片段与 Morph Target，并自动识别 `root/head/effector/statusLight`、常用骨骼和表情槽位
+- `AnimationMixer` 驱动的 `idle/move/interact/react` CrossFade，以及独立的动作、表情权重与骨骼姿态控制接口；模型变化不改写角色根轨道
+- 交互的预备、伸手、接触、恢复阶段，以及随持有者旋转的局部携带锚点
+- 基于静态碰撞体膨胀边界的确定性地面寻路，可把越界意图编译为“接近—交互”计划
+- 大模型意图观察器、校验器、计划器与单一 `runAgentTurn` 适配入口；模型不能直接写入位置、旋转、路径、脚本或资源 URL
+- 摄影机曲线缓存、轻量预览变换、增量时间线高亮、FPS/P95 监测、自适应像素比与弱设备阴影／局部灯降级；离线渲染固定为完整特效
 
 ## 剧本语法
 
@@ -66,6 +71,21 @@ npm run test:ui
 
 ## 项目格式
 
-项目使用 `schemaVersion: 3` 的纯 JSON 数据，不会直接序列化 Three.js 对象。`reference` 保存压缩后的概念图和提示词，`breakdown` 保存物体拆解与灰模连接，`objects` 保存稳定 ID、父子关系、变换、实体组件、运动配置、模型绑定、交互锚点和可选的实时材质参数，`director` 保存剧本文本、编译提示、物体动作、语义交互以及显式电影机位路径。旧版 v1/v2 JSON 在载入时会自动迁移。
+项目使用 `schemaVersion: 3` 的纯 JSON 数据，不会直接序列化 Three.js 对象。`reference` 保存压缩后的概念图和提示词，`breakdown` 保存物体拆解与灰模连接，`objects` 保存稳定 ID、父子关系、变换、实体组件、运动配置、模型绑定（`nodes`、`animations`、`bones`、`expressions`）、交互锚点和可选的实时材质参数，`director` 保存剧本文本、编译提示、物体动作、语义交互以及显式电影机位路径。旧版 v1/v2 JSON 在载入时会自动迁移。
 
-物理属性目前是结构化元数据，尚未运行真实动力学求解；`asset` 是替换合同而不是已完成的 GLB 加载器。后续阶段建议依次加入：GLB 与骨骼动画、导航网格、Rapier 适配层、音频轨道和离线渲染出口。
+物理属性仍以结构化元数据为主；当前确定性寻路会把静态物体视为膨胀后的地面障碍，但尚未运行刚体动力学或完整角色控制器。编辑器能够在当前浏览器会话中导入 OBJ 或单文件 GLB。OBJ 本身不包含通用骨架、蒙皮动画或表情，因此只走静态网格接口；需要动作和表情的角色应使用 GLB，并把贴图一并打包。模型文件不会嵌进项目 JSON，重新打开或跨机器交付时需要再次选择文件。下一阶段建议加入项目资产包／本地资产库、动画重定向、手部 IK、Rapier 角色胶囊体、导航网格、音频轨道和离线渲染出口。
+
+### 角色运行时接口
+
+导入后可通过编辑器实例读取能力报告并控制角色：
+
+```js
+const report = editor.assetReport(objectId);
+editor.playAssetAction(objectId, "interact");
+editor.setAssetExpression(objectId, "smile", 0.8, { exclusive: true });
+editor.setAssetBonePose(objectId, "head", { rotationDegrees: [0, 20, 0] });
+editor.clearAssetExpressions(objectId);
+editor.clearAssetBonePose(objectId, "head");
+```
+
+动作既可传语义槽位，也可传 GLB 中的原始动画名；表情和骨骼同样支持语义槽位或原始名称。`assetReport` 会返回可用能力、自动绑定结果和当前运行状态，接入大模型或行为树时应先读报告，再发出受限的语义控制命令。

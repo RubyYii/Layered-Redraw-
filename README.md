@@ -154,7 +154,7 @@ npm run build:window-case
 npm run render:window-case:video30
 ```
 
-当前模型替换和智能角色采用接口先行：GLB 节点／动画槽位、物品锚点和语义意图已经进入项目格式，实际 GLB 加载器、导航网格和刚体求解仍是下一阶段。
+当前已经可以在浏览器会话中为选中物体导入 OBJ 或单文件 GLB，并在保持原始长宽高比例的前提下装入灰模边界。OBJ 作为静态网格使用；GLB 会进一步报告蒙皮、骨骼、动画片段和 Morph Target，自动绑定语义节点、`idle/move/interact/react` 动作、常用骨骼及表情槽位。运行时开放 `playAssetAction`、`setAssetExpression` 和 `setAssetBonePose`，以后替换角色模型时无需改写场景轨道。静态碰撞边界也能为越界的智能体意图生成确定性接近路径。模型文件尚未随 JSON 打包，手部 IK、动画重定向、导航网格和刚体求解仍是下一阶段。
 
 也可以直接调用 3D Skill：
 

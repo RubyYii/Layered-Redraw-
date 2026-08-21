@@ -202,6 +202,10 @@
             <div id="preview-indicator" class="preview-indicator" hidden>
               <span></span> 导演预览
             </div>
+            <div id="performance-indicator" class="performance-indicator" hidden aria-live="off">
+              <strong id="performance-fps">-- FPS</strong>
+              <span id="performance-quality">画质 100%</span>
+            </div>
             <div id="dialogue-overlay" class="dialogue-overlay" hidden>
               <strong id="dialogue-speaker"></strong>
               <p id="dialogue-text"></p>
@@ -377,6 +381,34 @@
                 </div>
                 <p>当前保存为可导出的物理属性；动力学求解器将在物理阶段接入。</p>
               </details>
+
+              <fieldset class="asset-fieldset">
+                <legend>角色／模型资产</legend>
+                <div class="asset-import-status">
+                  <strong id="asset-session-title">使用灰模</strong>
+                  <small id="asset-session-detail">OBJ 用于静态网格；GLB 可携带骨架、动作与表情 Morph。</small>
+                </div>
+                <div class="asset-import-actions">
+                  <button id="choose-asset-file" class="text-button is-primary" type="button">导入 OBJ / GLB</button>
+                  <button id="clear-asset-file" class="text-button" type="button" hidden>恢复灰模</button>
+                </div>
+                <input id="asset-file" type="file" accept="model/gltf-binary,model/obj,.glb,.obj" hidden />
+                <div id="asset-runtime-controls" class="asset-runtime-controls" hidden>
+                  <label for="asset-action-preview"><span>动作预览</span><select id="asset-action-preview" class="field-control"></select></label>
+                  <label for="asset-expression-preview"><span>表情／Morph</span><select id="asset-expression-preview" class="field-control"></select></label>
+                  <label class="asset-expression-weight" for="asset-expression-weight">
+                    <span>表情强度 <output id="asset-expression-output">0%</output></span>
+                    <input id="asset-expression-weight" type="range" min="0" max="1" step="0.01" value="0" />
+                  </label>
+                  <button id="play-asset-action" class="text-button" type="button">播放／重播动作</button>
+                  <button id="clear-asset-expression" class="text-button" type="button">清除表情</button>
+                </div>
+                <details id="asset-rig-details" class="asset-rig-details" hidden>
+                  <summary>骨架与控制接口</summary>
+                  <p id="asset-rig-detail"></p>
+                </details>
+                <small>会话级预览：自动识别节点、骨骼、动作槽和常见表情。OBJ 不含骨骼／动画；模型二进制暂不写入项目 JSON。</small>
+              </fieldset>
 
               <fieldset class="interaction-fieldset">
                 <legend>预览交互</legend>

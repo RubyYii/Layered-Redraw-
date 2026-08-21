@@ -4234,7 +4234,9 @@
           "move": "Move",
           "interact": "Interact",
           "react": "React"
-        }
+        },
+        "bones": {},
+        "expressions": {}
       },
       "motion": {
         "kind": "hover",
@@ -4941,7 +4943,9 @@
           "move": "Move",
           "interact": "Interact",
           "react": "React"
-        }
+        },
+        "bones": {},
+        "expressions": {}
       },
       "motion": {
         "kind": "hover",
@@ -5648,7 +5652,9 @@
           "move": "Move",
           "interact": "Interact",
           "react": "React"
-        }
+        },
+        "bones": {},
+        "expressions": {}
       },
       "motion": {
         "kind": "hover",
@@ -6355,7 +6361,9 @@
           "move": "Move",
           "interact": "Interact",
           "react": "React"
-        }
+        },
+        "bones": {},
+        "expressions": {}
       },
       "motion": {
         "kind": "hover",

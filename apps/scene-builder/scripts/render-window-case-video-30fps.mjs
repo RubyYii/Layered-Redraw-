@@ -96,7 +96,7 @@ try {
   await server.listen();
   const address = server.httpServer.address();
   const port = typeof address === "object" && address ? address.port : 5173;
-  const appUrl = `http://127.0.0.1:${port}/`;
+  const appUrl = `http://127.0.0.1:${port}/?renderQuality=full`;
 
   browser = await chromium.launch({
     executablePath,
@@ -143,7 +143,7 @@ try {
       .topbar,#director-dock,.statusbar,.library-panel,.inspector-panel{display:none!important}
       .workspace{display:block!important;width:1280px!important;height:720px!important}
       .viewport-shell{width:1280px!important;height:720px!important}
-      .viewport-tools,.camera-tools,.viewport-axis,#preview-indicator,.dialogue-overlay{display:none!important}
+      .viewport-tools,.camera-tools,.viewport-axis,#preview-indicator,#performance-indicator,.dialogue-overlay{display:none!important}
     `,
   });
   await page.waitForTimeout(300);
