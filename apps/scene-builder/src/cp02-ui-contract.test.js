@@ -174,4 +174,108 @@ describe("CP02 interaction surface contract", () => {
     expect(mesh.parent).toBe(scene);
     expect(materialDisposed).toBe(false);
   });
+
+  it("applies a CP02-only camera and lighting profile without duplicating its readability light", () => {
+    const scene = new THREE.Scene();
+    const perspectiveCamera = new THREE.PerspectiveCamera(42, 1, 0.05, 500);
+    const adapter = Object.assign(Object.create(ThreeSceneAdapter.prototype), {
+      scene,
+      renderer: { toneMappingExposure: 1 },
+      perspectiveCamera,
+      activeCamera: null,
+      orbitControls: {
+        object: null,
+        target: new THREE.Vector3(),
+        update() {},
+      },
+      transformControls: { camera: null },
+      hemisphereLight: new THREE.HemisphereLight(0xffffff, 0x111111, 0.5),
+      keyLight: new THREE.DirectionalLight(0xffffff, 1),
+      fillLight: new THREE.DirectionalLight(0xffffff, 0.25),
+      practicalLight: new THREE.PointLight(0xffffff, 1, 4, 2),
+      cp02ReadabilityLight: null,
+    });
+    const profile = {
+      id: "cp02-visual-repair-test",
+      camera: {
+        position: [0.3, 3.6, 3.7],
+        target: [0.8, 1.1, -1.4],
+        fov: 51,
+      },
+      lighting: {
+        exposure: 1.31,
+        hemisphereIntensity: 1.08,
+        keyIntensity: 3.05,
+        fillIntensity: 0.82,
+        practical: {
+          position: [-1.4, 3.2, 1.2],
+          intensity: 9.4,
+          distance: 13,
+          decay: 2,
+        },
+        readability: {
+          color: "#d7c19c",
+          position: [1.2, 2.5, -1.1],
+          intensity: 3.8,
+          distance: 7.5,
+          decay: 2,
+        },
+      },
+    };
+
+    const first = adapter.applyCp02VisualProfile(profile);
+    const second = adapter.applyCp02VisualProfile(profile);
+
+    expect(first).toEqual(second);
+    expect(first).toMatchObject({ id: "cp02-visual-repair-test", status: "ACTIVE" });
+    expect(adapter.activeCamera).toBe(perspectiveCamera);
+    expect(perspectiveCamera.position.toArray()).toEqual([0.3, 3.6, 3.7]);
+    expect(perspectiveCamera.fov).toBe(51);
+    expect(adapter.orbitControls.target.toArray()).toEqual([0.8, 1.1, -1.4]);
+    expect(adapter.renderer.toneMappingExposure).toBe(1.31);
+    expect(adapter.hemisphereLight.intensity).toBe(1.08);
+    expect(adapter.keyLight.intensity).toBe(3.05);
+    expect(adapter.fillLight.intensity).toBe(0.82);
+    expect(adapter.practicalLight.position.toArray()).toEqual([-1.4, 3.2, 1.2]);
+    expect(adapter.cp02ReadabilityLight.position.toArray()).toEqual([1.2, 2.5, -1.1]);
+    expect(scene.children.filter((child) => child.userData.cp02Readability)).toHaveLength(1);
+  });
+
+  it("applies an idempotent thermos display treatment while retaining the approved texture", () => {
+    const texture = new THREE.Texture();
+    const material = new THREE.MeshStandardMaterial({
+      color: "#ffffff",
+      roughness: 0.24,
+      metalness: 0.81,
+      map: texture,
+    });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+    const root = new THREE.Group();
+    root.add(mesh);
+    const adapter = Object.assign(Object.create(ThreeSceneAdapter.prototype), {
+      assetControllers: new Map([["cp02-memory-thermos", { root }]]),
+    });
+    const treatment = {
+      id: "aged-muted-metal-test",
+      color: "#b8aa91",
+      minRoughness: 0.72,
+      maxMetalness: 0.34,
+      yawDegrees: 168,
+    };
+
+    const first = adapter.applyAssetDisplayTreatment("cp02-memory-thermos", treatment);
+    const second = adapter.applyAssetDisplayTreatment("cp02-memory-thermos", treatment);
+
+    expect(first).toEqual(second);
+    expect(first).toEqual({
+      treatmentId: "aged-muted-metal-test",
+      materialCount: 1,
+      yawDegrees: 168,
+    });
+    expect(material.color.getHexString()).toBe("b8aa91");
+    expect(material.roughness).toBe(0.72);
+    expect(material.metalness).toBe(0.34);
+    expect(material.map).toBe(texture);
+    expect(root.rotation.y).toBeCloseTo(THREE.MathUtils.degToRad(168));
+  });
 });

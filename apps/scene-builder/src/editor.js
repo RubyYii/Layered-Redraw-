@@ -161,6 +161,7 @@ export class ThreeSceneAdapter {
     this.scene.add(axes);
 
     const hemisphere = new THREE.HemisphereLight(0x8fa39e, 0x171310, 0.85);
+    this.hemisphereLight = hemisphere;
     this.scene.add(hemisphere);
 
     const keyLight = new THREE.DirectionalLight(0xffdfb3, 2.65);
@@ -172,14 +173,17 @@ export class ThreeSceneAdapter {
     keyLight.shadow.camera.top = 18;
     keyLight.shadow.camera.bottom = -18;
     keyLight.shadow.bias = -0.00035;
+    this.keyLight = keyLight;
     this.scene.add(keyLight);
 
     const fillLight = new THREE.DirectionalLight(0x7fa6b8, 0.58);
     fillLight.position.set(-10, 7, -8);
+    this.fillLight = fillLight;
     this.scene.add(fillLight);
 
     const practical = new THREE.PointLight(0xe8a55a, 8, 13, 2);
     practical.position.set(-2.2, 3.6, 2.8);
+    this.practicalLight = practical;
     this.scene.add(practical);
   }
 
@@ -569,6 +573,68 @@ export class ThreeSceneAdapter {
     if (this.lastState) this.sync(this.lastState);
   }
 
+  applyCp02VisualProfile(profile = {}) {
+    const camera = profile.camera ?? {};
+    const lighting = profile.lighting ?? {};
+    const position = Array.isArray(camera.position) ? camera.position : [0, 3.6, 4];
+    const target = Array.isArray(camera.target) ? camera.target : [0, 1.2, 0];
+    const fov = Number(camera.fov) || 42;
+
+    this.activePreset = "perspective";
+    this.activeCamera = this.perspectiveCamera;
+    this.perspectiveCamera.position.fromArray(position);
+    this.perspectiveCamera.fov = fov;
+    this.perspectiveCamera.up.set(0, 1, 0);
+    this.perspectiveCamera.lookAt(new THREE.Vector3().fromArray(target));
+    this.perspectiveCamera.updateProjectionMatrix();
+    this.orbitControls.object = this.activeCamera;
+    this.orbitControls.target.fromArray(target);
+    this.orbitControls.update();
+    this.transformControls.camera = this.activeCamera;
+
+    this.renderer.toneMappingExposure = Number(lighting.exposure) || 1;
+    this.hemisphereLight.intensity = Number(lighting.hemisphereIntensity) || 0;
+    this.keyLight.intensity = Number(lighting.keyIntensity) || 0;
+    this.fillLight.intensity = Number(lighting.fillIntensity) || 0;
+
+    const practical = lighting.practical ?? {};
+    if (Array.isArray(practical.position)) this.practicalLight.position.fromArray(practical.position);
+    this.practicalLight.intensity = Number(practical.intensity) || 0;
+    this.practicalLight.distance = Number(practical.distance) || 0;
+    this.practicalLight.decay = Number(practical.decay) || 2;
+
+    const readability = lighting.readability ?? {};
+    if (!this.cp02ReadabilityLight) {
+      this.cp02ReadabilityLight = new THREE.PointLight(0xffffff, 0, 0, 2);
+      this.cp02ReadabilityLight.userData.cp02Readability = true;
+      this.scene.add(this.cp02ReadabilityLight);
+    }
+    this.cp02ReadabilityLight.color.set(readability.color ?? "#ffffff");
+    if (Array.isArray(readability.position)) this.cp02ReadabilityLight.position.fromArray(readability.position);
+    this.cp02ReadabilityLight.intensity = Number(readability.intensity) || 0;
+    this.cp02ReadabilityLight.distance = Number(readability.distance) || 0;
+    this.cp02ReadabilityLight.decay = Number(readability.decay) || 2;
+
+    const evidence = {
+      id: String(profile.id ?? "cp02-visual-profile"),
+      status: "ACTIVE",
+      camera: {
+        position: this.perspectiveCamera.position.toArray(),
+        target: this.orbitControls.target.toArray(),
+        fov: this.perspectiveCamera.fov,
+      },
+      lighting: {
+        exposure: this.renderer.toneMappingExposure,
+        hemisphereIntensity: this.hemisphereLight.intensity,
+        keyIntensity: this.keyLight.intensity,
+        fillIntensity: this.fillLight.intensity,
+        readabilityIntensity: this.cp02ReadabilityLight.intensity,
+      },
+    };
+    this.cp02VisualProfileEvidence = evidence;
+    return structuredClone(evidence);
+  }
+
   clearCp02ProposalPreview() {
     if (!this.cp02ProposalRoot) return;
     const children = [...this.cp02ProposalRoot.children];
@@ -730,6 +796,38 @@ export class ThreeSceneAdapter {
     this.applyAssetReplacements();
     this.scene.updateMatrixWorld(true);
     return controller.report;
+  }
+
+  applyAssetDisplayTreatment(id, treatment = {}) {
+    const controller = this.assetControllers.get(id);
+    if (!controller?.root) throw new Error("素材尚未材质化，无法应用显示处理。");
+    const treatmentId = String(treatment.id ?? "").trim();
+    if (!treatmentId) throw new Error("显示处理必须声明稳定 ID。");
+    const yawDegrees = Number(treatment.yawDegrees) || 0;
+    const materials = new Set();
+    controller.root.traverse((node) => {
+      const entries = Array.isArray(node.material) ? node.material : [node.material];
+      for (const material of entries) {
+        if (!material?.isMaterial) continue;
+        materials.add(material);
+        if (treatment.color && material.color?.set) material.color.set(treatment.color);
+        if (Number.isFinite(material.roughness) && Number.isFinite(treatment.minRoughness)) {
+          material.roughness = Math.max(material.roughness, treatment.minRoughness);
+        }
+        if (Number.isFinite(material.metalness) && Number.isFinite(treatment.maxMetalness)) {
+          material.metalness = Math.min(material.metalness, treatment.maxMetalness);
+        }
+        material.needsUpdate = true;
+      }
+    });
+    controller.root.rotation.y = THREE.MathUtils.degToRad(yawDegrees);
+    controller.root.userData.displayTreatmentId = treatmentId;
+    controller.root.updateMatrixWorld(true);
+    return {
+      treatmentId,
+      materialCount: materials.size,
+      yawDegrees,
+    };
   }
 
   clearAsset(id, { resync = true } = {}) {
@@ -1266,6 +1364,9 @@ export class ThreeSceneAdapter {
     this.cp02ProposalRoot?.removeFromParent();
     this.cp02DecisionLight.removeFromParent();
     this.cp02DecisionLight.dispose?.();
+    this.cp02ReadabilityLight?.removeFromParent();
+    this.cp02ReadabilityLight?.dispose?.();
+    this.cp02ReadabilityLight = null;
     this.cp02DecisionEffects = [];
     this.transformControls.dispose?.();
     this.orbitControls.dispose();

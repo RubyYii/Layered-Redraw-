@@ -41,6 +41,40 @@ const cp02ProjectUrl = new URL(
 const cp02CasePackRoot = "/case-packs/pact-cp02/";
 const cp02InitialUtterance = "我记得床边有一张小桌子、一把椅子，桌上放着一个旧杯子。";
 const cp02ThermosUtterance = "桌上还应该有一个旧保温杯，但不要替换那个杯子。";
+const cp02VisualRepairProfile = Object.freeze({
+  id: "cp02-visual-repair-r1",
+  camera: Object.freeze({
+    position: Object.freeze([0.1, 3.35, 3.75]),
+    target: Object.freeze([0.15, 1.12, -1.25]),
+    fov: 60,
+  }),
+  lighting: Object.freeze({
+    exposure: 1.08,
+    hemisphereIntensity: 0.84,
+    keyIntensity: 2.25,
+    fillIntensity: 0.56,
+    practical: Object.freeze({
+      position: Object.freeze([-1.45, 3.25, 1.2]),
+      intensity: 6.8,
+      distance: 13,
+      decay: 2,
+    }),
+    readability: Object.freeze({
+      color: "#d7c19c",
+      position: Object.freeze([1.35, 2.35, -1.25]),
+      intensity: 2.9,
+      distance: 6.8,
+      decay: 2,
+    }),
+  }),
+});
+const cp02ThermosDisplayTreatment = Object.freeze({
+  id: "cp02-aged-muted-thermos-r1",
+  color: "#c7baa2",
+  minRoughness: 0.72,
+  maxMetalness: 0.34,
+  yawDegrees: 168,
+});
 const cp02MaterializationBindings = Object.freeze({
   "CP02-TABLE-PROXY-001": Object.freeze({
     carrierId: "cp02-memory-table",
@@ -53,6 +87,7 @@ const cp02MaterializationBindings = Object.freeze({
   "CP02-THERMOS-CARRIER-001": Object.freeze({
     carrierId: "cp02-memory-thermos",
     casePackAssetId: "PH-MUG-MATERIAL-001",
+    displayTreatment: cp02ThermosDisplayTreatment,
   }),
 });
 
@@ -283,6 +318,10 @@ const cp02Evidence = {
   },
   materializedAssets: {},
   materializationErrors: [],
+  visualProfile: {
+    id: cp02VisualRepairProfile.id,
+    status: "PENDING",
+  },
   latestPerformanceReport: null,
 };
 
@@ -532,12 +571,16 @@ const materializeCp02PatchAssets = async (patch) => {
         cp02RuntimeCasePack,
         binding.casePackAssetId,
       );
+      const displayTreatment = binding.displayTreatment
+        ? editor.applyAssetDisplayTreatment(binding.carrierId, binding.displayTreatment)
+        : null;
       loaded.push({
         assetId: binding.casePackAssetId,
         carrierId: binding.carrierId,
         bytes: source.bytes,
         sha256: source.sha256,
         status: "MATERIALIZED",
+        displayTreatment,
         report: {
           format: report.format,
           meshCount: report.meshCount,
@@ -1435,7 +1478,7 @@ const loadCp02LocalProject = async () => {
     if (!response.ok) throw new Error(`本地场景请求失败（HTTP ${response.status}）`);
     const project = ensureInitialTimeline(await response.json());
     store.replaceProject(project);
-    editor.setCameraPreset("perspective");
+    cp02Evidence.visualProfile = editor.applyCp02VisualProfile(cp02VisualRepairProfile);
     await refreshCp02ProjectHash(store.getState().project);
     if (!cp02Evidence.ready) cp02Evidence.phase = "CP02 场景哈希已核验；等待本地 Case Pack。";
   } catch (error) {
@@ -1494,6 +1537,7 @@ const setupCp02Case = () => {
       casePack: cp02Evidence.casePack,
       materializedAssets: cp02MaterializedAssetList(),
       materializationErrors: cp02Evidence.materializationErrors,
+      visualProfile: cp02Evidence.visualProfile,
       executionMode: "engineering-evidence",
       networkPolicy: "local-only",
       publicAssetDisplay: false,

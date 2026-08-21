@@ -2891,7 +2891,15 @@ body.is-cp02-case .stage-nav {
 
 body.is-cp02-case .performance-indicator {
   top: 16px;
+  right: 16px;
+}
+
+body.is-cp02-case #viewport {
   right: 388px;
+}
+
+body.is-cp02-case #viewport canvas {
+  filter: saturate(0.72) sepia(0.08) contrast(0.94) brightness(0.92);
 }
 
 body.is-cp02-case .viewport-shell::after {
@@ -3158,6 +3166,10 @@ body.is-cp02-case .viewport-shell::after {
 
   body.is-cp02-case .performance-indicator {
     display: none;
+  }
+
+  body.is-cp02-case #viewport {
+    right: 0;
   }
 }
 

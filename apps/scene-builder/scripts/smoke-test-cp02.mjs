@@ -343,6 +343,16 @@ const assertMaterialized = (state, assetIds, label) => {
         && records[assetId].report.bounds.every((value) => Number.isFinite(value) && value > 0),
       `${label} ${assetId} has invalid source bounds`,
     );
+    if (assetId === "PH-MUG-MATERIAL-001") {
+      assert(
+        records[assetId]?.displayTreatment?.treatmentId === "cp02-aged-muted-thermos-r1",
+        `${label} thermos display treatment is not active`,
+      );
+      assert(
+        records[assetId]?.displayTreatment?.materialCount > 0,
+        `${label} thermos display treatment reached no rendered material`,
+      );
+    }
   }
 };
 
@@ -370,6 +380,22 @@ export async function runInteractionSequence(page, { stillsDir = null, pauseMs =
   await waitForReady(page);
   const initial = await snapshot(page);
   assertCasePackEvidence(initial);
+  assert(
+    initial.visualProfile?.id === "cp02-visual-repair-r1"
+      && initial.visualProfile?.status === "ACTIVE",
+    "CP02 visual repair profile is not active",
+  );
+  const layout = await page.evaluate(() => {
+    const viewportRect = document.querySelector("#viewport").getBoundingClientRect();
+    const panelRect = document.querySelector("#cp02-panel").getBoundingClientRect();
+    return {
+      viewportRight: viewportRect.right,
+      viewportWidth: viewportRect.width,
+      panelLeft: panelRect.left,
+    };
+  });
+  assert(layout.viewportRight <= layout.panelLeft, "CP02 governance panel still overlaps the 3D viewport");
+  assert(layout.viewportWidth >= 820, `CP02 3D viewport is too narrow: ${layout.viewportWidth}px`);
   assertMaterialized(initial, [], "Initial state");
   assert(initial.objectCount === 200, `CP02 initial object count must be 200, got ${initial.objectCount}`);
   assert(initial.governanceCounts.SOURCE_LOCKED === 1, "CP02 must contain exactly one SOURCE_LOCKED object");
