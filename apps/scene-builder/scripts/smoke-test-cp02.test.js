@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -86,5 +88,16 @@ describe("CP02 browser evidence statistics", () => {
     expect(isLocalRequest("blob:https://example.com/remote-id")).toBe(false);
     expect(isLocalRequest("data:image/png;base64,AAAA")).toBe(false);
     expect(isLocalRequest("https://example.com/model.glb")).toBe(false);
+  });
+
+  it("keeps the captured interaction sequence available to the render report", () => {
+    const source = fs.readFileSync(
+      fileURLToPath(new URL("./render-window-case-cp02.mjs", import.meta.url)),
+      "utf8",
+    );
+
+    expect(source).toMatch(/let interaction;[\s\S]*try \{/);
+    expect(source).toContain("interaction = await runInteractionSequence");
+    expect(source).not.toContain("const interaction = await runInteractionSequence");
   });
 });

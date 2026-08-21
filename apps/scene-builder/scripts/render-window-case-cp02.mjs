@@ -107,6 +107,7 @@ export async function renderCp02Evidence() {
   let browser;
   let context;
   let origin;
+  let interaction;
   try {
     ({ server, origin } = await startCp02Server());
     const launched = await launchCp02Browser({ headless: process.env.CP02_HEADLESS === "1" });
@@ -120,7 +121,7 @@ export async function renderCp02Evidence() {
     renderNetworkRecorder.attach(page, "uncut-interaction-video");
     const video = page.video();
     await page.goto(`${origin}/?case=pact-cp02`, { waitUntil: "networkidle" });
-    await runInteractionSequence(page, { pauseMs: 850 });
+    interaction = await runInteractionSequence(page, { pauseMs: 850 });
     await page.waitForTimeout(1200);
     await context.close();
     context = null;
