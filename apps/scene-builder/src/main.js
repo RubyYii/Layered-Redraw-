@@ -42,11 +42,11 @@ const cp02CasePackRoot = "/case-packs/pact-cp02/";
 const cp02InitialUtterance = "我记得床边有一张小桌子、一把椅子，桌上放着一个旧杯子。";
 const cp02ThermosUtterance = "桌上还应该有一个旧保温杯，但不要替换那个杯子。";
 const cp02VisualRepairProfile = Object.freeze({
-  id: "cp02-visual-repair-r1",
+  id: "cp02-visual-repair-r2",
   camera: Object.freeze({
-    position: Object.freeze([0.1, 3.35, 3.75]),
-    target: Object.freeze([0.15, 1.12, -1.25]),
-    fov: 60,
+    position: Object.freeze([0.55, 3.08, 3.32]),
+    target: Object.freeze([0.62, 1.04, -1.48]),
+    fov: 54,
   }),
   lighting: Object.freeze({
     exposure: 1.08,
@@ -65,6 +65,19 @@ const cp02VisualRepairProfile = Object.freeze({
       intensity: 2.9,
       distance: 6.8,
       decay: 2,
+    }),
+  }),
+  layers: Object.freeze({
+    id: "cp02-dual-memory-r2",
+    archiveObjectPrefixes: Object.freeze(["sandbox-table_", "sandbox-cup_"]),
+    archive: Object.freeze({
+      color: "#5f5548",
+      roughness: 0.96,
+      opacity: 0.86,
+      emissive: "#15110d",
+      emissiveIntensity: 0.12,
+      edgeColor: 0xb69a76,
+      edgeOpacity: 0.36,
     }),
   }),
 });
@@ -256,6 +269,11 @@ const elements = {
   dialogueOverlay: $("#dialogue-overlay"),
   dialogueSpeaker: $("#dialogue-speaker"),
   dialogueText: $("#dialogue-text"),
+  cp02LayerLegend: $("#cp02-layer-legend"),
+  cp02ArchiveLayer: $("#cp02-archive-layer"),
+  cp02MutableLayer: $("#cp02-mutable-layer"),
+  cp02MutableLayerState: $("#cp02-mutable-layer-state"),
+  cp02MutableLayerDetail: $("#cp02-mutable-layer-detail"),
   cp02Panel: $("#cp02-panel"),
   cp02Utterance: $("#cp02-utterance"),
   cp02Preview: $("#cp02-preview"),
@@ -440,6 +458,32 @@ const renderCp02PatchList = () => {
   elements.cp02PatchPreview.appendChild(item);
 };
 
+const cp02MutableLayerState = (project) => {
+  if (cp02Evidence.outcome === "WITHHELD") return "WITHHELD";
+  if (cp02Evidence.outcome === "PROPOSED" && cp02Evidence.currentPatch) return "PROPOSED";
+  if (project.objects.some((object) => (
+    object.id.startsWith("cp02-memory-") && object.governance?.state === "AUTHORISED"
+  ))) return "AUTHORISED";
+  return "EMPTY";
+};
+
+const renderCp02LayerLegend = (project) => {
+  const mutableState = cp02MutableLayerState(project);
+  const copy = {
+    EMPTY: ["PROPOSAL / EMPTY", "等待观众提出"],
+    PROPOSED: ["PROPOSAL / UNSETTLED", "框外浮现 · 尚未进入场景"],
+    AUTHORISED: ["PROPOSAL / AUTHORISED", "Guardian 已允许 · 仍可撤回"],
+    WITHHELD: ["PROPOSAL / WITHHELD", "改写被拒绝 · 原层保持"],
+  }[mutableState];
+  elements.cp02LayerLegend.hidden = false;
+  elements.cp02LayerLegend.dataset.mutableState = mutableState;
+  elements.cp02ArchiveLayer.dataset.layerState = "ARCHIVE_LOCKED";
+  elements.cp02MutableLayer.dataset.layerState = mutableState;
+  elements.cp02MutableLayerState.textContent = copy[0];
+  elements.cp02MutableLayerDetail.textContent = copy[1];
+  return mutableState;
+};
+
 const renderCp02Surface = () => {
   if (!isCp02Case) return;
   const project = currentState.project;
@@ -471,6 +515,7 @@ const renderCp02Surface = () => {
   elements.cp02Undo.disabled = cp02Evidence.busy || cp02Evidence.appliedReceipts.length === 0;
   elements.cp02AttemptSourceRewrite.disabled = !cp02Evidence.ready || cp02Evidence.busy;
   elements.cp02DownloadReceipt.disabled = !cp02Evidence.latestReceipt;
+  renderCp02LayerLegend(project);
   renderCp02CasePack();
   renderCp02PatchList();
 };
@@ -1494,6 +1539,7 @@ const setupCp02Case = () => {
   if (!isCp02Case) return;
   document.body.classList.add("is-cp02-case");
   elements.cp02Panel.hidden = false;
+  elements.cp02LayerLegend.hidden = false;
   elements.projectName.disabled = true;
   editor.setGovernanceOverlay(false);
 
@@ -1538,6 +1584,12 @@ const setupCp02Case = () => {
       materializedAssets: cp02MaterializedAssetList(),
       materializationErrors: cp02Evidence.materializationErrors,
       visualProfile: cp02Evidence.visualProfile,
+      layerGrammar: {
+        id: cp02Evidence.visualProfile?.layers?.id ?? null,
+        archiveObjectPrefixes: cp02Evidence.visualProfile?.layers?.archiveObjectPrefixes ?? [],
+        archiveState: "ARCHIVE_LOCKED",
+        mutableState: cp02MutableLayerState(currentState.project),
+      },
       executionMode: "engineering-evidence",
       networkPolicy: "local-only",
       publicAssetDisplay: false,

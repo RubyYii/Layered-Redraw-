@@ -221,6 +221,19 @@ describe("CP02 interaction surface contract", () => {
           decay: 2,
         },
       },
+      layers: {
+        id: "cp02-dual-memory-test",
+        archiveObjectPrefixes: ["sandbox-table_", "sandbox-cup_"],
+        archive: {
+          color: "#5f5548",
+          roughness: 0.96,
+          opacity: 0.86,
+          emissive: "#15110d",
+          emissiveIntensity: 0.12,
+          edgeColor: 0xb69a76,
+          edgeOpacity: 0.36,
+        },
+      },
     };
 
     const first = adapter.applyCp02VisualProfile(profile);
@@ -239,6 +252,12 @@ describe("CP02 interaction surface contract", () => {
     expect(adapter.practicalLight.position.toArray()).toEqual([-1.4, 3.2, 1.2]);
     expect(adapter.cp02ReadabilityLight.position.toArray()).toEqual([1.2, 2.5, -1.1]);
     expect(scene.children.filter((child) => child.userData.cp02Readability)).toHaveLength(1);
+    expect(adapter.cp02LayerGrammar).toEqual(profile.layers);
+    expect(first.layers).toEqual({
+      id: "cp02-dual-memory-test",
+      status: "ACTIVE",
+      archiveObjectPrefixes: ["sandbox-table_", "sandbox-cup_"],
+    });
   });
 
   it("applies an idempotent thermos display treatment while retaining the approved texture", () => {
@@ -277,5 +296,90 @@ describe("CP02 interaction surface contract", () => {
     expect(material.metalness).toBe(0.34);
     expect(material.map).toBe(texture);
     expect(root.rotation.y).toBeCloseTo(THREE.MathUtils.degToRad(168));
+  });
+
+  it("renders only declared archive anchors as a distinct CP02 memory layer without mutating source objects", () => {
+    const makeMesh = () => {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1, 1),
+        new THREE.MeshStandardMaterial({
+          color: "#d4d0c2",
+          roughness: 0.72,
+          metalness: 0.08,
+          emissive: "#000000",
+        }),
+      );
+      const edge = new THREE.LineSegments(
+        new THREE.EdgesGeometry(mesh.geometry),
+        new THREE.LineBasicMaterial({ color: "#151817", transparent: true, opacity: 0.38 }),
+      );
+      edge.userData.isEdgeOverlay = true;
+      mesh.add(edge);
+      return { mesh, edge };
+    };
+    const makeObject = (id) => ({
+      id,
+      name: id,
+      type: "box",
+      visible: true,
+      locked: true,
+      color: "#d4d0c2",
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      dimensions: [1, 1, 1],
+      scale: [1, 1, 1],
+      render: {
+        roughness: 0.72,
+        metalness: 0.08,
+        opacity: 1,
+        emissive: "#000000",
+        emissiveIntensity: 0,
+        edge: true,
+      },
+      governance: { state: "EVIDENCE_LOCKED" },
+      entity: { role: "prop" },
+    });
+    const adapter = Object.assign(Object.create(ThreeSceneAdapter.prototype), {
+      mode: "edit",
+      governanceOverlayEnabled: false,
+      isDragging: false,
+      assetControllers: new Map(),
+      cp02LayerGrammar: {
+        id: "cp02-dual-memory-test",
+        archiveObjectPrefixes: ["sandbox-table_", "sandbox-cup_"],
+        archive: {
+          color: "#5f5548",
+          roughness: 0.96,
+          opacity: 0.86,
+          emissive: "#15110d",
+          emissiveIntensity: 0.12,
+          edgeColor: 0xb69a76,
+          edgeOpacity: 0.36,
+        },
+      },
+    });
+
+    const archiveObject = makeObject("sandbox-cup_body");
+    const untouchedSource = structuredClone(archiveObject);
+    const archive = makeMesh();
+    adapter.syncMesh(archive.mesh, archiveObject, null);
+
+    expect(archiveObject).toEqual(untouchedSource);
+    expect(archive.mesh.userData.cp02VisualLayer).toBe("ARCHIVE_LOCKED");
+    expect(archive.mesh.material.color.getHexString()).toBe("5f5548");
+    expect(archive.mesh.material.roughness).toBe(0.96);
+    expect(archive.mesh.material.opacity).toBe(0.86);
+    expect(archive.mesh.material.emissive.getHexString()).toBe("15110d");
+    expect(archive.mesh.material.emissiveIntensity).toBe(0.12);
+    expect(archive.edge.visible).toBe(true);
+    expect(archive.edge.material.color.getHex()).toBe(0xb69a76);
+    expect(archive.edge.material.opacity).toBe(0.36);
+
+    const unrelatedObject = makeObject("sandbox-recorder_body");
+    const unrelated = makeMesh();
+    adapter.syncMesh(unrelated.mesh, unrelatedObject, null);
+    expect(unrelated.mesh.userData.cp02VisualLayer).toBeNull();
+    expect(unrelated.mesh.material.color.getHexString()).toBe("d4d0c2");
+    expect(unrelated.edge.visible).toBe(false);
   });
 });

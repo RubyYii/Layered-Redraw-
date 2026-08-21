@@ -369,6 +369,11 @@ export class ThreeSceneAdapter {
   syncMesh(mesh, object, selectionId) {
     mesh.name = object.name;
     const governanceState = object.governance?.state ?? null;
+    const archiveTreatment = this.cp02LayerGrammar?.archiveObjectPrefixes?.some((prefix) => (
+      object.id.startsWith(prefix)
+    ))
+      ? this.cp02LayerGrammar.archive
+      : null;
     mesh.visible = object.visible && governanceState !== "WITHHELD";
     const render = object.render ?? {};
     if (mesh.material) {
@@ -380,13 +385,32 @@ export class ThreeSceneAdapter {
       mesh.material.opacity = governanceState === "PROPOSED" ? 0.55 : (render.opacity ?? 1);
       mesh.material.transparent = mesh.material.opacity < 1;
       mesh.material.depthWrite = mesh.material.opacity >= 0.35;
+      if (archiveTreatment) {
+        mesh.material.color?.set(archiveTreatment.color);
+        mesh.material.roughness = Math.max(
+          mesh.material.roughness,
+          Number(archiveTreatment.roughness) || 0,
+        );
+        mesh.material.opacity = Number(archiveTreatment.opacity) || mesh.material.opacity;
+        mesh.material.transparent = mesh.material.opacity < 1;
+        mesh.material.depthWrite = mesh.material.opacity >= 0.35;
+        mesh.material.emissive?.set(archiveTreatment.emissive ?? "#000000");
+        mesh.material.emissiveIntensity = Number(archiveTreatment.emissiveIntensity) || 0;
+      }
     }
-    const edgeStyle = governanceEdgeStyle(
+    let edgeStyle = governanceEdgeStyle(
       governanceState,
       this.mode,
       this.governanceOverlayEnabled,
       render.edge !== false,
     );
+    if (archiveTreatment) {
+      edgeStyle = {
+        visible: render.edge !== false,
+        color: archiveTreatment.edgeColor,
+        opacity: archiveTreatment.edgeOpacity,
+      };
+    }
     mesh.children.forEach((child) => {
       if (child.userData.isEdgeOverlay) {
         child.visible = edgeStyle.visible;
@@ -406,6 +430,7 @@ export class ThreeSceneAdapter {
     mesh.userData.entityRole = object.entity?.role ?? "prop";
     mesh.userData.governanceState = governanceState;
     mesh.userData.governanceAssetId = object.governance?.assetId ?? null;
+    mesh.userData.cp02VisualLayer = archiveTreatment ? "ARCHIVE_LOCKED" : null;
 
     if (this.mode === "preview" || !(this.isDragging && object.id === selectionId)) {
       mesh.position.fromArray(object.position);
@@ -576,6 +601,7 @@ export class ThreeSceneAdapter {
   applyCp02VisualProfile(profile = {}) {
     const camera = profile.camera ?? {};
     const lighting = profile.lighting ?? {};
+    const layers = profile.layers ?? null;
     const position = Array.isArray(camera.position) ? camera.position : [0, 3.6, 4];
     const target = Array.isArray(camera.target) ? camera.target : [0, 1.2, 0];
     const fov = Number(camera.fov) || 42;
@@ -615,6 +641,8 @@ export class ThreeSceneAdapter {
     this.cp02ReadabilityLight.distance = Number(readability.distance) || 0;
     this.cp02ReadabilityLight.decay = Number(readability.decay) || 2;
 
+    this.cp02LayerGrammar = layers ? structuredClone(layers) : null;
+
     const evidence = {
       id: String(profile.id ?? "cp02-visual-profile"),
       status: "ACTIVE",
@@ -630,8 +658,14 @@ export class ThreeSceneAdapter {
         fillIntensity: this.fillLight.intensity,
         readabilityIntensity: this.cp02ReadabilityLight.intensity,
       },
+      layers: this.cp02LayerGrammar ? {
+        id: String(this.cp02LayerGrammar.id ?? "cp02-layer-grammar"),
+        status: "ACTIVE",
+        archiveObjectPrefixes: [...(this.cp02LayerGrammar.archiveObjectPrefixes ?? [])],
+      } : null,
     };
     this.cp02VisualProfileEvidence = evidence;
+    if (this.lastState) this.sync(this.lastState);
     return structuredClone(evidence);
   }
 

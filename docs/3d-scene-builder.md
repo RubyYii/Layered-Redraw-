@@ -55,10 +55,18 @@ The bundled `projects/window-case` fixture contains one continuous room, four no
 
 The CP02 route is an engineering checkpoint for one reversible `Reframe`, not a
 general scene-generation system. Its fixed local sequence is proposal → Guardian
-allow/reject → semantic chair move → two exact undos → forbidden source-photo
-replacement. The source photograph, evidence objects, and stage objects remain
-locked; the table, chair, and cup are repository-authored proxies. Catalogued
-public candidates remain metadata-only and are not downloaded or displayed.
+allow/reject → additive thermos → semantic chair move → exact undos → forbidden
+source-photo replacement. The source photograph, evidence objects, and stage
+objects remain locked. Proposal geometry is procedural; after Guardian allow,
+the table and chair carriers load exact hash-bound local GLBs, the cup remains a
+project-authored proxy, and the artist-kept thermos is loaded only as a separate
+additive object. The ignored local Case Pack is not public-release clearance.
+
+The R2 viewport makes the intentional duplication explicit: the existing
+evidence table and retained cup are rendered as a muted archive layer, while the
+bedside table, chair, proposal cup and thermos occupy a dynamic mutable layer.
+This is a render-only distinction and does not change project hashes or weaken
+the ScenePatch protection boundary.
 
 Run the formal local gate on the target Apple M5 MacBook Air with visible system
 Chrome:
@@ -90,7 +98,7 @@ verification; screenshots and controller inspection never populate the artist's
 
 ## Current limits
 
-- OBJ and GLB loading are connected for local session files, but model files are not embedded in project JSON or packaged for transfer yet.
+- OBJ and GLB loading are connected for local session files. CP02 additionally supports one fixed same-origin local Case Pack, but its binary files remain intentionally ignored and are not yet packaged for transfer or remote recovery.
 - OBJ is intentionally static: its common interchange form has no portable skin, skeletal animation, or morph-expression contract. Animated characters should use a self-contained GLB; external OBJ MTL/texture references are ignored.
 - GLB bone overrides are local-pose controls, not animation retargeting or inverse kinematics.
 - The ground planner expands axis-aligned static bounds by actor radius; it is not a navigation mesh and does not replace a rigid-body or character-controller solver.
@@ -98,7 +106,7 @@ verification; screenshots and controller inspection never populate the artist's
 - Camera splines and procedural secondary motion improve continuity but do not replace authored animation.
 - The agent runtime validates semantic intents but does not call a language model.
 - CP02 understands only the two frozen bilingual fixture statements; Gemini, DeepSeek, and DSH are not live dependencies in this checkpoint.
-- CP02 public-asset records are discovery metadata, not downloaded models, rights clearance, or artistic approval.
+- CP02's three selected public assets have separate source, technical and local artistic records and are loaded from the fixed ignored Case Pack. This does not generalise to arbitrary catalog entries and does not authorise public display.
 - The example is real-time stylized blockout, not photoreal final rendering.
 - The RGB-D spatial bridge is exportable from the painting editor, but its Scene Builder import adapter is not implemented yet.
 

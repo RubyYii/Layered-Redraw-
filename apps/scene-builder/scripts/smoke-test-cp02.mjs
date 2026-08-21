@@ -364,6 +364,28 @@ const waitForReady = (page) => page.waitForFunction(
 
 const snapshot = (page) => page.evaluate(() => window.__PACT_CP02_EVIDENCE__.snapshot());
 
+const assertLayerLegendState = async (page, expectedMutableState) => {
+  const legend = await page.evaluate(() => {
+    const root = document.querySelector("#cp02-layer-legend");
+    const archive = document.querySelector("#cp02-archive-layer");
+    const mutable = document.querySelector("#cp02-mutable-layer");
+    if (!root || !archive || !mutable) return null;
+    return {
+      hidden: root.hidden,
+      mutableState: root.dataset.mutableState,
+      archiveState: archive.dataset.layerState,
+      archiveText: archive.textContent,
+      mutableText: mutable.textContent,
+    };
+  });
+  assert(legend, "CP02 dual-memory layer legend is missing");
+  assert(legend.hidden === false, "CP02 dual-memory layer legend is hidden");
+  assert(legend.archiveState === "ARCHIVE_LOCKED", "CP02 archive layer is not visibly locked");
+  assert(legend.archiveText.includes("证物桌") && legend.archiveText.includes("留存杯"), "Archive anchors are not named");
+  assert(legend.mutableState === expectedMutableState, `CP02 mutable layer state must be ${expectedMutableState}`);
+  assert(legend.mutableText.includes("床边桌") && legend.mutableText.includes("椅子"), "Mutable layer objects are not named");
+};
+
 const screenshot = async (page, filePath) => {
   await page.waitForTimeout(240);
   await page.screenshot({ path: filePath, animations: "disabled" });
@@ -381,9 +403,11 @@ export async function runInteractionSequence(page, { stillsDir = null, pauseMs =
   const initial = await snapshot(page);
   assertCasePackEvidence(initial);
   assert(
-    initial.visualProfile?.id === "cp02-visual-repair-r1"
-      && initial.visualProfile?.status === "ACTIVE",
-    "CP02 visual repair profile is not active",
+    initial.visualProfile?.id === "cp02-visual-repair-r2"
+      && initial.visualProfile?.status === "ACTIVE"
+      && initial.visualProfile?.layers?.id === "cp02-dual-memory-r2"
+      && initial.visualProfile?.layers?.status === "ACTIVE",
+    "CP02 R2 dual-memory visual repair profile is not active",
   );
   const layout = await page.evaluate(() => {
     const viewportRect = document.querySelector("#viewport").getBoundingClientRect();
@@ -399,6 +423,7 @@ export async function runInteractionSequence(page, { stillsDir = null, pauseMs =
   assertMaterialized(initial, [], "Initial state");
   assert(initial.objectCount === 200, `CP02 initial object count must be 200, got ${initial.objectCount}`);
   assert(initial.governanceCounts.SOURCE_LOCKED === 1, "CP02 must contain exactly one SOURCE_LOCKED object");
+  await assertLayerLegendState(page, "EMPTY");
   await maybeScreenshot("01-establishing.png");
   await maybePause();
 
@@ -412,6 +437,7 @@ export async function runInteractionSequence(page, { stillsDir = null, pauseMs =
   assert(proposed.projectHash === initial.projectHash, "Proposal preview mutated the project hash");
   assert(proposed.objectCount === 200, "Proposal preview entered SceneStore");
   assert(proposed.proposalPrimitiveCount === 15, "Proposal preview must contain 15 ephemeral primitives");
+  await assertLayerLegendState(page, "PROPOSED");
   await maybeScreenshot("03-preview.png");
   await maybePause();
 
@@ -430,6 +456,7 @@ export async function runInteractionSequence(page, { stillsDir = null, pauseMs =
   assertExactIds(receipts.initialApply.expectedChangedObjectIds, expected.initial, "Initial patch");
   assert(authorised.objectCount === 218, `Authorised room must contain 218 objects, got ${authorised.objectCount}`);
   assertMaterialized(authorised, ["PH-TABLE-WOODEN-001", "PH-CHAIR-SCHOOL-001"], "Initial allow");
+  await assertLayerLegendState(page, "AUTHORISED");
   await maybeScreenshot("04-authorised.png");
   await maybePause();
 
@@ -441,6 +468,7 @@ export async function runInteractionSequence(page, { stillsDir = null, pauseMs =
   const thermosProposed = await snapshot(page);
   assert(thermosProposed.projectHash === authorised.projectHash, "Thermos proposal mutated SceneStore");
   assert(thermosProposed.proposalPrimitiveCount === 1, "Thermos proposal must use one ephemeral carrier primitive");
+  await assertLayerLegendState(page, "PROPOSED");
   await maybeScreenshot("05-thermos-proposed.png");
   await maybePause();
 
@@ -520,6 +548,7 @@ export async function runInteractionSequence(page, { stillsDir = null, pauseMs =
   assert(undone.projectHash === initial.projectHash, "Two exact undos did not restore the initial project hash");
   assert(undone.objectCount === 200, "Two exact undos did not restore the initial object count");
   assertMaterialized(undone, [], "Full undo");
+  await assertLayerLegendState(page, "EMPTY");
   await maybeScreenshot("08-undone.png");
   await maybePause();
 
@@ -536,6 +565,7 @@ export async function runInteractionSequence(page, { stillsDir = null, pauseMs =
   assert(rejected.projectHash === beforeSourceAttemptHash, "Rejected source-photo patch changed the project hash");
   assert(receipts.sourceRejected.reasonCode === "SCENE_PATCH_REJECTED", "Source-photo patch did not use ScenePatch rejection");
   assert(rejected.governanceCounts.SOURCE_LOCKED === 1, "Source-photo rejection lost SOURCE_LOCKED state");
+  await assertLayerLegendState(page, "WITHHELD");
   await maybeScreenshot("09-rejected.png");
   await maybePause();
 

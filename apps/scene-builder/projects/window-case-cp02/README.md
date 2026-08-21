@@ -13,9 +13,11 @@ cd apps/scene-builder
 npm run build:window-case:cp02
 ```
 
-The generated project is an engineering-stage fixture. It is not evidence that
-the CP02 interaction, performance target, public assets, or artistic direction
-has been approved.
+The generated project is an engineering-stage fixture. The current local
+checkpoint has passed its runtime target and loads three separately cleared,
+technically validated and artist-kept assets from a hash-bound ignored Case
+Pack. That local approval does not authorise public display, publication,
+deployment, or the composite artistic direction.
 
 ## Local interaction surface
 
@@ -47,10 +49,26 @@ The fixed proof sequence is:
 only when the evidence overlay is enabled. Authorised engineering proxies use a
 solid material and visible seam; withheld proposals never create geometry.
 
-The three displayed furniture assets remain repository-authored engineering
-proxies. The Poly Haven records in `asset-catalog.json` remain metadata-only
-`DISCOVERED_CANDIDATE` entries with `publicDisplay: false`; this route performs
-no model API call, public-asset download, or non-local network request.
+The proposal preview remains a repository-authored procedural layer. After a
+Guardian allow decision, the approved local Case Pack replaces the table and
+chair carriers with the exact registered Poly Haven GLBs. The cup remains a
+project-authored proxy. The approved thermos is a separate additive GLB and is
+explicitly prohibited from replacing that cup. All four mutable objects remain
+receipt-bound and reversible.
+
+The Case Pack is served only from the ignored same-origin
+`public/case-packs/pact-cp02/` directory. This route performs no model API call,
+arbitrary asset retrieval, or non-local network request. The immutable
+`DISCOVERED_CANDIDATE` entries in `asset-catalog.json` are the original
+discovery records; the local Case Pack manifest is the current materialisation
+authority.
+
+The CP02 R2 visual profile does not delete the apparent duplicate furniture.
+It treats the collaborator room's evidence table and retained cup as a dim
+`ARCHIVE_LOCKED` layer at the frame edge, while the bedside table, chair,
+proposal cup and additive thermos occupy a visibly labelled mutable layer. The
+visual treatment changes no source object, source photograph, ScenePatch, or
+undo hash.
 
 For automated evidence, the route exposes only
 `window.__PACT_CP02_EVIDENCE__.snapshot()`. It returns a structured clone of
