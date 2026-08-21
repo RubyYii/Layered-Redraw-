@@ -452,10 +452,26 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
 
 export async function loadGlbFile(file, config = {}) {
   const { name } = validateGlbFile(file);
-  const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+  let buffer;
   try {
-    const buffer = await file.arrayBuffer();
+    buffer = await file.arrayBuffer();
+  } catch (error) {
+    throw new Error(`GLB 载入失败：${error?.message || "无法读取文件"}`);
+  }
+  return loadGlbBytes(buffer, name, config);
+}
+
+export async function loadGlbBytes(input, name = "model.glb", config = {}) {
+  const bytes = input instanceof ArrayBuffer
+    ? new Uint8Array(input)
+    : ArrayBuffer.isView(input)
+      ? new Uint8Array(input.buffer, input.byteOffset, input.byteLength)
+      : null;
+  validateGlbFile({ name, size: bytes?.byteLength ?? 0 });
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  try {
     inspectGlbBuffer(buffer);
+    const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
     const gltf = await new GLTFLoader().parseAsync(buffer, "");
     return createAssetController(gltf, config, name, { format: "GLB" });
   } catch (error) {

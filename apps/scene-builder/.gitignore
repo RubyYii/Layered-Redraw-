@@ -6,3 +6,4 @@ coverage/
 artifacts/
 inputs/
 *.webm
+/public/case-packs/pact-cp02/

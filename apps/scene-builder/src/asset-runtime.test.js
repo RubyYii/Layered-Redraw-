@@ -5,6 +5,7 @@ import {
   inferRigBindings,
   inferSemanticBindings,
   inspectGlbBuffer,
+  loadGlbBytes,
   loadObjFile,
   resolveRigBindings,
   resolveSemanticBindings,
@@ -90,6 +91,16 @@ describe("replaceable OBJ/GLB asset bindings", () => {
     expect(inspectGlbBuffer(embedded)).toMatchObject({ asset: { version: "2.0" } });
     expect(() => inspectGlbBuffer(external)).toThrow(/外部资源引用/);
     expect(() => inspectGlbBuffer(new Uint8Array(20))).toThrow(/有效的 GLB/);
+  });
+
+  it("loads only self-contained GLB bytes through the reusable byte API", async () => {
+    const external = glbWithDocument({
+      asset: { version: "2.0" },
+      images: [{ uri: "https://example.com/track.png" }],
+    });
+
+    await expect(loadGlbBytes(external, "external.glb")).rejects.toThrow(/外部资源引用/);
+    await expect(loadGlbBytes(external, "external.gltf")).rejects.toThrow(/GLB/);
   });
 
   it("drives actions, expressions, bone poses, and aspect-preserving fit through one controller", () => {
