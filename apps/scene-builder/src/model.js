@@ -606,8 +606,9 @@ export class SceneStore {
     mutator(draft);
     draft.updatedAt = now();
     this.project = normalizeProject(draft);
-    if (history) this.checkpoint();
-    else this.emit();
+    if (history) return this.checkpoint();
+    this.emit();
+    return true;
   }
 
   setSelection(id) {

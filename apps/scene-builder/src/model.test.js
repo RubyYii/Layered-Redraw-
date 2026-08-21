@@ -238,6 +238,15 @@ describe("scene schema", () => {
 });
 
 describe("SceneStore history", () => {
+  it("reports whether a mutation created a history checkpoint", () => {
+    const store = new SceneStore(createEmptyProject());
+
+    expect(store.mutate((project) => {
+      project.name = "transactional change";
+    })).toBe(true);
+    expect(store.historyIndex).toBe(1);
+  });
+
   it("supports add, edit, undo and redo", () => {
     const store = new SceneStore(createEmptyProject());
     const id = store.addObject("box");
