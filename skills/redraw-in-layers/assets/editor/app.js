@@ -49,6 +49,9 @@ const TRANSLATIONS = {
     selectedLegend: "已选择",
     lockedLegend: "已锁定",
     canvasTitle: "画布",
+    canvasViewLabel: "画布视图",
+    canvasView2d: "2D 图层",
+    canvasView3d: "3D 空间",
     canvasKickerVector: "VECTOR CANVAS",
     canvasKickerRaster: "RASTER LAYER STACK",
     canvasKickerPixel: "PIXEL LAYER STACK",
@@ -68,6 +71,13 @@ const TRANSLATIONS = {
     modeText: "纯文本解析",
     selectionNone: "未选择",
     canvasStageLabel: "可交互分层画布",
+    spatialCanvasLabel: "RGB 与相对深度生成的可旋转三维画布",
+    spatialHeightfield: "RGB-D 高度场",
+    spatialWaiting: "等待配对深度",
+    spatialReadyToOpen: "深度已配对，可以打开 3D 空间画布。",
+    spatialEmptyTitle: "先为场景图准备深度",
+    spatialEmptyBody: "估计相对深度或导入配对深度图后，即可生成可旋转的空间画布。",
+    spatialGestureHint: "拖动旋转 · 滚轮缩放 · 双击复位",
     canvasEmptyTitle: "从一个可编辑的分层工程开始",
     canvasEmptyBody: "打开本地 SVG，或通过本地服务载入矢量／位图工程。",
     chooseSvg: "选择 SVG 文件",
@@ -293,6 +303,24 @@ const TRANSLATIONS = {
     planningRequestSaved: "图层规划请求已保存。",
     referenceWorking: "正在处理参考素材…",
     sceneReferenceOnly: "风格和色彩参考不会成为深度估计主场景。",
+    spatialPaintingLabel: "3D 深度空间绘画",
+    spatialControlTitle: "非破坏式空间画布",
+    spatialControlIntro: "RGB 负责颜色，深度只负责表面位移；所有调整都不会改写原始 16 位深度。",
+    spatialDepthStrengthLabel: "纵深强度",
+    spatialPerspectiveLabel: "观察透视",
+    spatialMeshResolutionLabel: "网格精度",
+    spatialWireframeLabel: "显示网格线",
+    spatialOpenButton: "打开 3D 画布",
+    spatialResetButton: "复位视角",
+    spatialExportButton: "导出空间桥接",
+    spatialNeedsDepth: "需要与当前 RGB 配对的深度图。",
+    spatialLoading: "正在把 RGB 与相对深度构造成空间表面…",
+    spatialReady: "空间网格已生成：{vertices} 顶点 · {triangles} 三角面",
+    spatialUnavailable: "3D 画布暂不可用：{detail}",
+    spatialNoWebgl: "当前浏览器不支持 WebGL2。",
+    spatialViewHint: "3D 空间画布已打开；拖动旋转，滚轮缩放。",
+    spatialExported: "空间桥接 JSON 已导出。",
+    spatialBridgeFailure: "空间桥接生成失败：{detail}",
     serveHint: "请通过 layered_redraw.py serve 启动编辑器；也可以手动打开 SVG。",
   },
   en: {
@@ -338,6 +366,9 @@ const TRANSLATIONS = {
     selectedLegend: "Selected",
     lockedLegend: "Locked",
     canvasTitle: "Canvas",
+    canvasViewLabel: "Canvas view",
+    canvasView2d: "2D layers",
+    canvasView3d: "3D space",
     canvasKickerVector: "VECTOR CANVAS",
     canvasKickerRaster: "RASTER LAYER STACK",
     canvasKickerPixel: "PIXEL LAYER STACK",
@@ -357,6 +388,13 @@ const TRANSLATIONS = {
     modeText: "Text inference",
     selectionNone: "Nothing selected",
     canvasStageLabel: "Interactive layered canvas",
+    spatialCanvasLabel: "Orbitable 3D canvas generated from RGB and relative depth",
+    spatialHeightfield: "RGB-D height field",
+    spatialWaiting: "Waiting for paired depth",
+    spatialReadyToOpen: "Paired depth is ready; open the 3D spatial canvas.",
+    spatialEmptyTitle: "Prepare depth for the scene first",
+    spatialEmptyBody: "Estimate relative depth or import a paired depth map to build an orbitable spatial canvas.",
+    spatialGestureHint: "Drag to orbit · wheel to zoom · double-click to reset",
     canvasEmptyTitle: "Start with an editable layered project",
     canvasEmptyBody: "Open a local SVG, or use the local server for vector and raster projects.",
     chooseSvg: "Choose SVG file",
@@ -585,6 +623,24 @@ const TRANSLATIONS = {
     planningRequestSaved: "Layer-planning request saved.",
     referenceWorking: "Processing reference material…",
     sceneReferenceOnly: "Style and palette references cannot drive scene depth estimation.",
+    spatialPaintingLabel: "3D depth painting",
+    spatialControlTitle: "Non-destructive spatial canvas",
+    spatialControlIntro: "RGB supplies colour and depth only displaces the surface; controls never rewrite the original 16-bit depth.",
+    spatialDepthStrengthLabel: "Depth strength",
+    spatialPerspectiveLabel: "View perspective",
+    spatialMeshResolutionLabel: "Mesh detail",
+    spatialWireframeLabel: "Show mesh grid",
+    spatialOpenButton: "Open 3D canvas",
+    spatialResetButton: "Reset view",
+    spatialExportButton: "Export spatial bridge",
+    spatialNeedsDepth: "The active RGB needs a paired depth map.",
+    spatialLoading: "Building a spatial surface from RGB and relative depth…",
+    spatialReady: "Spatial mesh ready: {vertices} vertices · {triangles} triangles",
+    spatialUnavailable: "3D canvas unavailable: {detail}",
+    spatialNoWebgl: "This browser does not support WebGL2.",
+    spatialViewHint: "3D spatial canvas open; drag to orbit and use the wheel to zoom.",
+    spatialExported: "Spatial bridge JSON exported.",
+    spatialBridgeFailure: "Could not build the spatial bridge: {detail}",
     serveHint: "Start the editor with layered_redraw.py serve, or open an SVG manually.",
   },
 };
@@ -615,6 +671,7 @@ const elements = {
   canvasKicker: document.querySelector("#canvasKicker"),
   canvasSize: document.querySelector("#canvasSize"),
   canvasStage: document.querySelector("#canvasStage"),
+  canvasViewButtons: Array.from(document.querySelectorAll("[data-canvas-view]")),
   clearSelectionButton: document.querySelector("#clearSelectionButton"),
   clearMaskButton: document.querySelector("#clearMaskButton"),
   closeCompareButton: document.querySelector("#closeCompareButton"),
@@ -698,6 +755,21 @@ const elements = {
   selectionModeLabel: document.querySelector("#selectionModeLabel"),
   selectionOverlay: document.querySelector("#selectionOverlay"),
   selectionSummary: document.querySelector("#selectionSummary"),
+  spatialCanvas: document.querySelector("#spatialCanvas"),
+  spatialCapabilityBadge: document.querySelector("#spatialCapabilityBadge"),
+  spatialControlStatus: document.querySelector("#spatialControlStatus"),
+  spatialDepthStrength: document.querySelector("#spatialDepthStrength"),
+  spatialDepthStrengthValue: document.querySelector("#spatialDepthStrengthValue"),
+  spatialEmpty: document.querySelector("#spatialEmpty"),
+  spatialExportButton: document.querySelector("#spatialExportButton"),
+  spatialHudStatus: document.querySelector("#spatialHudStatus"),
+  spatialMeshResolution: document.querySelector("#spatialMeshResolution"),
+  spatialOpenButton: document.querySelector("#spatialOpenButton"),
+  spatialPerspective: document.querySelector("#spatialPerspective"),
+  spatialPerspectiveValue: document.querySelector("#spatialPerspectiveValue"),
+  spatialResetButton: document.querySelector("#spatialResetButton"),
+  spatialStage: document.querySelector("#spatialStage"),
+  spatialWireframe: document.querySelector("#spatialWireframe"),
   saveDesignButton: document.querySelector("#saveDesignButton"),
   savePresetButton: document.querySelector("#savePresetButton"),
   showAllButton: document.querySelector("#showAllButton"),
@@ -715,6 +787,7 @@ const elements = {
 
 const state = {
   bbox: null,
+  canvasView: "2d",
   canvasStatus: { key: "waitingForProject", vars: {}, kind: "idle" },
   drag: null,
   designPlan: null,
@@ -741,6 +814,13 @@ const state = {
   sourceName: null,
   svg: null,
   serverConnected: false,
+  spatialBridge: null,
+  spatialBusy: false,
+  spatialError: null,
+  spatialLoadSequence: 0,
+  spatialSourceKey: null,
+  spatialStatus: { key: "spatialNeedsDepth", vars: {}, kind: "idle" },
+  spatialViewer: null,
   toastTimer: null,
   workflowMode: "guided",
 };
@@ -948,6 +1028,246 @@ function pairedDepthRun(item = activeReferenceItem()) {
   return state.referenceIntelligence?.depth_runs?.find((run) => run.id === item.paired_depth_run) || null;
 }
 
+function spatialOptions() {
+  return {
+    detail: Number.parseInt(elements.spatialMeshResolution.value, 10),
+    depthStrength: Number(elements.spatialDepthStrength.value) / 100,
+    perspective: Number(elements.spatialPerspective.value) / 100,
+    wireframe: elements.spatialWireframe.checked,
+  };
+}
+
+function spatialSourceKey(active = activeReferenceItem(), depth = pairedDepthRun(active)) {
+  if (!active || !depth) return null;
+  return `${active.id}:${depth.id}`;
+}
+
+function updateSpatialOutputs() {
+  elements.spatialDepthStrengthValue.value = `${Math.round(Number(elements.spatialDepthStrength.value))}%`;
+  elements.spatialPerspectiveValue.value = `${Math.round(Number(elements.spatialPerspective.value))}%`;
+}
+
+function renderSpatialStatus() {
+  const { key, vars, kind } = state.spatialStatus;
+  const message = t(key, vars);
+  elements.spatialControlStatus.textContent = message;
+  elements.spatialControlStatus.dataset.status = kind;
+  elements.spatialHudStatus.textContent = message;
+}
+
+function setSpatialStatus(key, vars = {}, kind = "idle") {
+  state.spatialStatus = { key, vars, kind };
+  renderSpatialStatus();
+}
+
+function discardSpatialViewer() {
+  if (state.spatialViewer) state.spatialViewer.dispose();
+  state.spatialViewer = null;
+  state.spatialSourceKey = null;
+  state.spatialBridge = null;
+  state.spatialError = null;
+  elements.spatialStage.classList.remove("is-ready");
+  elements.spatialEmpty.hidden = false;
+  elements.spatialCanvas.width = Math.max(1, elements.spatialCanvas.width);
+}
+
+function ensureSpatialViewer() {
+  if (state.spatialViewer) return state.spatialViewer;
+  const Viewer = window.LayeredSpatial3D?.DepthMeshViewer;
+  if (!Viewer) throw new Error(t("spatialNoWebgl"));
+  state.spatialViewer = new Viewer(elements.spatialCanvas);
+  return state.spatialViewer;
+}
+
+function spatialArtifactUrls(active, depth) {
+  const sourceVersion = active.stored_sha256 || "source";
+  const depthVersion = depth.artifact_sha256?.preview || depth.artifact_sha256?.depth_16 || depth.id;
+  return {
+    rgbUrl: `/api/references/${encodeURIComponent(active.id)}/rgb?v=${encodeURIComponent(sourceVersion)}`,
+    depthUrl: `/api/references/${encodeURIComponent(active.id)}/preview?run=${encodeURIComponent(depth.id)}&v=${encodeURIComponent(depthVersion)}`,
+  };
+}
+
+async function fetchSpatialBridge(active, depth) {
+  const options = spatialOptions();
+  const query = new URLSearchParams({
+    source: active.id,
+    run: depth.id,
+    displacement: String(options.depthStrength),
+    resolution: String(options.detail),
+    perspective: String(options.perspective),
+  });
+  const response = await fetch(`/api/spatial-bridge?${query}`, {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  if (!response.ok || !result.ok || !result.bridge) {
+    throw new Error(result.error || `HTTP ${response.status}`);
+  }
+  return result.bridge;
+}
+
+function renderSpatialControls({ autoLoad = true } = {}) {
+  const active = activeReferenceItem();
+  const depth = pairedDepthRun(active);
+  const readyForSpatial = Boolean(state.serverConnected && active && depth);
+  const key = spatialSourceKey(active, depth);
+  updateSpatialOutputs();
+
+  elements.canvasViewButtons.forEach((button) => {
+    const selected = button.dataset.canvasView === state.canvasView;
+    button.classList.toggle("is-active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+    button.disabled = button.dataset.canvasView === "3d" && !readyForSpatial;
+  });
+  elements.spatialCapabilityBadge.textContent = depth ? "D✓" : "D?";
+  elements.spatialCapabilityBadge.dataset.status = depth ? "ready" : "idle";
+  elements.spatialOpenButton.disabled = !readyForSpatial || state.spatialBusy;
+  elements.spatialExportButton.disabled = !readyForSpatial || state.spatialBusy;
+  elements.spatialResetButton.disabled = !state.spatialViewer?.report().ready;
+  elements.spatialDepthStrength.disabled = !readyForSpatial || state.spatialBusy;
+  elements.spatialPerspective.disabled = !readyForSpatial || state.spatialBusy;
+  elements.spatialMeshResolution.disabled = !readyForSpatial || state.spatialBusy;
+  elements.spatialWireframe.disabled = !readyForSpatial || state.spatialBusy;
+
+  if (!readyForSpatial) {
+    if (state.spatialSourceKey || state.spatialViewer) discardSpatialViewer();
+    setSpatialStatus("spatialNeedsDepth");
+    return;
+  }
+
+  if (key !== state.spatialSourceKey && !state.spatialBusy) {
+    state.spatialBridge = null;
+    setSpatialStatus("spatialReadyToOpen", {}, "ready");
+  } else {
+    renderSpatialStatus();
+  }
+  if (autoLoad && state.canvasView === "3d" && key !== state.spatialSourceKey && !state.spatialBusy) {
+    void refreshSpatialView();
+  }
+}
+
+async function refreshSpatialView({ force = false } = {}) {
+  const active = activeReferenceItem();
+  const depth = pairedDepthRun(active);
+  const key = spatialSourceKey(active, depth);
+  if (!state.serverConnected || !active || !depth || !key) {
+    setSpatialStatus("spatialNeedsDepth");
+    elements.spatialEmpty.hidden = false;
+    return null;
+  }
+
+  let viewer;
+  try {
+    viewer = ensureSpatialViewer();
+  } catch (error) {
+    state.spatialError = error.message || String(error);
+    elements.spatialEmpty.hidden = false;
+    setSpatialStatus("spatialUnavailable", { detail: state.spatialError }, "error");
+    renderSpatialControls({ autoLoad: false });
+    return null;
+  }
+  if (!force && state.spatialSourceKey === key && viewer.report().ready) {
+    const report = viewer.setOptions(spatialOptions());
+    setSpatialStatus("spatialReady", report, "ready");
+    return report;
+  }
+
+  const sequence = ++state.spatialLoadSequence;
+  state.spatialBusy = true;
+  state.spatialError = null;
+  setSpatialStatus("spatialLoading", {}, "loading");
+  renderSpatialControls({ autoLoad: false });
+  elements.spatialEmpty.hidden = true;
+  elements.spatialStage.classList.remove("is-ready");
+  try {
+    const [bridge, report] = await Promise.all([
+      fetchSpatialBridge(active, depth),
+      viewer.load({ ...spatialArtifactUrls(active, depth), ...spatialOptions() }),
+    ]);
+    if (sequence !== state.spatialLoadSequence || !report) return null;
+    state.spatialBridge = bridge;
+    state.spatialSourceKey = key;
+    state.spatialError = null;
+    elements.spatialEmpty.hidden = true;
+    elements.spatialStage.classList.add("is-ready");
+    setSpatialStatus("spatialReady", report, "ready");
+    return report;
+  } catch (error) {
+    if (sequence !== state.spatialLoadSequence) return null;
+    state.spatialSourceKey = key;
+    state.spatialBridge = null;
+    state.spatialError = error.message || String(error);
+    elements.spatialEmpty.hidden = false;
+    elements.spatialStage.classList.remove("is-ready");
+    setSpatialStatus("spatialUnavailable", { detail: state.spatialError }, "error");
+    return null;
+  } finally {
+    if (sequence === state.spatialLoadSequence) {
+      state.spatialBusy = false;
+      renderSpatialControls();
+    }
+  }
+}
+
+function setCanvasView(view) {
+  const next = view === "3d" ? "3d" : "2d";
+  if (next === "3d" && !pairedDepthRun()) {
+    showToast(t("spatialNeedsDepth"));
+    return;
+  }
+  state.canvasView = next;
+  document.body.dataset.canvasView = next;
+  elements.spatialStage.hidden = next !== "3d";
+  renderSpatialControls({ autoLoad: false });
+  if (next === "3d") {
+    setCanvasStatus("spatialViewHint", {}, "ready");
+    void refreshSpatialView();
+  } else if (state.svg) {
+    setCanvasStatus("loadedLayers", { count: state.layers.length }, "ready");
+    window.requestAnimationFrame(renderSelection);
+  }
+}
+
+function updateSpatialViewOptions() {
+  updateSpatialOutputs();
+  state.spatialBridge = null;
+  if (!state.spatialViewer?.report().ready) return;
+  const report = state.spatialViewer.setOptions(spatialOptions());
+  setSpatialStatus("spatialReady", report, "ready");
+}
+
+async function downloadSpatialBridge() {
+  const active = activeReferenceItem();
+  const depth = pairedDepthRun(active);
+  if (!active || !depth) {
+    showToast(t("spatialNeedsDepth"));
+    return;
+  }
+  try {
+    const bridge = await fetchSpatialBridge(active, depth);
+    state.spatialBridge = bridge;
+    const payload = new Blob([`${JSON.stringify(bridge, null, 2)}\n`], { type: "application/json" });
+    const url = URL.createObjectURL(payload);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${safeFilename(active.label || active.id)}-spatial-bridge.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(t("spatialExported"));
+  } catch (error) {
+    showToast(t("spatialBridgeFailure", { detail: error.message || String(error) }));
+  }
+}
+
 function updatePlanningDepthControls() {
   const faithful = elements.planningModeSelect.value === "faithful";
   elements.planningFlattenDepth.disabled = faithful;
@@ -1044,6 +1364,7 @@ function renderReferenceStudio() {
   elements.savePlanningRequestButton.disabled = state.referenceBusy
     || !state.serverConnected || !active || !elements.planningPromptInput.value.trim();
   updatePlanningDepthControls();
+  renderSpatialControls();
 }
 
 function fileAsDataUrl(file) {
@@ -2594,11 +2915,25 @@ elements.workflowButtons.forEach((button) => {
   button.addEventListener("click", () => { void changeWorkflowMode(button.dataset.workflowMode); });
 });
 
+elements.canvasViewButtons.forEach((button) => {
+  button.addEventListener("click", () => setCanvasView(button.dataset.canvasView));
+});
+
 elements.svgFileInput.addEventListener("change", () => readSvgFile(elements.svgFileInput.files[0]));
 elements.referenceFileInput.addEventListener("change", () => { void uploadReference(elements.referenceFileInput.files[0]); });
 elements.depthFileInput.addEventListener("change", () => { void uploadDepthMap(elements.depthFileInput.files[0]); });
 elements.estimateDepthButton.addEventListener("click", () => { void estimateReferenceDepth(); });
 elements.savePlanningRequestButton.addEventListener("click", () => { void savePlanningRequest(); });
+elements.spatialOpenButton.addEventListener("click", () => {
+  if (state.canvasView === "3d") void refreshSpatialView({ force: true });
+  else setCanvasView("3d");
+});
+elements.spatialResetButton.addEventListener("click", () => state.spatialViewer?.resetView());
+elements.spatialExportButton.addEventListener("click", () => { void downloadSpatialBridge(); });
+elements.spatialDepthStrength.addEventListener("input", updateSpatialViewOptions);
+elements.spatialPerspective.addEventListener("input", updateSpatialViewOptions);
+elements.spatialMeshResolution.addEventListener("change", updateSpatialViewOptions);
+elements.spatialWireframe.addEventListener("change", updateSpatialViewOptions);
 elements.planningPromptInput.addEventListener("input", renderReferenceStudio);
 elements.planningModeSelect.addEventListener("change", renderReferenceStudio);
 elements.planningLayerBudget.addEventListener("input", renderReferenceStudio);
@@ -2684,7 +3019,7 @@ elements.linkedLayersCheckbox.addEventListener("change", () => {
 });
 
 elements.canvasStage.addEventListener("click", (event) => {
-  if (state.ignoreClick || state.mode !== "layer" || !state.svg) return;
+  if (state.canvasView !== "2d" || state.ignoreClick || state.mode !== "layer" || !state.svg) return;
   const layerNode = projectIsRaster()
     ? rasterLayerAtPoint(event.clientX, event.clientY)
     : findOwningLayer(event.target);
@@ -2694,6 +3029,7 @@ elements.canvasStage.addEventListener("click", (event) => {
 });
 
 elements.canvasStage.addEventListener("pointerdown", (event) => {
+  if (state.canvasView !== "2d") return;
   if (beginMask(event)) return;
   if (state.mode !== "bbox" || !state.svg || event.button !== 0) return;
   const point = relativePointer(event);
@@ -2710,6 +3046,7 @@ elements.canvasStage.addEventListener("pointerdown", (event) => {
 });
 
 elements.canvasStage.addEventListener("pointermove", (event) => {
+  if (state.canvasView !== "2d") return;
   if (continueMask(event)) return;
   if (!state.drag || state.drag.pointerId !== event.pointerId) return;
   const point = relativePointer(event);
@@ -2717,16 +3054,19 @@ elements.canvasStage.addEventListener("pointermove", (event) => {
 });
 
 elements.canvasStage.addEventListener("pointerup", (event) => {
+  if (state.canvasView !== "2d") return;
   if (finishMask(event)) return;
   if (!state.drag || state.drag.pointerId !== event.pointerId) return;
   finishBoxSelection(event);
 });
 
 elements.canvasStage.addEventListener("dragover", (event) => {
+  if (state.canvasView !== "2d") return;
   event.preventDefault();
   event.dataTransfer.dropEffect = "copy";
 });
 elements.canvasStage.addEventListener("drop", (event) => {
+  if (state.canvasView !== "2d") return;
   event.preventDefault();
   readSvgFile(event.dataTransfer.files[0]);
 });
@@ -2740,10 +3080,12 @@ window.addEventListener("keydown", (event) => {
 });
 
 const resizeObserver = new ResizeObserver(() => {
-  if (state.svg) window.requestAnimationFrame(renderSelection);
+  if (state.canvasView === "3d") state.spatialViewer?.render();
+  else if (state.svg) window.requestAnimationFrame(renderSelection);
 });
 resizeObserver.observe(elements.canvasStage);
 
+document.body.dataset.canvasView = state.canvasView;
 applyLocale(state.locale);
 setMode("layer");
 if (location.protocol === "http:" || location.protocol === "https:") {

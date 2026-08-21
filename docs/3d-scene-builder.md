@@ -11,6 +11,12 @@
 5. **Asset runtime** — a local OBJ or self-contained GLB can replace a selected placeholder for the browser session without non-uniformly distorting the source. OBJ provides static geometry. GLB can additionally provide skins, bones, animation clips, and morph targets; the runtime reports those capabilities and infers semantic nodes, actions, rig bones, and expression slots. `AnimationMixer` crossfades between `idle`, `move`, `interact`, and `react` states supplied by the deterministic timeline.
 6. **Agent boundary** — an observation builder exposes only visible semantic affordances. The validator rejects direct model control of transforms, paths, scripts, code, or asset URLs; the planner can deterministically add a collision-aware ground path before an out-of-range interaction. `runAgentTurn` is the single callback boundary for a future provider and returns validated timeline clips rather than executing model-authored transforms.
 
+## Incoming depth-painting bridge
+
+The Layered Redraw editor can export `spatial-bridge.json` using contract `depth-heightfield-v1`. It binds one immutable RGB artifact to one near-white relative-depth run, records both sets of hashes, carries the display mesh resolution and displacement, and includes semantic-layer depth summaries only when the layer plan matches that exact RGB/depth pair. `metric_scale: false` and `relative_depth_must_not_be_treated_as_metres` are hard boundaries.
+
+The bridge is intentionally marked `ready-for-import-adapter`: the Scene Builder does not yet import it automatically. A future adapter may create a textured 2.5D environment surface or camera-composition reference after verifying the hashes. It must not silently turn the height field into collision geometry, infer hidden surfaces, or claim calibrated world scale. Authored scene objects, character rigs, navigation, and interaction anchors remain separate Scene Builder data.
+
 ## Stable replacement contract
 
 Characters are addressed through a root object rather than individual placeholder meshes. `asset.nodes` maps semantic slots such as `root`, `head`, `effector`, and `statusLight`; `asset.animations` maps `idle`, `move`, `interact`, and `react`; `asset.bones` maps common rig roles such as `hips`, `head`, and both hands; `asset.expressions` maps roles such as `smile`, blinks, and `mouthOpen` to morph-target names. The importer replaces the placeholder hierarchy for the current session while preserving screenplay tracks and object interactions. Explicit bindings win when present; otherwise conservative name matching reports missing slots instead of inventing them.
@@ -53,5 +59,6 @@ The bundled `projects/window-case` fixture contains one continuous room, four no
 - Camera splines and procedural secondary motion improve continuity but do not replace authored animation.
 - The agent runtime validates semantic intents but does not call a language model.
 - The example is real-time stylized blockout, not photoreal final rendering.
+- The RGB-D spatial bridge is exportable from the painting editor, but its Scene Builder import adapter is not implemented yet.
 
 The next vertical slice should persist/package imported assets, add a retargeting profile and hand IK for one pickup interaction, and connect a Rapier-backed capsule controller while keeping the semantic interaction contract unchanged.

@@ -97,6 +97,7 @@ select:focus-visible,
 .canvas-toolbar,
 .canvas-meta,
 .mode-switch,
+.canvas-view-switch,
 .section-label-row,
 .secondary-actions,
 .canvas-footer,
@@ -682,6 +683,60 @@ body[data-workflow-mode="expert"] .reference-source-actions {
 .reference-note[data-status="ready"] {
   color: var(--sage-dark);
   font-weight: 700;
+}
+
+.spatial-control-card {
+  padding: 10px;
+  border: 1px solid rgb(83 103 92 / 25%);
+  border-radius: 9px;
+  background:
+    linear-gradient(145deg, rgb(31 38 34 / 4%), transparent 52%),
+    rgb(255 253 248 / 66%);
+}
+
+.spatial-control-card h4 {
+  margin: 2px 0 0;
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.spatial-control-card > p:not(.reference-note) {
+  margin: 8px 0;
+  color: var(--ink-soft);
+  font-size: 8px;
+  line-height: 1.55;
+}
+
+.spatial-control-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.spatial-detail-row {
+  align-items: end;
+  margin-top: 8px;
+}
+
+.spatial-detail-row .check-inline {
+  justify-content: flex-start;
+}
+
+.spatial-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.spatial-actions .button:first-child {
+  grid-column: auto;
+}
+
+.spatial-actions .button {
+  min-width: 0;
+  padding-inline: 8px;
 }
 
 .design-studio {
@@ -1424,6 +1479,52 @@ body[data-workflow-mode="guided"] .proof-expert-only {
   background: rgb(255 253 248 / 62%);
 }
 
+.canvas-view-switch {
+  flex: 0 0 auto;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgb(255 253 248 / 75%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 70%);
+}
+
+.canvas-view-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.canvas-view-button:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.canvas-view-button.is-active {
+  background: var(--brick-dark);
+  color: var(--paper-bright);
+  box-shadow: 0 3px 10px rgb(128 63 54 / 19%);
+}
+
+.canvas-view-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+body[data-canvas-view="3d"] .mode-switch {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .mode-button {
   min-height: 32px;
   padding: 0 10px;
@@ -1472,6 +1573,152 @@ body[data-workflow-mode="guided"] .proof-expert-only {
     #dfd9cf;
   isolation: isolate;
   user-select: none;
+}
+
+.spatial-stage {
+  position: absolute;
+  inset: clamp(14px, 3.2vw, 38px);
+  z-index: 6;
+  overflow: hidden;
+  border: 1px solid rgb(36 39 36 / 56%);
+  border-radius: 9px;
+  background: #1b1d1b;
+  box-shadow:
+    0 25px 70px rgb(35 32 27 / 27%),
+    inset 0 0 0 1px rgb(255 255 255 / 6%);
+}
+
+.spatial-stage::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 3%) 1px, transparent 1px) 0 0 / 48px 48px,
+    linear-gradient(rgb(255 255 255 / 3%) 1px, transparent 1px) 0 0 / 48px 48px;
+  content: "";
+  mix-blend-mode: screen;
+}
+
+.spatial-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.spatial-stage canvas:active {
+  cursor: grabbing;
+}
+
+.spatial-hud {
+  position: absolute;
+  top: 13px;
+  left: 13px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 26px);
+  padding: 8px 11px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 999px;
+  background: rgb(24 27 24 / 72%);
+  color: #f5efe3;
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+.spatial-hud div,
+.spatial-hud strong,
+.spatial-hud small {
+  display: block;
+  min-width: 0;
+}
+
+.spatial-hud strong {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+.spatial-hud small {
+  margin-top: 2px;
+  overflow: hidden;
+  color: rgb(245 239 227 / 60%);
+  font: 7px ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spatial-live-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 4px rgb(189 139 76 / 14%);
+}
+
+.spatial-stage.is-ready .spatial-live-dot {
+  background: #9fb6a7;
+  box-shadow: 0 0 0 4px rgb(159 182 167 / 14%);
+}
+
+.spatial-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  display: grid;
+  justify-items: center;
+  width: min(340px, calc(100% - 40px));
+  padding: 28px;
+  transform: translate(-50%, -50%);
+  border: 1px dashed rgb(245 239 227 / 26%);
+  border-radius: 12px;
+  background: rgb(26 30 27 / 74%);
+  color: #f5efe3;
+  text-align: center;
+  pointer-events: none;
+}
+
+.spatial-empty > span {
+  color: #d5ae72;
+  font-family: var(--serif);
+  font-size: 42px;
+}
+
+.spatial-empty strong {
+  margin-top: 10px;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.spatial-empty small {
+  margin-top: 7px;
+  color: rgb(245 239 227 / 57%);
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.spatial-gesture-hint {
+  position: absolute;
+  right: 13px;
+  bottom: 11px;
+  z-index: 2;
+  margin: 0;
+  color: rgb(245 239 227 / 52%);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+body[data-canvas-view="3d"] .canvas-empty,
+body[data-canvas-view="3d"] .artboard,
+body[data-canvas-view="3d"] .selection-overlay,
+body[data-canvas-view="3d"] .drag-box {
+  display: none !important;
 }
 
 .paper-grain {

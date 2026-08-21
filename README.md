@@ -25,6 +25,8 @@ v0.6 新增“参考图与空间”工作流：可注册多张 RGB 参考、导�
 
 v0.7 新增实验性的 [3D Scene Builder](apps/scene-builder/README.md)：把剧本、角色、物品和镜头放进同一个连续 Three.js 场景，提供角色层级根节点、弧长运动、样条摄影机、语义交互锚点、可替换模型绑定，以及面向未来智能角色的确定性意图边界。它与 2D 图层工程并列孵化，不把实时灰模预演宣称为物理仿真或最终电影画质。架构和边界见 [`docs/3d-scene-builder.md`](docs/3d-scene-builder.md)。
 
+v0.8 把深度真正接进绘画编辑器：当前 RGB 与配对相对深度可以生成可拖动旋转、滚轮缩放的 WebGL 2.5D 高度场；纵深强度在 GPU 中实时调整，不会反复重建网格或改写 16 位深度证据。编辑器和命令行都能导出带 RGB／深度哈希、相对尺度声明、语义层深度摘要与 Scene Builder 适配边界的 `spatial-bridge.json`。它适合空间构图和接口交接，但不冒充米制重建、隐藏表面恢复或物理仿真。
+
 正式绘制前还可以生成带参数的 A/B/C 设计稿。当前内置输出是参数合同、差异、低细节示意和外部真实渲染请求；只有注册了真实场景渲染后，才能作为画面效果证据。选择并锁定一个方案后，它可以晋升为最终 8–12 图层绘制的设计依据，但这本身不等于艺术质量已经成立。
 
 这次升级的重点不是增加更多笔刷，而是让风格先改变画面设计：重新裁切、调整主体尺度、组织留白、压平或强化透视、概括形状、重组明暗，再决定色彩与材质。
@@ -49,6 +51,12 @@ v0.7 新增实验性的 [3D Scene Builder](apps/scene-builder/README.md)：把�
     </td>
   </tr>
 </table>
+
+### RGB + 深度 → 3D 空间画布
+
+![Layered Redraw 3D 深度空间画布：像素场景与相对深度生成可旋转高度场](assets/readme/editor-spatial-3d.zh-CN.png)
+
+当前场景 RGB 提供颜色纹理，配对的近白相对深度提供表面位移。画布支持旋转、缩放、实时 GPU 纵深、透视与网格精度控制，并可导出带证据哈希和尺度边界的 `spatial-bridge.json`。这是用于空间构图和下游适配的 2.5D 高度场，不是米制扫描或完整场景重建。
 
 ![Layered Redraw 语义图层结构](assets/readme/layer-stack.svg)
 
@@ -87,6 +95,7 @@ Codex 会先确认画面情绪、构图取舍、风格、颜色、主体和细�
 - `$stage-in-3d`：把剧本、分镜或场景说明编译为可编辑的连续 3D 灰模、电影时间线与确定性预览。
 - 实验性 3D 导演工具：连续场景、电影时间线、30fps 固定步长渲染、角色层级、曲线路径、物品交互锚点和可审计的智能体意图合同。
 - 参考智能：多 RGB 角色注册、RGB-D 配对、可选单目相对深度估计、16 位深度证据、3–8 区间预览，以及提示词驱动的 5–20 图层规划。
+- 3D 深度空间画布：原图纹理与近白相对深度组成 WebGL 高度场，支持轨道观察、实时 GPU 纵深、网格精度／透视控制和可审计空间桥接导出。
 - “引导创作”：6 个内置构图优先模板，以及忠实度、抽象、主体强调、空间平面化和色彩强度等少量安全参数。
 - “艺术指导”：完整控制构图平衡、裁切、留白、主体比例、空间、造型、明暗组、色板、边缘和材质，并可保存为项目内双语模板。
 - `design-plan.json`：两种界面共享的设计合同；其哈希进入工程版本，设计变化可以追踪、比较和恢复。
@@ -133,11 +142,12 @@ python skills/redraw-in-layers/scripts/layered_redraw.py serve examples/canal-ev
 
 1. 顶部选择“引导创作”或“艺术指导”，右上角选择“中文”或“EN”。
 2. 在“参考图与空间”添加主场景与补充参考；需要时估计相对深度，或在专家模式导入同尺寸单通道 RGB-D 深度。
-3. 描述哪些对象应独立、合并或作为叠加层，选择 5–20 的目标图层数并保存规划请求。
-4. 选择视觉模板或专家参数；再生成、选择、锁定并晋升 A/B/C 参数设计稿。
-5. 从左侧选择语义图层，或用图层点击、框选、套索、画笔和纯文本限定修改范围。
-6. 调整透明度、混合模式、顺序和双语名称；用历史区比较或恢复版本。
-7. 描述变化并下载 `edit-request.json`，再交给 Codex 与 `$redraw-in-layers`。
+3. 深度配对后点击“打开 3D 画布”，拖动检查空间关系；需要下游接入时导出空间桥接 JSON。
+4. 描述哪些对象应独立、合并或作为叠加层，选择 5–20 的目标图层数并保存规划请求。
+5. 选择视觉模板或专家参数；再生成、选择、锁定并晋升 A/B/C 参数设计稿。
+6. 从左侧选择语义图层，或用图层点击、框选、套索、画笔和纯文本限定修改范围。
+7. 调整透明度、混合模式、顺序和双语名称；用历史区比较或恢复版本。
+8. 描述变化并下载 `edit-request.json`，再交给 Codex 与 `$redraw-in-layers`。
 
 ### 运行 3D 场景编辑器
 
@@ -284,6 +294,9 @@ python skills/redraw-in-layers/scripts/layered_redraw.py plan-request output/my-
 
 # 已有 RGB-D 时，导入同尺寸单通道深度；声明近处是高值或低值
 python skills/redraw-in-layers/scripts/layered_redraw.py depth-register output/my-project depth.png --raw-near high
+
+# 导出 RGB + 相对深度的非破坏式 3D 高度场接口
+python skills/redraw-in-layers/scripts/layered_redraw.py spatial-bridge output/my-project --displacement 0.65 --resolution 96
 
 # Codex 分析出 semantic-regions.json 后，确定性解析正式图层方案
 python skills/redraw-in-layers/scripts/layered_redraw.py plan-resolve output/my-project semantic-regions.json

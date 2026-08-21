@@ -33,6 +33,23 @@ Robust percentile normalization is recorded. Never overwrite an old run; create 
 
 For supplied RGB-D, accept only a single-channel map with exactly the same width and height as its paired RGB. The user or source format must state whether near values are high or low. Preserve the supplied file digest and record the conversion.
 
+## 3D spatial painting
+
+The local editor can turn the active scene RGB and its paired near-white depth preview into an orbitable WebGL height field. RGB remains the colour texture; normalized nearness displaces vertices along the surface normal. Depth strength, mesh detail, perspective, and grid display are view parameters only. The depth-strength control runs in the vertex shader so dragging it does not resample or rewrite the depth image.
+
+This is a 2.5D spatial canvas, not reconstructed metric geometry. It is useful for judging depth rhythm, camera angle, silhouette separation, and future 3D adapter work. It does not infer hidden or back-facing surfaces, calibrated camera intrinsics, real-world scale, watertight topology, collision shapes, or character rigs.
+
+`spatial-bridge.json` is the auditable handoff. It binds:
+
+- the source RGB artifact and SHA-256;
+- one paired immutable depth run and all artifact hashes;
+- near-white relative-depth orientation and an explicit `metric_scale: false` declaration;
+- height-field resolution, display displacement, perspective, and texture-fit policy;
+- semantic layer depth summaries only when `layer-plan.json` is current for the exact RGB/depth pair;
+- invariants that forbid treating relative depth as metres or art direction as a rewritten raw map.
+
+The bridge advertises the downstream `depth-heightfield-v1` contract. `ready-for-import-adapter` means the evidence is prepared for a Scene Builder adapter; it does not claim that an automatic importer, full mesh reconstruction, or physics simulation already exists. A downstream adapter must verify the hashes and preserve this limitation.
+
 ## Prompt-directed planning
 
 Create `planning-request.json` before semantic region resolution. It contains:
@@ -92,6 +109,9 @@ python scripts/layered_redraw.py depth-estimate <project> --zones 5 --device aut
 # Existing RGB-D / depth source.
 python scripts/layered_redraw.py depth-register <project> depth.png --raw-near high --zones 5
 
+# Export the same non-destructive contract used by the editor's 3D canvas.
+python scripts/layered_redraw.py spatial-bridge <project> --displacement 0.65 --resolution 96
+
 python scripts/layered_redraw.py plan-request <project> "Keep the figure separate; merge distant buildings" --layers 10 --separate figure --merge "building-one,building-two"
 python scripts/layered_redraw.py plan-resolve <project> semantic-regions.json
 ```
@@ -117,3 +137,4 @@ Reject the run when:
 - high-priority or explicitly separate regions cannot fit the budget;
 - the plan derives layers directly from depth bands without semantic reasoning;
 - any generated artwork step mutates the registered source or canonical depth evidence.
+- a spatial handoff claims metric scale, hidden geometry, or physical simulation from monocular relative depth.

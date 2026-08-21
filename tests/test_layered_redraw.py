@@ -234,6 +234,97 @@ class LayeredRedrawTests(unittest.TestCase):
             self.assertTrue(state["depth_runs"][0]["relative_depth"])
 
     @unittest.skipUnless(Image is not None and importlib.util.find_spec("numpy"), "Pillow and NumPy are required")
+    def test_spatial_bridge_binds_rgb_depth_and_current_semantic_layers_without_metric_claims(self) -> None:
+        import numpy as np
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project, reference = self._make_reference_project(Path(temp_dir))
+
+            def predictor(image):
+                horizontal = np.linspace(0.0, 1.0, image.width, dtype=np.float32)
+                return np.tile(horizontal, (image.height, 1))
+
+            run = TOOLS.REFERENCES.estimate_depth(
+                project,
+                reference["id"],
+                zone_count=5,
+                predictor=predictor,
+            )["run"]
+            request = TOOLS.REFERENCES.create_planning_request(
+                project,
+                "Keep every depth region editable while preserving the measured ordering.",
+                mode="faithful",
+                layer_budget=5,
+                depth_run_id=run["id"],
+            )["request"]
+            regions = {
+                "kind": TOOLS.REFERENCES.REGIONS_KIND,
+                "source_id": reference["id"],
+                "regions": [
+                    {
+                        "id": f"region-depth-{index}",
+                        "label_zh": f"深度区{index}",
+                        "label_en": f"Depth region {index}",
+                        "semantic_class": f"depth-class-{index}",
+                        "depth_mean": index / 6,
+                        "area_fraction": 0.18,
+                        "confidence": 0.9,
+                    }
+                    for index in range(1, 6)
+                ],
+            }
+            TOOLS.REFERENCES.resolve_layer_plan(project, regions, raw_request=request)
+
+            bridge = TOOLS.REFERENCES.build_spatial_bridge(
+                project,
+                reference["id"],
+                depth_run_id=run["id"],
+                displacement=0.8,
+                mesh_resolution=128,
+                perspective=0.45,
+            )
+            repeated = TOOLS.REFERENCES.build_spatial_bridge(
+                project,
+                reference["id"],
+                depth_run_id=run["id"],
+                displacement=0.8,
+                mesh_resolution=128,
+                perspective=0.45,
+            )
+            self.assertEqual(bridge["kind"], TOOLS.REFERENCES.SPATIAL_BRIDGE_KIND)
+            self.assertEqual(bridge["contract_sha256"], repeated["contract_sha256"])
+            self.assertEqual(bridge["source"]["rgb_sha256"], reference["stored_sha256"])
+            self.assertEqual(bridge["depth"]["id"], run["id"])
+            self.assertTrue(bridge["depth"]["relative_depth"])
+            self.assertFalse(bridge["depth"]["metric_scale"])
+            self.assertEqual(bridge["surface"]["mesh_resolution"], 128)
+            self.assertEqual(bridge["surface"]["displacement"], 0.8)
+            self.assertEqual(bridge["semantic_layers"]["status"], "current")
+            self.assertEqual(bridge["semantic_layers"]["count"], 5)
+            self.assertTrue(bridge["invariants"]["raw_depth_immutable"])
+            self.assertTrue(bridge["invariants"]["relative_depth_must_not_be_treated_as_metres"])
+            self.assertEqual(bridge["handoff"]["contract"], "depth-heightfield-v1")
+
+            replacement_run = TOOLS.REFERENCES.estimate_depth(
+                project,
+                reference["id"],
+                zone_count=5,
+                predictor=predictor,
+            )["run"]
+            incompatible = TOOLS.REFERENCES.build_spatial_bridge(
+                project,
+                reference["id"],
+                depth_run_id=replacement_run["id"],
+            )
+            self.assertEqual(incompatible["semantic_layers"]["status"], "incompatible")
+            self.assertEqual(incompatible["semantic_layers"]["count"], 0)
+
+            with self.assertRaises(TOOLS.REFERENCES.ReferenceIntelligenceError):
+                TOOLS.REFERENCES.build_spatial_bridge(project, mesh_resolution=96.5)
+            with self.assertRaises(TOOLS.REFERENCES.ReferenceIntelligenceError):
+                TOOLS.REFERENCES.build_spatial_bridge(project, displacement=2.1)
+
+    @unittest.skipUnless(Image is not None and importlib.util.find_spec("numpy"), "Pillow and NumPy are required")
     def test_external_rgbd_import_requires_matching_single_channel_depth(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

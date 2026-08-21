@@ -1,6 +1,6 @@
 ---
 name: redraw-in-layers
-description: Interview the user about visual intent, analyze one or more RGB or RGB-D references, optionally estimate relative depth, and create or revise artwork with 5–20 stable semantic layers (normally 8–12). Supports prompt-directed semantic layer planning, editable SVG, generated raster, layered pixel art, parameterized A/B/C proofs, hybrid sources, masks, recoverable revisions, OpenRaster, and scoped edits. Use for photo-derived drawing, multi-reference or depth-aware planning, multi-layer generation, pixel art, posters, sketches, painterly images, art direction, local layer controls, or non-destructive revision.
+description: Interview the user about visual intent, analyze one or more RGB or RGB-D references, optionally estimate relative depth, and create or revise artwork with 5–20 stable semantic layers (normally 8–12). Supports prompt-directed semantic layer planning, WebGL RGB-D height-field painting, editable SVG, generated raster, layered pixel art, parameterized A/B/C proofs, hybrid sources, masks, recoverable revisions, OpenRaster, and scoped edits. Use for photo-derived drawing, multi-reference or depth-aware planning, 2.5D spatial painting, multi-layer generation, pixel art, posters, sketches, painterly images, art direction, local layer controls, or non-destructive revision.
 ---
 
 # Redraw In Layers
@@ -40,6 +40,7 @@ Read `references/reference-intelligence.md` whenever the user supplies multiple 
 4. Save `planning-request.json` before resolving regions. Keep raw depth immutable; in Art Direction mode, flattening and exaggeration affect only the planner's interpretation.
 5. Write valid `semantic-regions.json`, then run `plan-resolve` to produce 5–20 stable semantic layers. Never substitute depth bands for semantic layers, and never invent per-pixel masks when only labels exist.
 6. Carry the resolved `layer-plan.json` into vector or raster production. Preserve the registered source bundle and all depth-run hashes in recoverable snapshots.
+7. When the user wants a spatial view, open the editor's 3D canvas or export `spatial-bridge.json`. Treat its height field as 2.5D relative geometry: it can support orbiting, composition, and downstream adapter work, but cannot recover metric scale, hidden surfaces, or full scene topology.
 
 ## Create vector artwork
 
@@ -132,12 +133,13 @@ python scripts/layered_redraw.py reference-add <project> scene.jpg --role primar
 python scripts/layered_redraw.py references <project>
 python scripts/layered_redraw.py depth-estimate <project> --zones 5 --device auto
 python scripts/layered_redraw.py depth-register <project> depth.png --raw-near high
+python scripts/layered_redraw.py spatial-bridge <project> --displacement 0.65 --resolution 96
 python scripts/layered_redraw.py plan-request <project> "Keep the main figure separate" --layers 10
 python scripts/layered_redraw.py plan-resolve <project> semantic-regions.json
 python scripts/layered_redraw.py serve <project-directory>
 ```
 
-Use `assets/editor/` for multi-reference registration, RGB/depth comparison, RGB-D import, optional relative-depth estimation, planning-request authoring, Guided presets, Art Direction controls, parameterized A/B/C proof creation and promotion, layer, box, lasso, brush, and text-described selection; mask persistence; composition controls; history comparison; undo; engineering and plan-schema reports; and request authoring. The server is loopback-only and mutations require the same-origin session token fetched by the bundled UI. Preset and expert parameter changes participate in the revision hash and create recoverable snapshots where appropriate.
+Use `assets/editor/` for multi-reference registration, RGB/depth comparison, RGB-D import, optional relative-depth estimation, a non-destructive WebGL height-field canvas, spatial-bridge export, planning-request authoring, Guided presets, Art Direction controls, parameterized A/B/C proof creation and promotion, layer, box, lasso, brush, and text-described selection; mask persistence; composition controls; history comparison; undo; engineering and plan-schema reports; and request authoring. The server is loopback-only and mutations require the same-origin session token fetched by the bundled UI. Preset and expert parameter changes participate in the revision hash and create recoverable snapshots where appropriate.
 
 ## Load references selectively
 

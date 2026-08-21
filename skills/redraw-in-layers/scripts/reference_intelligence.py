@@ -24,6 +24,7 @@ DEPTH_KIND = "layered-redraw-depth-run"
 REQUEST_KIND = "layered-redraw-layer-planning-request"
 PLAN_KIND = "layered-redraw-semantic-layer-plan"
 REGIONS_KIND = "layered-redraw-semantic-regions"
+SPATIAL_BRIDGE_KIND = "layered-redraw-spatial-bridge"
 DEFAULT_MODEL_ID = "depth-anything/Depth-Anything-V2-Small-hf"
 REFERENCE_ROLES = {
     "primary-rgb",
@@ -678,6 +679,142 @@ def reference_artifact(
     if not path.is_file():
         raise ReferenceIntelligenceError(f"Depth artifact is missing: {relative}")
     return path.read_bytes(), "application/json; charset=utf-8" if artifact == "metadata" else "image/png"
+
+
+def _bounded_spatial_float(value: Any, *, label: str, minimum: float, maximum: float) -> float:
+    if isinstance(value, bool):
+        raise ReferenceIntelligenceError(f"{label} must be a number")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ReferenceIntelligenceError(f"{label} must be a number") from exc
+    if not math.isfinite(number) or not minimum <= number <= maximum:
+        raise ReferenceIntelligenceError(f"{label} must be between {minimum} and {maximum}")
+    return number
+
+
+def build_spatial_bridge(
+    raw_project: str | Path,
+    source_id: str | None = None,
+    *,
+    depth_run_id: str | None = None,
+    displacement: float = 0.65,
+    mesh_resolution: int = 96,
+    perspective: float = 0.58,
+) -> dict[str, Any]:
+    """Describe a non-destructive RGB + relative-depth 3D height-field handoff."""
+    project = _project(raw_project)
+    state = public_state(project)
+    selected_source = source_id or state.get("active_rgb")
+    if not isinstance(selected_source, str):
+        raise ReferenceIntelligenceError("3D spatial painting requires an active scene RGB reference")
+    source = _item(state, selected_source)
+    if source.get("role") not in {"primary-rgb", "alternate-view"}:
+        raise ReferenceIntelligenceError("Only scene RGB references can drive 3D spatial painting")
+
+    selected_run = depth_run_id or source.get("paired_depth_run")
+    run = next((item for item in state["depth_runs"] if item.get("id") == selected_run), None)
+    if run is None or run.get("source_id") != selected_source:
+        raise ReferenceIntelligenceError("3D spatial painting requires depth paired with the active RGB reference")
+    if run.get("orientation") != "near-white" or run.get("relative_depth") is not True:
+        raise ReferenceIntelligenceError("Spatial painting requires normalized near-white relative depth")
+
+    safe_displacement = _bounded_spatial_float(
+        displacement, label="displacement", minimum=0.0, maximum=2.0,
+    )
+    safe_perspective = _bounded_spatial_float(
+        perspective, label="perspective", minimum=0.0, maximum=1.0,
+    )
+    if isinstance(mesh_resolution, bool):
+        raise ReferenceIntelligenceError("mesh_resolution must be an integer between 24 and 160")
+    try:
+        resolution_number = float(mesh_resolution)
+    except (TypeError, ValueError) as exc:
+        raise ReferenceIntelligenceError("mesh_resolution must be an integer between 24 and 160") from exc
+    if not math.isfinite(resolution_number) or not resolution_number.is_integer():
+        raise ReferenceIntelligenceError("mesh_resolution must be an integer between 24 and 160")
+    safe_resolution = int(resolution_number)
+    if not 24 <= safe_resolution <= 160:
+        raise ReferenceIntelligenceError("mesh_resolution must be an integer between 24 and 160")
+
+    plan = state.get("layer_plan")
+    plan_current = bool(
+        state.get("layer_plan_status") == "current"
+        and isinstance(plan, dict)
+        and plan.get("source_id") == selected_source
+        and plan.get("source_depth_run") == run.get("id")
+        and plan.get("raw_depth_immutable") is True
+    )
+    semantic_layers = []
+    if plan_current:
+        for layer in plan.get("layers", []):
+            if not isinstance(layer, dict):
+                continue
+            semantic_layers.append({
+                key: layer.get(key)
+                for key in (
+                    "id", "label_zh", "label_en", "semantic_classes", "raw_depth_mean",
+                    "directed_depth_mean", "raw_depth_range", "area_fraction", "is_overlay", "z_index",
+                )
+            })
+    if plan_current:
+        semantic_status = "current"
+    elif state.get("layer_plan_status") == "current":
+        semantic_status = "incompatible"
+    else:
+        semantic_status = state.get("layer_plan_status", "missing")
+
+    bridge = {
+        "kind": SPATIAL_BRIDGE_KIND,
+        "schema_version": "1.0",
+        "source": {
+            "id": selected_source,
+            "role": source.get("role"),
+            "label": source.get("label"),
+            "width": source.get("width"),
+            "height": source.get("height"),
+            "rgb_artifact": source.get("file"),
+            "rgb_sha256": source.get("stored_sha256"),
+        },
+        "depth": {
+            "id": run.get("id"),
+            "depth_16_artifact": run.get("artifacts", {}).get("depth_16"),
+            "preview_artifact": run.get("artifacts", {}).get("preview"),
+            "artifact_sha256": run.get("artifact_sha256", {}),
+            "orientation": "near-white",
+            "relative_depth": True,
+            "metric_scale": False,
+            "meaning": run.get("meaning"),
+            "zone_count": run.get("zone_count"),
+            "bands": run.get("bands", []),
+        },
+        "surface": {
+            "representation": "rgb-depth-heightfield",
+            "mesh_resolution": safe_resolution,
+            "displacement": round(safe_displacement, 6),
+            "perspective": round(safe_perspective, 6),
+            "near_direction": "+surface-normal",
+            "texture_fit": "preserve-aspect",
+        },
+        "semantic_layers": {
+            "status": semantic_status,
+            "count": len(semantic_layers),
+            "layers": semantic_layers,
+        },
+        "invariants": {
+            "raw_depth_immutable": True,
+            "art_direction_changes_interpretation_only": True,
+            "relative_depth_must_not_be_treated_as_metres": True,
+        },
+        "handoff": {
+            "target": "apps/scene-builder",
+            "contract": "depth-heightfield-v1",
+            "status": "ready-for-import-adapter",
+        },
+    }
+    stable = json.dumps(bridge, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    bridge["contract_sha256"] = _sha256(stable)
+    return bridge
 
 
 def create_planning_request(

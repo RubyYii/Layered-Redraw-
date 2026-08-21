@@ -21,6 +21,8 @@ v0.6 adds a References & Space workflow. Register multiple RGB inputs, pair supp
 
 v0.7 adds the experimental [3D Scene Builder](apps/scene-builder/README.md). It stages screenplay, characters, props, and cameras in one continuous Three.js scene with hierarchical character roots, arc-length motion, spline cameras, semantic interaction anchors, replaceable model bindings, and a deterministic intent boundary for future intelligent characters. It incubates alongside the 2D layer format and does not present real-time blockout footage as physical simulation or final-film rendering. See [`docs/3d-scene-builder.md`](docs/3d-scene-builder.md) for architecture and boundaries.
 
+v0.8 connects depth to the painting editor itself. The active RGB and paired relative depth form an orbitable WebGL 2.5D height field; GPU-side displacement keeps the depth slider responsive without rebuilding the mesh or rewriting 16-bit evidence. The editor and CLI export `spatial-bridge.json` with RGB/depth hashes, an explicit relative-scale declaration, semantic-layer depth summaries, and the boundary for a future Scene Builder adapter. It supports spatial composition and handoff, not metric reconstruction, hidden-surface recovery, or physical simulation.
+
 Before production, the project can generate parameterized A/B/C proofs. The built-in output is a parameter contract, deltas, a low-detail schematic, and an external render request. It becomes image-effect evidence only after scene-specific renders are registered. Selection and promotion can guide the final 8–12 layers, but do not establish artistic quality on their own.
 
 The goal is not another brush picker. A style now changes crop, scale, negative space, depth, shape grammar, and value grouping before colour and surface treatment.
@@ -45,6 +47,12 @@ The goal is not another brush picker. A style now changes crop, scale, negative 
     </td>
   </tr>
 </table>
+
+### RGB + depth → 3D spatial canvas
+
+![Layered Redraw 3D depth canvas showing an orbitable height field generated from a pixel scene and relative depth](assets/readme/editor-spatial-3d.en.png)
+
+The active RGB supplies colour while its paired near-white relative depth displaces the surface. The canvas supports orbit, zoom, GPU-side depth, perspective and mesh-detail controls, then exports an evidence-hashed `spatial-bridge.json` with explicit scale boundaries. This is a 2.5D composition and adapter surface, not a metric scan or full-scene reconstruction.
 
 ![Layered Redraw semantic layer architecture](assets/readme/layer-stack.en.svg)
 
@@ -83,6 +91,7 @@ Open the local editor, select layers or frame a region, export `edit-request.jso
 - `$stage-in-3d`, a Codex skill that compiles screenplays, storyboards, or scene notes into editable continuous 3D blockouts, cinematic timelines, and deterministic previews.
 - An experimental 3D director with continuous scenes, cinematic timelines, fixed-step 30fps rendering, hierarchical characters, curved motion, object interaction anchors, and an auditable agent-intent contract.
 - Reference intelligence for role-aware multi-RGB input, RGB-D pairing, optional monocular relative-depth estimation, immutable 16-bit depth evidence, 3–8 diagnostic bands, and prompt-directed 5–20-layer planning.
+- A 3D depth canvas that combines source texture and near-white relative depth as a WebGL height field with orbit controls, GPU displacement, mesh/perspective controls, and an auditable spatial-bridge export.
 - Guided Creation with six composition-first presets and a small set of safe controls for faithfulness, abstraction, subject emphasis, spatial flattening, and colour intensity.
 - Art Direction with full control over balance, crop, negative space, subject scale, depth, form, value groups, palette, edge hierarchy, and material, plus reusable bilingual project presets.
 - A shared `design-plan.json` whose digest participates in the project revision, making visual-direction changes traceable and recoverable.
@@ -129,11 +138,12 @@ In the editor:
 
 1. Choose Guided Creation or Art Direction in the header, then select 中文 or EN.
 2. In References & Space, add the primary scene and supporting inputs. Estimate relative depth when useful, or import same-size single-channel RGB-D depth in Art Direction mode.
-3. Describe which objects should stay separate, merge, or become overlays; choose a 5–20 layer target and save the planning request.
-4. Choose a visual system or expert parameters, then generate, select, lock, and promote an A/B/C proof.
-5. Select semantic layers or constrain an edit with layer click, frame, lasso, brush, or text-described scope.
-6. Adjust opacity, blend, order, and bilingual labels; compare or restore history.
-7. Describe the change, download `edit-request.json`, and give it to Codex with `$redraw-in-layers`.
+3. Once depth is paired, open the 3D canvas and drag to inspect the spatial reading; export the bridge JSON when a downstream adapter needs it.
+4. Describe which objects should stay separate, merge, or become overlays; choose a 5–20 layer target and save the planning request.
+5. Choose a visual system or expert parameters, then generate, select, lock, and promote an A/B/C proof.
+6. Select semantic layers or constrain an edit with layer click, frame, lasso, brush, or text-described scope.
+7. Adjust opacity, blend, order, and bilingual labels; compare or restore history.
+8. Describe the change, download `edit-request.json`, and give it to Codex with `$redraw-in-layers`.
 
 ### Run the 3D Scene Builder
 
@@ -280,6 +290,9 @@ python skills/redraw-in-layers/scripts/layered_redraw.py plan-request output/my-
 
 # For existing RGB-D, import same-size single-channel depth and declare its near direction
 python skills/redraw-in-layers/scripts/layered_redraw.py depth-register output/my-project depth.png --raw-near high
+
+# Export the non-destructive RGB + relative-depth 3D height-field contract
+python skills/redraw-in-layers/scripts/layered_redraw.py spatial-bridge output/my-project --displacement 0.65 --resolution 96
 
 # After Codex writes semantic-regions.json, resolve the formal layer plan deterministically
 python skills/redraw-in-layers/scripts/layered_redraw.py plan-resolve output/my-project semantic-regions.json
