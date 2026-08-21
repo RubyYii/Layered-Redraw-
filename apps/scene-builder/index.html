@@ -217,6 +217,66 @@
             </div>
           </div>
 
+          <aside id="cp02-panel" class="cp02-panel" aria-label="PACT CP02 可改写房间交互" hidden>
+            <header class="cp02-heading">
+              <div>
+                <span class="cp02-kicker">PACT · CP02</span>
+                <h2>可改写房间</h2>
+              </div>
+              <span class="cp02-local-badge">LOCAL ONLY</span>
+            </header>
+
+            <p class="cp02-stage-note">阶段成果 · 工程代理物 · 非最终作品</p>
+
+            <dl class="cp02-source-lock">
+              <div>
+                <dt>不可改写源图</dt>
+                <dd id="cp02-source-hash">校验中…</dd>
+              </div>
+              <div>
+                <dt>补丁</dt>
+                <dd id="cp02-patch-id">尚未提出</dd>
+              </div>
+              <div>
+                <dt>结果</dt>
+                <dd id="cp02-outcome" data-outcome="READY">READY</dd>
+              </div>
+            </dl>
+
+            <label class="cp02-prompt" for="cp02-utterance">
+              <span>观众记忆陈述</span>
+              <textarea id="cp02-utterance" rows="3" spellcheck="false">我记得床边有一张小桌子、一把椅子，桌上放着一个旧杯子。</textarea>
+            </label>
+
+            <button id="cp02-preview" class="cp02-action is-primary" type="button">01 · 提出空间改写</button>
+            <ol id="cp02-patch-preview" class="cp02-patch-preview" aria-live="polite">
+              <li>等待观众提出记忆。</li>
+            </ol>
+
+            <div class="cp02-guardian" role="group" aria-label="Guardian 决策">
+              <span>GUARDIAN</span>
+              <button id="cp02-guardian-allow" class="cp02-action is-allow" type="button" disabled>02 · 允许</button>
+              <button id="cp02-guardian-reject" class="cp02-action is-reject" type="button" disabled>02 · 拒绝</button>
+            </div>
+
+            <div class="cp02-secondary-actions">
+              <button id="cp02-move-chair" class="cp02-action" type="button" disabled>03 · 椅子退出亲近位置</button>
+              <button id="cp02-undo" class="cp02-action" type="button" disabled>撤销上一补丁</button>
+            </div>
+
+            <details class="cp02-proof-tools" open>
+              <summary>工程边界验证</summary>
+              <label for="cp02-evidence-overlay">
+                <input id="cp02-evidence-overlay" type="checkbox" />
+                显示证据锁定标记
+              </label>
+              <button id="cp02-attempt-source-rewrite" class="cp02-action is-danger" type="button">尝试改写源照片（应拒绝）</button>
+              <button id="cp02-download-receipt" class="cp02-action" type="button" disabled>下载最新回执</button>
+            </details>
+
+            <p id="cp02-phase" class="cp02-phase" aria-live="polite">本地确定性运行时已就绪。</p>
+          </aside>
+
           <div class="viewport-tools" aria-label="变换工具">
             <button type="button" data-tool="translate" class="tool-button is-active" aria-pressed="true" title="移动 W">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M9 6l3-3 3 3M3 12h18M6 9l-3 3 3 3M18 9l3 3-3 3M9 18l3 3 3-3" /></svg>

@@ -12,6 +12,17 @@ const clamp01 = (value) => Math.min(1, Math.max(0, value));
 const sameVector = (left, right) => left?.length === right?.length && left.every((value, index) => value === right[index]);
 const cameraCurveCache = new WeakMap();
 
+const governanceEdgeStyle = (state, mode, evidenceOverlayEnabled, renderEdge = true) => {
+  if (!state) return { visible: mode === "edit" && renderEdge, color: 0x151817, opacity: 0.38 };
+  if (state === "SOURCE_LOCKED") return { visible: renderEdge, color: 0x65d8e8, opacity: 0.92 };
+  if (state === "EVIDENCE_LOCKED") {
+    return { visible: evidenceOverlayEnabled && renderEdge, color: 0xa8aaa3, opacity: 0.58 };
+  }
+  if (state === "AUTHORISED") return { visible: renderEdge, color: 0x7ad0c5, opacity: 0.72 };
+  if (state === "PROPOSED") return { visible: renderEdge, color: 0x65d8e8, opacity: 0.84 };
+  return { visible: false, color: 0x151817, opacity: 0 };
+};
+
 const cameraCurveFor = (path) => {
   let curve = cameraCurveCache.get(path);
   if (curve) return curve;
@@ -74,10 +85,16 @@ export class ThreeSceneAdapter {
     this.previewShadowsEnabled = true;
     this.previewObjectLightsEnabled = true;
     this.performanceAdaptationEnabled = new URLSearchParams(window.location.search).get("renderQuality") !== "full";
+    this.governanceOverlayEnabled = false;
+    this.cp02DecisionEffects = [];
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x070909);
     this.scene.fog = new THREE.FogExp2(0x070909, 0.026);
+    this.cp02ProposalRoot = new THREE.Group();
+    this.cp02ProposalRoot.name = "CP02_PROPOSAL_PREVIEW";
+    this.cp02ProposalRoot.userData.ephemeral = true;
+    this.scene.add(this.cp02ProposalRoot);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
     this.renderer.setClearColor(0x070909, 1);
@@ -312,7 +329,8 @@ export class ThreeSceneAdapter {
 
   syncMesh(mesh, object, selectionId) {
     mesh.name = object.name;
-    mesh.visible = object.visible;
+    const governanceState = object.governance?.state ?? null;
+    mesh.visible = object.visible && governanceState !== "WITHHELD";
     const render = object.render ?? {};
     if (mesh.material) {
       mesh.material.color?.set(object.color);
@@ -320,12 +338,22 @@ export class ThreeSceneAdapter {
       mesh.material.metalness = render.metalness ?? 0.02;
       mesh.material.emissive?.set(render.emissive ?? "#000000");
       mesh.material.emissiveIntensity = render.emissiveIntensity ?? 0;
-      mesh.material.opacity = render.opacity ?? 1;
+      mesh.material.opacity = governanceState === "PROPOSED" ? 0.55 : (render.opacity ?? 1);
       mesh.material.transparent = mesh.material.opacity < 1;
       mesh.material.depthWrite = mesh.material.opacity >= 0.35;
     }
+    const edgeStyle = governanceEdgeStyle(
+      governanceState,
+      this.mode,
+      this.governanceOverlayEnabled,
+      render.edge !== false,
+    );
     mesh.children.forEach((child) => {
-      if (child.userData.isEdgeOverlay) child.visible = this.mode === "edit" && render.edge !== false;
+      if (child.userData.isEdgeOverlay) {
+        child.visible = edgeStyle.visible;
+        child.material?.color?.setHex(edgeStyle.color);
+        if (child.material) child.material.opacity = edgeStyle.opacity;
+      }
       if (child.userData.isObjectLight && render.light) {
         child.visible = this.mode !== "preview" || this.previewObjectLightsEnabled;
         child.color.set(render.light.color);
@@ -337,6 +365,7 @@ export class ThreeSceneAdapter {
     mesh.userData.locked = object.locked;
     mesh.userData.dimensions = [...object.dimensions];
     mesh.userData.entityRole = object.entity?.role ?? "prop";
+    mesh.userData.governanceState = governanceState;
 
     if (this.mode === "preview" || !(this.isDragging && object.id === selectionId)) {
       mesh.position.fromArray(object.position);
@@ -499,6 +528,121 @@ export class ThreeSceneAdapter {
     this.performanceHandler = typeof handler === "function" ? handler : null;
   }
 
+  setGovernanceOverlay(enabled) {
+    this.governanceOverlayEnabled = Boolean(enabled);
+    if (this.lastState) this.sync(this.lastState);
+  }
+
+  clearCp02ProposalPreview() {
+    if (!this.cp02ProposalRoot) return;
+    const children = [...this.cp02ProposalRoot.children];
+    children.forEach((child) => {
+      child.removeFromParent();
+      child.traverse((entry) => {
+        entry.geometry?.dispose?.();
+        if (Array.isArray(entry.material)) entry.material.forEach((material) => material.dispose?.());
+        else entry.material?.dispose?.();
+      });
+    });
+  }
+
+  showCp02ProposalPreview({ catalog, slots, patch }) {
+    this.clearCp02ProposalPreview();
+    const assets = Array.isArray(catalog) ? catalog : [];
+    const authoredSlots = Array.isArray(slots) ? slots : [];
+    const operations = Array.isArray(patch?.operations) ? patch.operations : [];
+    let primitiveCount = 0;
+
+    for (const operation of operations) {
+      if (!['add', 'replace'].includes(operation.kind)) continue;
+      const asset = assets.find((candidate) => (
+        candidate.assetId === operation.assetId
+        && candidate.status === "PROJECT_AUTHORED_PROXY"
+      ));
+      const slot = authoredSlots.find((candidate) => candidate.id === operation.slotId);
+      if (!asset?.bundle?.children || !slot || asset.semanticClass !== slot.semanticClass) continue;
+
+      const bundleRoot = new THREE.Group();
+      bundleRoot.name = `PROPOSED · ${asset.semanticClass}`;
+      bundleRoot.position.fromArray(slot.position);
+      bundleRoot.rotation.set(...slot.rotation.map((value) => value * DEG_TO_RAD));
+      bundleRoot.userData.governanceState = "PROPOSED";
+      bundleRoot.userData.ephemeral = true;
+
+      for (const template of asset.bundle.children) {
+        const geometry = geometryForType(template.type);
+        const material = new THREE.MeshStandardMaterial({
+          color: template.color,
+          roughness: template.render?.roughness ?? 0.78,
+          metalness: template.render?.metalness ?? 0.02,
+          transparent: true,
+          opacity: 0.55,
+          depthWrite: false,
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = template.name;
+        mesh.position.fromArray(template.position);
+        mesh.rotation.set(...(template.rotation ?? [0, 0, 0]).map((value) => value * DEG_TO_RAD));
+        mesh.scale.fromArray(template.dimensions);
+        mesh.userData.governanceState = "PROPOSED";
+        mesh.userData.ephemeral = true;
+        mesh.renderOrder = 60;
+
+        const seam = new THREE.LineSegments(
+          new THREE.EdgesGeometry(geometry, 28),
+          new THREE.LineDashedMaterial({
+            color: 0x65d8e8,
+            dashSize: 0.09,
+            gapSize: 0.055,
+            transparent: true,
+            opacity: 0.92,
+            depthTest: false,
+          }),
+        );
+        seam.computeLineDistances();
+        seam.userData.isProposalSeam = true;
+        seam.renderOrder = 61;
+        mesh.add(seam);
+        bundleRoot.add(mesh);
+        primitiveCount += 1;
+      }
+      this.cp02ProposalRoot.add(bundleRoot);
+    }
+
+    return primitiveCount;
+  }
+
+  showCp02DecisionPressure({ positions = [], outcome = "WITHHELD", durationMs = 1800 } = {}) {
+    const duration = Math.max(250, Number(durationMs) || 1800);
+    const color = outcome === "APPLIED" ? 0x69d6ca : 0xd27b58;
+    const safePositions = positions.length ? positions : [[0, 1.2, 0]];
+    const startedAt = performance.now();
+    for (const position of safePositions) {
+      if (!Array.isArray(position) || position.length !== 3 || !position.every(Number.isFinite)) continue;
+      const light = new THREE.PointLight(color, 0, 4.8, 2);
+      light.position.fromArray(position);
+      light.userData.cp02DecisionPressure = true;
+      this.scene.add(light);
+      this.cp02DecisionEffects.push({ light, startedAt, duration, baseIntensity: 7.5 });
+    }
+    return duration;
+  }
+
+  applyCp02DecisionPressure(timestamp) {
+    this.cp02DecisionEffects = this.cp02DecisionEffects.filter((effect) => {
+      const progress = clamp01((timestamp - effect.startedAt) / effect.duration);
+      if (progress >= 1) {
+        effect.light.removeFromParent();
+        effect.light.dispose?.();
+        return false;
+      }
+      const envelope = Math.sin(progress * Math.PI) ** 2;
+      const pressure = 0.78 + (0.22 * Math.cos(progress * Math.PI * 4));
+      effect.light.intensity = effect.baseIntensity * envelope * pressure;
+      return true;
+    });
+  }
+
   async loadAssetFile(id, file) {
     const object = this.store.getState().project.objects.find((candidate) => candidate.id === id);
     const carrier = this.meshes.get(id);
@@ -627,6 +771,7 @@ export class ThreeSceneAdapter {
       this.framePacing.reset(performance.now());
       this.renderer.setPixelRatio(this.basePixelRatio);
       this.setPreviewEffects(true);
+      if (this.lastState) this.sync(this.lastState);
       return;
     }
 
@@ -1009,6 +1154,7 @@ export class ThreeSceneAdapter {
     }
     if (this.mode === "edit") this.orbitControls.update();
     if (this.mode === "preview" && this.interactionEffects.size) this.applyInteractionEffects(timestamp);
+    if (this.cp02DecisionEffects.length) this.applyCp02DecisionPressure(timestamp);
     this.selectionHelper?.update();
     this.renderer.render(this.scene, this.activeCamera);
   };
@@ -1037,6 +1183,13 @@ export class ThreeSceneAdapter {
     this.transformControls.removeEventListener("dragging-changed", this.onDraggingChanged);
     this.transformControls.removeEventListener("objectChange", this.onObjectChange);
     this.removeSelectionHelper();
+    this.clearCp02ProposalPreview();
+    this.cp02ProposalRoot?.removeFromParent();
+    this.cp02DecisionEffects.forEach((effect) => {
+      effect.light.removeFromParent();
+      effect.light.dispose?.();
+    });
+    this.cp02DecisionEffects = [];
     this.transformControls.dispose?.();
     this.orbitControls.dispose();
     this.meshes.forEach((mesh) => this.disposeMesh(mesh));

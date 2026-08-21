@@ -2618,6 +2618,270 @@ canvas.is-director-preview {
   display: none;
 }
 
+.cp02-panel {
+  position: absolute;
+  z-index: 14;
+  top: 16px;
+  right: 16px;
+  display: grid;
+  width: min(356px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  gap: 11px;
+  padding: 15px;
+  overflow-y: auto;
+  border: 1px solid rgb(101 216 232 / 42%);
+  border-radius: 3px;
+  background:
+    linear-gradient(155deg, rgb(20 27 27 / 96%), rgb(9 12 12 / 91%)),
+    rgb(9 12 12 / 94%);
+  box-shadow: 0 22px 70px rgb(0 0 0 / 52%), inset 0 0 0 1px rgb(255 255 255 / 3%);
+  backdrop-filter: blur(12px);
+  scrollbar-color: rgb(101 216 232 / 35%) transparent;
+}
+
+.cp02-panel[hidden] {
+  display: none;
+}
+
+.cp02-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cp02-heading h2 {
+  margin: 3px 0 0;
+  color: #edf2ef;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+}
+
+.cp02-kicker,
+.cp02-local-badge,
+.cp02-source-lock dt,
+.cp02-prompt > span,
+.cp02-guardian > span {
+  color: #8fa09c;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 8px;
+  letter-spacing: 0.16em;
+}
+
+.cp02-local-badge {
+  padding: 4px 6px;
+  border: 1px solid rgb(105 214 202 / 48%);
+  color: #83d7cd;
+}
+
+.cp02-stage-note {
+  margin: -3px 0 0;
+  color: #9ca4a0;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.cp02-source-lock {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 0.82fr;
+  margin: 0;
+  border-top: 1px solid rgb(255 255 255 / 9%);
+  border-bottom: 1px solid rgb(255 255 255 / 9%);
+}
+
+.cp02-source-lock > div {
+  min-width: 0;
+  padding: 8px 7px 8px 0;
+}
+
+.cp02-source-lock > div + div {
+  padding-left: 8px;
+  border-left: 1px solid rgb(255 255 255 / 7%);
+}
+
+.cp02-source-lock dt {
+  margin-bottom: 4px;
+}
+
+.cp02-source-lock dd {
+  margin: 0;
+  overflow: hidden;
+  color: #cad2ce;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#cp02-outcome[data-outcome="PROPOSED"] { color: #65d8e8; }
+#cp02-outcome[data-outcome="APPLIED"],
+#cp02-outcome[data-outcome="UNDONE"] { color: #69d6ca; }
+#cp02-outcome[data-outcome="WITHHELD"],
+#cp02-outcome[data-outcome="ERROR"] { color: #e08b68; }
+
+.cp02-prompt {
+  display: grid;
+  gap: 6px;
+}
+
+.cp02-prompt textarea {
+  width: 100%;
+  min-height: 62px;
+  resize: vertical;
+  padding: 9px 10px;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 3%);
+  color: #d8ddda;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.cp02-action {
+  min-height: 31px;
+  padding: 7px 9px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 4%);
+  color: #bfc8c3;
+  font-size: 10px;
+  text-align: left;
+}
+
+.cp02-action:not(:disabled):hover {
+  border-color: rgb(101 216 232 / 48%);
+  background: rgb(101 216 232 / 8%);
+  color: #eef4f1;
+}
+
+.cp02-action.is-primary {
+  border-color: rgb(101 216 232 / 48%);
+  color: #9ee5ed;
+}
+
+.cp02-action.is-allow { color: #84ddd2; }
+.cp02-action.is-reject,
+.cp02-action.is-danger { color: #d99579; }
+
+.cp02-patch-preview {
+  display: grid;
+  gap: 3px;
+  min-height: 28px;
+  margin: 0;
+  padding: 7px 9px 7px 25px;
+  border-left: 1px dashed rgb(101 216 232 / 58%);
+  background: rgb(101 216 232 / 3%);
+  color: #aeb9b4;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.cp02-guardian {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.cp02-guardian > span {
+  padding-right: 3px;
+}
+
+.cp02-secondary-actions {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 6px;
+}
+
+.cp02-proof-tools {
+  padding-top: 8px;
+  border-top: 1px solid rgb(255 255 255 / 9%);
+  color: #8f9994;
+  font-size: 9px;
+}
+
+.cp02-proof-tools summary {
+  cursor: pointer;
+  letter-spacing: 0.08em;
+}
+
+.cp02-proof-tools[open] {
+  display: grid;
+  gap: 7px;
+}
+
+.cp02-proof-tools label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.cp02-phase {
+  min-height: 27px;
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid rgb(255 255 255 / 9%);
+  color: #9eaaa5;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+body.is-cp02-case .app-shell {
+  --timeline-height: 0px;
+  --statusbar-height: 0px;
+}
+
+body.is-cp02-case .topbar {
+  grid-template-columns: auto minmax(210px, 0.65fr) minmax(420px, 1fr);
+}
+
+body.is-cp02-case .top-actions,
+body.is-cp02-case .side-panel,
+body.is-cp02-case .director-dock,
+body.is-cp02-case .statusbar,
+body.is-cp02-case .viewport-tools,
+body.is-cp02-case .camera-tools,
+body.is-cp02-case .viewport-axis {
+  display: none;
+}
+
+body.is-cp02-case .workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body.is-cp02-case .project-name {
+  color: #b8c1bc;
+  font-family: Georgia, "Songti SC", serif;
+  letter-spacing: 0.05em;
+}
+
+body.is-cp02-case .stage-nav {
+  pointer-events: none;
+}
+
+body.is-cp02-case .performance-indicator {
+  top: 16px;
+  right: 388px;
+}
+
+body.is-cp02-case .viewport-shell::after {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(92deg, transparent 0 83px, rgb(255 246 220 / 1.2%) 84px, transparent 85px 173px),
+    radial-gradient(circle at 46% 44%, transparent 38%, rgb(0 0 0 / 19%) 76%, rgb(0 0 0 / 46%) 100%);
+  mix-blend-mode: screen, normal;
+}
+
 @media (max-width: 1220px) {
   :root {
     --panel-left: 224px;
@@ -2851,6 +3115,25 @@ canvas.is-director-preview {
     gap: 4px;
     padding: 0 5px;
     font-size: 8px;
+  }
+
+  body.is-cp02-case .topbar {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  body.is-cp02-case .stage-nav {
+    display: none;
+  }
+
+  body.is-cp02-case .cp02-panel {
+    top: 9px;
+    right: 9px;
+    width: calc(100% - 18px);
+    max-height: calc(100% - 18px);
+  }
+
+  body.is-cp02-case .performance-indicator {
+    display: none;
   }
 }
 

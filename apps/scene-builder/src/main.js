@@ -16,10 +16,27 @@ import {
   compileScreenplay,
   formatTimecode,
 } from "./director.js";
+import {
+  decideCp02ReframeIntent,
+  runSceneCompositionTurn,
+} from "./agent-runtime.js";
+import {
+  applyScenePatch,
+  hashProject,
+  undoScenePatch,
+} from "./scene-patch-runtime.js";
+import cp02AssetCatalog from "../projects/window-case-cp02/asset-catalog.json";
+import cp02SceneSlots from "../projects/window-case-cp02/scene-slots.json";
 
 const STORAGE_KEY = "blockout-studio.project.v3";
 const LEGACY_STORAGE_KEY_V2 = "blockout-studio.project.v2";
 const LEGACY_STORAGE_KEY = "blockout-studio.project.v1";
+const searchParams = new URLSearchParams(window.location.search);
+const isCp02Case = searchParams.get("case") === "pact-cp02";
+const cp02ProjectUrl = new URL(
+  "../projects/window-case-cp02/cp02-mutable-room.blockout.json",
+  import.meta.url,
+).href;
 
 const $ = (selector) => {
   const element = document.querySelector(selector);
@@ -44,6 +61,7 @@ const lockIcon = (locked) => locked
   : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 7.5-2"/></svg>';
 
 const restoreProject = () => {
+  if (isCp02Case) return createEmptyProject("PACT CP02 · 正在载入本地场景");
   const saved = localStorage.getItem(STORAGE_KEY)
     ?? localStorage.getItem(LEGACY_STORAGE_KEY_V2)
     ?? localStorage.getItem(LEGACY_STORAGE_KEY);
@@ -185,6 +203,21 @@ const elements = {
   dialogueOverlay: $("#dialogue-overlay"),
   dialogueSpeaker: $("#dialogue-speaker"),
   dialogueText: $("#dialogue-text"),
+  cp02Panel: $("#cp02-panel"),
+  cp02Utterance: $("#cp02-utterance"),
+  cp02Preview: $("#cp02-preview"),
+  cp02GuardianAllow: $("#cp02-guardian-allow"),
+  cp02GuardianReject: $("#cp02-guardian-reject"),
+  cp02MoveChair: $("#cp02-move-chair"),
+  cp02Undo: $("#cp02-undo"),
+  cp02AttemptSourceRewrite: $("#cp02-attempt-source-rewrite"),
+  cp02DownloadReceipt: $("#cp02-download-receipt"),
+  cp02EvidenceOverlay: $("#cp02-evidence-overlay"),
+  cp02SourceHash: $("#cp02-source-hash"),
+  cp02PatchId: $("#cp02-patch-id"),
+  cp02Outcome: $("#cp02-outcome"),
+  cp02PatchPreview: $("#cp02-patch-preview"),
+  cp02Phase: $("#cp02-phase"),
   toast: $("#toast"),
 };
 
@@ -201,6 +234,23 @@ let timelineClipNodes = new Map();
 let activeTimelineClipIds = new Set();
 let lastTimelineUiTime = -Infinity;
 let lastDialogueClipId = null;
+let cp02LastHashedProject = null;
+let cp02HashSequence = 0;
+
+const cp02Evidence = {
+  ready: false,
+  busy: false,
+  phase: "READY",
+  outcome: "READY",
+  currentPatch: null,
+  currentTurn: null,
+  initialProjectHash: null,
+  projectHash: null,
+  latestReceipt: null,
+  receipts: [],
+  appliedReceipts: [],
+  latestPerformanceReport: null,
+};
 
 const selectedObject = () => currentState.project.objects.find((object) => object.id === currentState.selectionId) ?? null;
 
@@ -211,6 +261,286 @@ const showToast = (message) => {
   toastTimer = window.setTimeout(() => {
     elements.toast.hidden = true;
   }, 2400);
+};
+
+const cp02ProtectedObjectIds = (project) => project.objects
+  .filter((object) => ["SOURCE_LOCKED", "EVIDENCE_LOCKED", "STAGE_LOCKED"].includes(object.governance?.state))
+  .map((object) => object.id)
+  .sort();
+
+const cp02DescendantIds = (project, rootId) => {
+  const ids = new Set([rootId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const object of project.objects) {
+      if (!ids.has(object.id) && ids.has(object.parentId)) {
+        ids.add(object.id);
+        changed = true;
+      }
+    }
+  }
+  return [...ids].sort();
+};
+
+const cp02GovernanceCounts = (project) => project.objects.reduce((counts, object) => {
+  const state = object.governance?.state ?? "UNGOVERNED";
+  counts[state] = (counts[state] ?? 0) + 1;
+  return counts;
+}, {});
+
+const cp02ProposalPositions = (patch) => (patch?.operations ?? [])
+  .map((operation) => cp02SceneSlots.find((slot) => slot.id === operation.slotId)?.position)
+  .filter(Boolean);
+
+const renderCp02PatchList = () => {
+  elements.cp02PatchPreview.replaceChildren();
+  const patch = cp02Evidence.currentPatch;
+  if (patch) {
+    patch.operations.forEach((operation) => {
+      const asset = cp02AssetCatalog.find((candidate) => candidate.assetId === operation.assetId);
+      const item = document.createElement("li");
+      item.textContent = `${operation.kind.toUpperCase()} · ${asset?.semanticClass ?? operation.objectId} → ${operation.slotId ?? "移除"}`;
+      elements.cp02PatchPreview.appendChild(item);
+    });
+    return;
+  }
+  if (cp02Evidence.currentTurn?.patchPreview?.outcome === "WITHHELD") {
+    const item = document.createElement("li");
+    item.textContent = `未形成补丁：${cp02Evidence.currentTurn.patchPreview.code}`;
+    elements.cp02PatchPreview.appendChild(item);
+    return;
+  }
+  if (cp02Evidence.latestReceipt) {
+    const item = document.createElement("li");
+    item.textContent = `${cp02Evidence.latestReceipt.outcome} · ${cp02Evidence.latestReceipt.reasonCode ?? cp02Evidence.latestReceipt.patchId}`;
+    elements.cp02PatchPreview.appendChild(item);
+    return;
+  }
+  const item = document.createElement("li");
+  item.textContent = "等待观众提出记忆。";
+  elements.cp02PatchPreview.appendChild(item);
+};
+
+const renderCp02Surface = () => {
+  if (!isCp02Case) return;
+  const project = currentState.project;
+  const sourceHash = project.cp02?.sourcePhotoSha256 ?? "missing";
+  elements.cp02SourceHash.textContent = sourceHash === "missing" ? sourceHash : `${sourceHash.slice(0, 12)}…${sourceHash.slice(-8)}`;
+  elements.cp02SourceHash.title = sourceHash;
+  elements.cp02PatchId.textContent = cp02Evidence.currentPatch?.patchId
+    ?? cp02Evidence.latestReceipt?.patchId
+    ?? "尚未提出";
+  elements.cp02Outcome.textContent = cp02Evidence.outcome;
+  elements.cp02Outcome.dataset.outcome = cp02Evidence.outcome;
+  elements.cp02Phase.textContent = cp02Evidence.phase;
+
+  const chair = project.objects.find((object) => object.id === "cp02-memory-chair");
+  const canMoveChair = chair?.governance?.state === "AUTHORISED"
+    && chair.governance.slotId === "memory-chair-near";
+  elements.cp02Preview.disabled = !cp02Evidence.ready || cp02Evidence.busy || cp02Evidence.appliedReceipts.length > 0;
+  elements.cp02GuardianAllow.disabled = cp02Evidence.busy || !cp02Evidence.currentPatch;
+  elements.cp02GuardianReject.disabled = cp02Evidence.busy || !cp02Evidence.currentPatch;
+  elements.cp02MoveChair.disabled = cp02Evidence.busy || !canMoveChair || Boolean(cp02Evidence.currentPatch);
+  elements.cp02Undo.disabled = cp02Evidence.busy || cp02Evidence.appliedReceipts.length === 0;
+  elements.cp02AttemptSourceRewrite.disabled = !cp02Evidence.ready || cp02Evidence.busy;
+  elements.cp02DownloadReceipt.disabled = !cp02Evidence.latestReceipt;
+  renderCp02PatchList();
+};
+
+const refreshCp02ProjectHash = async (project) => {
+  if (!isCp02Case || !project.cp02 || project === cp02LastHashedProject) return;
+  cp02LastHashedProject = project;
+  const sequence = ++cp02HashSequence;
+  try {
+    const projectHash = await hashProject(project);
+    if (sequence !== cp02HashSequence) return;
+    cp02Evidence.projectHash = projectHash;
+    cp02Evidence.initialProjectHash ??= projectHash;
+    cp02Evidence.ready = true;
+    renderCp02Surface();
+  } catch (error) {
+    cp02Evidence.ready = false;
+    cp02Evidence.phase = `哈希校验失败：${error.message}`;
+    renderCp02Surface();
+  }
+};
+
+const recordCp02Receipt = (receipt) => {
+  cp02Evidence.latestReceipt = structuredClone(receipt);
+  cp02Evidence.receipts.push(structuredClone(receipt));
+  cp02Evidence.outcome = receipt.outcome;
+};
+
+const runCp02Action = async (pendingLabel, action) => {
+  if (!isCp02Case || cp02Evidence.busy) return;
+  cp02Evidence.busy = true;
+  cp02Evidence.phase = pendingLabel;
+  renderCp02Surface();
+  try {
+    await action();
+  } catch (error) {
+    cp02Evidence.outcome = "ERROR";
+    cp02Evidence.phase = `操作失败：${error.message}`;
+    showToast(error.message);
+  } finally {
+    cp02Evidence.busy = false;
+    renderCp02Surface();
+  }
+};
+
+const previewCp02Reframe = () => runCp02Action("正在将记忆陈述转为受限意图…", async () => {
+  const turn = await runSceneCompositionTurn({
+    project: currentState.project,
+    text: elements.cp02Utterance.value,
+    decide: decideCp02ReframeIntent,
+    catalog: cp02AssetCatalog,
+    slots: cp02SceneSlots,
+  });
+  cp02Evidence.currentTurn = structuredClone(turn);
+  if (turn.patchPreview.outcome === "WITHHELD") {
+    cp02Evidence.currentPatch = null;
+    cp02Evidence.outcome = "WITHHELD";
+    cp02Evidence.phase = `意图被限制：${turn.patchPreview.code}`;
+    editor.clearCp02ProposalPreview();
+    editor.showCp02DecisionPressure({ outcome: "WITHHELD" });
+    return;
+  }
+  cp02Evidence.currentPatch = structuredClone(turn.patchPreview);
+  cp02Evidence.outcome = "PROPOSED";
+  cp02Evidence.phase = "改写只存在于临时预览层；SceneStore 尚未改变。";
+  editor.showCp02ProposalPreview({
+    catalog: cp02AssetCatalog,
+    slots: cp02SceneSlots,
+    patch: turn.patchPreview,
+  });
+});
+
+const decideCp02Patch = (guardianDecision) => runCp02Action(
+  guardianDecision === "ALLOW" ? "Guardian 正在核验并执行补丁…" : "Guardian 正在拒绝补丁…",
+  async () => {
+    const patch = cp02Evidence.currentPatch;
+    if (!patch) throw new Error("没有可供 Guardian 决策的补丁");
+    const positions = cp02ProposalPositions(patch);
+    const receipt = await applyScenePatch({
+      store,
+      catalog: cp02AssetCatalog,
+      slots: cp02SceneSlots,
+      patch,
+      guardianDecision,
+      mode: "engineering-evidence",
+    });
+    if (receipt.outcome === "APPLIED") cp02Evidence.appliedReceipts.push(structuredClone(receipt));
+    recordCp02Receipt(receipt);
+    cp02Evidence.currentPatch = null;
+    cp02Evidence.currentTurn = null;
+    editor.clearCp02ProposalPreview();
+    editor.showCp02DecisionPressure({ positions, outcome: receipt.outcome, durationMs: 1800 });
+    cp02Evidence.phase = receipt.outcome === "APPLIED"
+      ? `补丁已应用：${receipt.expectedChangedObjectIds.length} 个稳定对象 ID 发生预期改变。`
+      : "Guardian 已拒绝；房间状态与源图均未改变。";
+  },
+);
+
+const moveCp02Chair = () => runCp02Action("正在把椅子从亲近位置撤回…", async () => {
+  const project = currentState.project;
+  const chair = project.objects.find((object) => object.id === "cp02-memory-chair");
+  if (!chair || chair.governance?.slotId !== "memory-chair-near") {
+    throw new Error("椅子当前不在可撤回的亲近位置");
+  }
+  const patch = {
+    schemaVersion: 1,
+    patchId: "CP02-REFRAME-CHAIR-MOVE-001",
+    caseAction: "Reframe",
+    provider: "deterministic-cp02-controller-v1",
+    reason: "The authorised chair withdraws from the intimate bedside position.",
+    preconditionHash: await hashProject(project),
+    expectedChangedObjectIds: cp02DescendantIds(project, chair.id),
+    forbiddenChangedObjectIds: cp02ProtectedObjectIds(project),
+    operations: [{
+      kind: "move_between_slots",
+      objectId: chair.id,
+      fromSlotId: "memory-chair-near",
+      slotId: "memory-chair-withdrawn",
+    }],
+  };
+  const receipt = await applyScenePatch({
+    store,
+    catalog: cp02AssetCatalog,
+    slots: cp02SceneSlots,
+    patch,
+    guardianDecision: "ALLOW",
+    mode: "engineering-evidence",
+  });
+  if (receipt.outcome !== "APPLIED") throw new Error(receipt.reason);
+  cp02Evidence.appliedReceipts.push(structuredClone(receipt));
+  recordCp02Receipt(receipt);
+  const target = cp02SceneSlots.find((slot) => slot.id === "memory-chair-withdrawn");
+  editor.showCp02DecisionPressure({ positions: [target.position], outcome: "APPLIED", durationMs: 1800 });
+  cp02Evidence.phase = "椅子已通过语义槽位补丁撤回；没有向 agent 暴露直接变换。";
+});
+
+const undoLatestCp02Patch = () => runCp02Action("正在核验回执并精确撤销…", async () => {
+  const applied = cp02Evidence.appliedReceipts.at(-1);
+  if (!applied) throw new Error("没有可撤销的已应用补丁");
+  const receipt = await undoScenePatch({ store, receipt: applied });
+  cp02Evidence.appliedReceipts.pop();
+  recordCp02Receipt(receipt);
+  cp02Evidence.currentPatch = null;
+  cp02Evidence.currentTurn = null;
+  editor.clearCp02ProposalPreview();
+  editor.showCp02DecisionPressure({ outcome: "APPLIED", durationMs: 1800 });
+  cp02Evidence.phase = cp02Evidence.appliedReceipts.length
+    ? "上一补丁已精确撤销；初始家具改写仍在场景中。"
+    : "补丁序列已全部撤销；房间恢复到 CP02 初始哈希。";
+});
+
+const attemptCp02SourceRewrite = () => runCp02Action("正在验证 SOURCE_LOCKED 拒绝路径…", async () => {
+  const project = currentState.project;
+  const source = project.objects.find((object) => object.id === "sandbox-photo_image");
+  if (!source) throw new Error("CP02 源照片对象缺失");
+  const patch = {
+    schemaVersion: 1,
+    patchId: "CP02-FORBIDDEN-SOURCE-REWRITE-001",
+    caseAction: "Reframe",
+    provider: "deterministic-cp02-boundary-test-v1",
+    reason: "Technical negative test: SOURCE_LOCKED must never be replaced.",
+    preconditionHash: await hashProject(project),
+    expectedChangedObjectIds: [source.id],
+    forbiddenChangedObjectIds: cp02ProtectedObjectIds(project),
+    operations: [{
+      kind: "replace",
+      objectId: source.id,
+      assetId: "CP02-CUP-PROXY-001",
+      slotId: "memory-cup-on-table",
+    }],
+  };
+  const receipt = await applyScenePatch({
+    store,
+    catalog: cp02AssetCatalog,
+    slots: cp02SceneSlots,
+    patch,
+    guardianDecision: "ALLOW",
+    mode: "engineering-evidence",
+  });
+  if (receipt.outcome !== "WITHHELD") throw new Error("SOURCE_LOCKED 负向测试意外通过");
+  recordCp02Receipt(receipt);
+  cp02Evidence.currentPatch = null;
+  cp02Evidence.currentTurn = null;
+  editor.clearCp02ProposalPreview();
+  editor.showCp02DecisionPressure({ positions: [source.position], outcome: "WITHHELD", durationMs: 1800 });
+  cp02Evidence.phase = `改写被拒绝：${receipt.reason}`;
+});
+
+const downloadLatestCp02Receipt = () => {
+  if (!cp02Evidence.latestReceipt) return;
+  const blob = new Blob([JSON.stringify(cp02Evidence.latestReceipt, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${cp02Evidence.latestReceipt.patchId}-${cp02Evidence.latestReceipt.outcome}.receipt.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
 };
 
 const setControlValue = (control, value) => {
@@ -783,7 +1113,7 @@ const compileDirector = ({ announce = true } = {}) => {
 
 const setDirectorMode = (mode) => {
   const nextMode = mode === "preview" ? "preview" : "edit";
-  if (nextMode === "preview") {
+  if (nextMode === "preview" && !isCp02Case) {
     const timeline = currentState.project.director.timeline;
     const stale = timeline.compiledScript !== elements.screenplayInput.value;
     const readyTimeline = stale || (!timeline.clips.length && elements.screenplayInput.value.trim())
@@ -827,6 +1157,10 @@ const togglePlayback = () => {
 };
 
 const scheduleAutosave = (project) => {
+  if (isCp02Case) {
+    elements.autosaveStatus.textContent = "CP02 临时会话 · 不写入默认项目";
+    return;
+  }
   window.clearTimeout(autosaveTimer);
   elements.autosaveStatus.textContent = "保存中…";
   autosaveTimer = window.setTimeout(() => {
@@ -854,10 +1188,14 @@ store.subscribe((state) => {
   renderDirector(state);
   runtime?.setProject(state.project);
   scheduleAutosave(state.project);
+  renderCp02Surface();
+  void refreshCp02ProjectHash(state.project);
 });
 
 runtime = new DirectorRuntime(currentState.project, updateTimelineFrame, updatePlaybackState);
-editor.setPerformanceHandler(({ fps, qualityScale, p95Ms, shadowsEnabled, objectLightsEnabled, adaptationEnabled }) => {
+editor.setPerformanceHandler((report) => {
+  if (isCp02Case) cp02Evidence.latestPerformanceReport = structuredClone(report);
+  const { fps, qualityScale, p95Ms, shadowsEnabled, objectLightsEnabled, adaptationEnabled } = report;
   elements.performanceFps.textContent = `${Math.round(fps)} FPS`;
   const effectsLabel = shadowsEnabled && objectLightsEnabled ? "特效 实时" : "特效 简化";
   const quality = adaptationEnabled ? qualityScale : 1;
@@ -878,6 +1216,78 @@ editor.setPreviewInteractionHandler((id) => {
     showToast(`“${object.name}”没有配置点击响应`);
   }
 });
+
+const loadCp02LocalProject = async () => {
+  cp02Evidence.ready = false;
+  cp02Evidence.phase = "正在载入仓库内 CP02 固定场景…";
+  renderCp02Surface();
+  try {
+    const response = await fetch(cp02ProjectUrl, { cache: "no-store" });
+    if (!response.ok) throw new Error(`本地场景请求失败（HTTP ${response.status}）`);
+    const project = ensureInitialTimeline(await response.json());
+    store.replaceProject(project);
+    editor.setCameraPreset("perspective");
+    cp02Evidence.phase = "本地确定性运行时已就绪；等待观众提出记忆。";
+    await refreshCp02ProjectHash(store.getState().project);
+  } catch (error) {
+    cp02Evidence.ready = false;
+    cp02Evidence.outcome = "ERROR";
+    cp02Evidence.phase = `CP02 场景载入失败：${error.message}`;
+    renderCp02Surface();
+  }
+};
+
+const setupCp02Case = () => {
+  if (!isCp02Case) return;
+  document.body.classList.add("is-cp02-case");
+  elements.cp02Panel.hidden = false;
+  elements.projectName.disabled = true;
+  editor.setGovernanceOverlay(false);
+
+  elements.cp02Preview.addEventListener("click", () => void previewCp02Reframe());
+  elements.cp02GuardianAllow.addEventListener("click", () => void decideCp02Patch("ALLOW"));
+  elements.cp02GuardianReject.addEventListener("click", () => void decideCp02Patch("REJECT"));
+  elements.cp02MoveChair.addEventListener("click", () => void moveCp02Chair());
+  elements.cp02Undo.addEventListener("click", () => void undoLatestCp02Patch());
+  elements.cp02AttemptSourceRewrite.addEventListener("click", () => void attemptCp02SourceRewrite());
+  elements.cp02DownloadReceipt.addEventListener("click", downloadLatestCp02Receipt);
+  elements.cp02EvidenceOverlay.addEventListener("change", () => {
+    editor.setGovernanceOverlay(elements.cp02EvidenceOverlay.checked);
+  });
+
+  window.__PACT_CP02_EVIDENCE__ = Object.freeze({
+    snapshot: () => structuredClone({
+      schemaVersion: 1,
+      ready: cp02Evidence.ready,
+      phase: cp02Evidence.phase,
+      outcome: cp02Evidence.outcome,
+      sourcePhotoSha256: currentState.project.cp02?.sourcePhotoSha256 ?? null,
+      initialProjectHash: cp02Evidence.initialProjectHash,
+      projectHash: cp02Evidence.projectHash,
+      objectCount: currentState.project.objects.length,
+      governanceCounts: cp02GovernanceCounts(currentState.project),
+      currentPatch: cp02Evidence.currentPatch,
+      latestReceipt: cp02Evidence.latestReceipt,
+      receipts: cp02Evidence.receipts,
+      appliedPatchDepth: cp02Evidence.appliedReceipts.length,
+      historyIndex: store.historyIndex,
+      proposalPrimitiveCount: editor.cp02ProposalRoot?.children.reduce(
+        (count, root) => count + root.children.length,
+        0,
+      ) ?? 0,
+      performance: cp02Evidence.latestPerformanceReport,
+      executionMode: "engineering-evidence",
+      networkPolicy: "local-only",
+      publicAssetDisplay: false,
+    }),
+  });
+
+  runtime?.stop();
+  setDirectorMode("preview");
+  cp02Evidence.phase = "正在载入仓库内 CP02 固定场景…";
+  renderCp02Surface();
+  void loadCp02LocalProject();
+};
 
 SCREENPLAY_SYNTAX.forEach((syntax) => {
   const code = document.createElement("code");
@@ -1301,6 +1711,13 @@ window.addEventListener("resize", () => {
 document.addEventListener("keydown", (event) => {
   const isEditing = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
   const modifier = event.ctrlKey || event.metaKey;
+  const isCp02Control = event.target instanceof Element && Boolean(event.target.closest("#cp02-panel"));
+
+  if (isCp02Case && isCp02Control) return;
+  if (isCp02Case) {
+    event.preventDefault();
+    return;
+  }
 
   if (modifier && event.key.toLowerCase() === "z" && directorMode === "edit") {
     event.preventDefault();
@@ -1355,4 +1772,5 @@ window.addEventListener("beforeunload", () => {
   editor.dispose();
 }, { once: true });
 
+setupCp02Case();
 editor.setCameraPreset("perspective");
