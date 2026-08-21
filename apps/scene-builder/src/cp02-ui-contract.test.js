@@ -45,6 +45,37 @@ describe("CP02 interaction surface contract", () => {
     expect(typeof ThreeSceneAdapter.prototype.setGovernanceOverlay).toBe("function");
   });
 
+  it("reuses one resident decision-pressure light across rapid Guardian decisions", () => {
+    const scene = new THREE.Scene();
+    const decisionLight = new THREE.PointLight(0x69d6ca, 0, 4.8, 2);
+    decisionLight.userData.cp02DecisionPressure = true;
+    scene.add(decisionLight);
+    const adapter = Object.assign(Object.create(ThreeSceneAdapter.prototype), {
+      scene,
+      cp02DecisionLight: decisionLight,
+      cp02DecisionEffects: [],
+    });
+
+    adapter.showCp02DecisionPressure({
+      positions: [[0, 1, 0], [3, 1, 0], [0, 1, 3]],
+      outcome: "APPLIED",
+      durationMs: 1800,
+    });
+    adapter.showCp02DecisionPressure({
+      positions: [[1, 2, 3]],
+      outcome: "WITHHELD",
+      durationMs: 1800,
+    });
+
+    expect(scene.children.filter((child) => child.userData.cp02DecisionPressure)).toEqual([decisionLight]);
+    expect(adapter.cp02DecisionEffects).toHaveLength(1);
+    expect(adapter.cp02DecisionEffects[0].light).toBe(decisionLight);
+    expect(decisionLight.position.toArray()).toEqual([1, 2, 3]);
+    adapter.applyCp02DecisionPressure(adapter.cp02DecisionEffects[0].startedAt + 1801);
+    expect(decisionLight.parent).toBe(scene);
+    expect(decisionLight.intensity).toBe(0);
+  });
+
   it("attaches a hash-verified Case Pack controller to an existing governed carrier", async () => {
     const carrier = new THREE.Group();
     carrier.scale.set(0.22, 0.34, 0.22);

@@ -98,6 +98,9 @@ export class ThreeSceneAdapter {
     this.cp02ProposalRoot.name = "CP02_PROPOSAL_PREVIEW";
     this.cp02ProposalRoot.userData.ephemeral = true;
     this.scene.add(this.cp02ProposalRoot);
+    this.cp02DecisionLight = new THREE.PointLight(0x69d6ca, 0, 4.8, 2);
+    this.cp02DecisionLight.userData.cp02DecisionPressure = true;
+    this.scene.add(this.cp02DecisionLight);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
     this.renderer.setClearColor(0x070909, 1);
@@ -648,16 +651,22 @@ export class ThreeSceneAdapter {
   showCp02DecisionPressure({ positions = [], outcome = "WITHHELD", durationMs = 1800 } = {}) {
     const duration = Math.max(250, Number(durationMs) || 1800);
     const color = outcome === "APPLIED" ? 0x69d6ca : 0xd27b58;
-    const safePositions = positions.length ? positions : [[0, 1.2, 0]];
+    const safePositions = (positions.length ? positions : [[0, 1.2, 0]])
+      .filter((position) => Array.isArray(position) && position.length === 3 && position.every(Number.isFinite));
     const startedAt = performance.now();
-    for (const position of safePositions) {
-      if (!Array.isArray(position) || position.length !== 3 || !position.every(Number.isFinite)) continue;
-      const light = new THREE.PointLight(color, 0, 4.8, 2);
-      light.position.fromArray(position);
-      light.userData.cp02DecisionPressure = true;
-      this.scene.add(light);
-      this.cp02DecisionEffects.push({ light, startedAt, duration, baseIntensity: 7.5 });
-    }
+    const center = safePositions.length
+      ? safePositions.reduce((result, position) => result.add(new THREE.Vector3(...position)), new THREE.Vector3())
+        .multiplyScalar(1 / safePositions.length)
+      : new THREE.Vector3(0, 1.2, 0);
+    this.cp02DecisionLight.color.setHex(color);
+    this.cp02DecisionLight.position.copy(center);
+    this.cp02DecisionLight.intensity = 0;
+    this.cp02DecisionEffects = [{
+      light: this.cp02DecisionLight,
+      startedAt,
+      duration,
+      baseIntensity: 7.5,
+    }];
     return duration;
   }
 
@@ -665,8 +674,7 @@ export class ThreeSceneAdapter {
     this.cp02DecisionEffects = this.cp02DecisionEffects.filter((effect) => {
       const progress = clamp01((timestamp - effect.startedAt) / effect.duration);
       if (progress >= 1) {
-        effect.light.removeFromParent();
-        effect.light.dispose?.();
+        effect.light.intensity = 0;
         return false;
       }
       const envelope = Math.sin(progress * Math.PI) ** 2;
@@ -1256,10 +1264,8 @@ export class ThreeSceneAdapter {
     this.removeSelectionHelper();
     this.clearCp02ProposalPreview();
     this.cp02ProposalRoot?.removeFromParent();
-    this.cp02DecisionEffects.forEach((effect) => {
-      effect.light.removeFromParent();
-      effect.light.dispose?.();
-    });
+    this.cp02DecisionLight.removeFromParent();
+    this.cp02DecisionLight.dispose?.();
     this.cp02DecisionEffects = [];
     this.transformControls.dispose?.();
     this.orbitControls.dispose();
