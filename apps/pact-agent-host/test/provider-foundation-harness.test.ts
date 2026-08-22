@@ -55,6 +55,9 @@ describe('provider-configurable DSH foundation harness', () => {
         provider: 'deepseek-official',
         model: 'deepseek-v4-pro',
       });
+      expect(deepseek.requests[0]?.system).toContain(
+        `PACT runtime identity: role=CaseConductor; sessionId=${conductor.agent.id}`,
+      );
       expect(gemini.requests).toHaveLength(0);
     } finally {
       await harness.dispose();
@@ -110,6 +113,7 @@ describe('provider-configurable DSH foundation harness', () => {
         },
       ),
       textResponse('trace receipt consumed'),
+      textResponse('second assigned turn consumed'),
     ]);
     const harness = await createFoundationHarness({
       persistenceRoot,
@@ -179,6 +183,27 @@ describe('provider-configurable DSH foundation harness', () => {
       expect(ledger.assertComplete()).toEqual({
         completedAssignments: 1,
         sentDispatches: 2,
+      });
+
+      ledger.assignSession({
+        sessionId: conductor.agent.id,
+        probeId: 'probe-ledger-followup',
+        provider: 'deepseek',
+        route: 'deepseek-official',
+        model: 'deepseek-v4-pro',
+        dispatches: [{
+          purpose: 'run one later assigned terminal turn',
+          expectedOutcome: 'terminal-after-tool-result',
+        }],
+      });
+      conductor.agent.followup(createUserMessage({
+        content: [{ type: 'text', text: 'finish the second assigned turn' }],
+        source: { kind: 'user' },
+      }));
+      await conductor.agent.whenIdle();
+      expect(ledger.assertComplete()).toEqual({
+        completedAssignments: 2,
+        sentDispatches: 3,
       });
     } finally {
       await harness.dispose();

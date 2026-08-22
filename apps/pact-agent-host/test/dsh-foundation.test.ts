@@ -277,6 +277,9 @@ describe('real DSH rc.6 foundation with a scripted adapter', () => {
         request.provider === 'pact-fake' && request.model === 'pact-fake'
       ),
     ).toBe(true);
+    expect(adapter.requests[0]?.system).toContain(
+      `PACT runtime identity: role=Rewriter; sessionId=${started.childId}`,
+    );
     expect(
       adapter.requests.map((request) =>
         request.tools?.map((tool) => tool.name).sort()

@@ -119,7 +119,19 @@ export const createFoundationHarness = async (
   ctx.subagents.registerContinuableSetup((childCtx) => {
     const child = childCtx.agent;
     if (child === undefined) throw new Error('PACT_CHILD_AGENT_REQUIRED');
-    return registry.bind(child.id, roleForContinuableChild(child.session));
+    const role = roleForContinuableChild(child.session);
+    const releaseBinding = registry.bind(child.id, role);
+    const releaseIdentity = childCtx.systemPrompt.section({
+      name: 'pact:runtime-identity',
+      order: 10,
+      text:
+        `PACT runtime identity: role=${role}; sessionId=${child.id}. ` +
+        'Use these exact runtime-bound values in PACT tool arguments; never invent or alter them.',
+    });
+    return () => {
+      releaseIdentity();
+      releaseBinding();
+    };
   });
 
   let active = true;
@@ -140,6 +152,13 @@ export const createFoundationHarness = async (
             () => registry.bind(conductor.id, 'CaseConductor'),
             'pact conductor role binding',
           );
+          agentCtx.systemPrompt.section({
+            name: 'pact:runtime-identity',
+            order: 10,
+            text:
+              `PACT runtime identity: role=CaseConductor; sessionId=${conductor.id}. ` +
+              'Use these exact runtime-bound values in PACT tool arguments; never invent or alter them.',
+          });
           agentCtx.tools.restrict({ allow: ROOT_PACT_TOOLS });
         },
       });

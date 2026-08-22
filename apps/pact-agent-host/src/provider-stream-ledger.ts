@@ -124,10 +124,14 @@ const envelopeFinish = (
 
 class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
   private sent = 0;
-  private readonly assignments = new Map<string, AssignmentState>();
+  private readonly currentAssignmentBySession =
+    new Map<string, AssignmentState>();
+  private readonly assignmentStates: AssignmentState[] = [];
   private readonly records: ProviderAttemptRecord[] = [];
   private readonly latestRecordBySession = new Map<string, number>();
   private readonly recordByRawToolCallId = new Map<string, number>();
+  private readonly pendingAcceptedDomainTools =
+    new Map<string, (readonly string[])[]>();
   private readonly now: () => number;
   private readonly deadlineAt: number;
 
@@ -160,6 +164,16 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
         }
       } else if (event.type === 'pact/public-trace') {
         this.observePublicTrace(sessionId, event.time);
+        this.observeAcceptedDomainTool(sessionId, [
+          'pact_publish_trace',
+          'pact_route_turn',
+        ]);
+      } else if (event.type === 'pact/contribution') {
+        this.observeAcceptedDomainTool(sessionId, [
+          'pact_submit_contribution',
+        ]);
+      } else if (event.type === 'pact/draft') {
+        this.observeAcceptedDomainTool(sessionId, ['pact_submit_draft']);
       }
     });
   }
@@ -170,10 +184,14 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
 
   assignSession(assignment: ProviderStreamAssignment): void {
     const sessionId = String(assignment.sessionId);
-    if (this.assignments.has(sessionId)) {
+    const current = this.currentAssignmentBySession.get(sessionId);
+    if (
+      current !== undefined &&
+      current.nextDispatch < current.assignment.dispatches.length
+    ) {
       throw new CompatibilityDispatchError(
         'PROVIDER_SESSION_ALREADY_ASSIGNED',
-        `provider session ${sessionId} already has a probe assignment`,
+        `provider session ${sessionId} has an incomplete probe assignment`,
       );
     }
     if (assignment.dispatches.length === 0) {
@@ -182,11 +200,13 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
         `${assignment.probeId} has no provider dispatches`,
       );
     }
-    this.assignments.set(sessionId, {
+    const state = {
       assignment,
       recordIndexes: [],
       nextDispatch: 0,
-    });
+    };
+    this.currentAssignmentBySession.set(sessionId, state);
+    this.assignmentStates.push(state);
   }
 
   attemptRecords(): readonly ProviderAttemptRecord[] {
@@ -194,7 +214,7 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
   }
 
   assertComplete(): ProviderDispatchLedgerSummary {
-    for (const state of this.assignments.values()) {
+    for (const state of this.assignmentStates) {
       if (state.nextDispatch !== state.assignment.dispatches.length) {
         throw new CompatibilityDispatchError(
           'PROVIDER_SESSION_DISPATCH_PLAN_INCOMPLETE',
@@ -237,7 +257,7 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
           )) {
             throw new CompatibilityDispatchError(
               'PROVIDER_TOOL_NOT_ACCEPTED',
-              `PROVIDER_TOOL_NOT_ACCEPTED: ${state.assignment.probeId}`,
+              `PROVIDER_TOOL_NOT_ACCEPTED: ${state.assignment.probeId} ${record.contract.toolCalls.map((receipt) => `${receipt.name}:${receipt.status}`).join(',')}`,
             );
           }
           return;
@@ -263,7 +283,7 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
       });
     }
     return {
-      completedAssignments: this.assignments.size,
+      completedAssignments: this.assignmentStates.length,
       sentDispatches: this.sent,
     };
   }
@@ -281,7 +301,7 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
         'refused an unassigned DSH provider stream',
       );
     }
-    const state = this.assignments.get(sessionId);
+    const state = this.currentAssignmentBySession.get(sessionId);
     if (state === undefined) {
       throw new CompatibilityDispatchError(
         'PROVIDER_SESSION_NOT_ASSIGNED',
@@ -393,7 +413,9 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
       toolCallId: normalizedToolCallId(rawCallId),
       name,
       argumentsHash: sha256(rawArguments),
-      status: 'observed',
+      status: this.consumePendingDomainAcceptance(sessionId, name)
+        ? 'accepted'
+        : 'observed',
     };
     this.recordByRawToolCallId.set(rawCallId, recordIndex);
     this.replaceContract(recordIndex, {
@@ -427,6 +449,48 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     this.replaceContract(recordIndex, {
       firstPublicTraceAt: new Date(time).toISOString(),
     });
+  }
+
+  private observeAcceptedDomainTool(
+    sessionId: string,
+    acceptedNames: readonly string[],
+  ): void {
+    const recordIndex = this.latestRecordBySession.get(sessionId);
+    if (recordIndex === undefined) return;
+    const record = this.records[recordIndex];
+    if (record === undefined) return;
+    let accepted = false;
+    this.replaceContract(recordIndex, {
+      toolCalls: record.contract.toolCalls.map((receipt) => {
+        if (
+          accepted ||
+          receipt.status !== 'observed' ||
+          !acceptedNames.includes(receipt.name)
+        ) return receipt;
+        accepted = true;
+        return { ...receipt, status: 'accepted' };
+      }),
+    });
+    if (!accepted) {
+      const pending = this.pendingAcceptedDomainTools.get(sessionId) ?? [];
+      pending.push([...acceptedNames]);
+      this.pendingAcceptedDomainTools.set(sessionId, pending);
+    }
+  }
+
+  private consumePendingDomainAcceptance(
+    sessionId: string,
+    toolName: string,
+  ): boolean {
+    const pending = this.pendingAcceptedDomainTools.get(sessionId);
+    if (pending === undefined) return false;
+    const index = pending.findIndex((acceptedNames) =>
+      acceptedNames.includes(toolName)
+    );
+    if (index < 0) return false;
+    pending.splice(index, 1);
+    if (pending.length === 0) this.pendingAcceptedDomainTools.delete(sessionId);
+    return true;
   }
 
   private replaceContract(
