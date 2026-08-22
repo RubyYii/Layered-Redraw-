@@ -72,6 +72,23 @@ const completeEnv = (): NodeJS.ProcessEnv => ({
   GEMINI_API_KEY: 'test-only-not-forwarded-by-command',
 });
 
+const completedTiming = () => ({
+  chainStartedAt: '2026-08-22T18:01:00.000Z',
+  firstPublicTraceAt: '2026-08-22T18:01:01.000Z',
+  draftAcceptedAt: '2026-08-22T18:01:07.000Z',
+  firstPublicTraceLatencyMs: 1_000,
+  draftAcceptedLatencyMs: 7_000,
+  firstPublicTraceTargetMet: true,
+  draftTargetMet: true,
+  hardDeadlineMet: true,
+});
+
+const completedOrchestration = () => ({
+  activeConductorTurns: 2,
+  settlementSinkTurns: 5,
+  blockedSettlementSinkTurns: 5,
+});
+
 const completedResult = () => {
   let sentOrdinal = 0;
   const records = COMPATIBILITY_PROBES.flatMap((probe) =>
@@ -110,6 +127,8 @@ const completedResult = () => {
     completedProbes: compatibilityPlan.intendedProbes,
     sentDispatches: compatibilityPlan.plannedDispatches,
     attemptRecords: records,
+    timing: completedTiming(),
+    orchestration: completedOrchestration(),
   };
 };
 
@@ -178,6 +197,21 @@ describe('authorised real-provider command boundary', () => {
       reachedProbes: 1,
       sentDispatches: 1,
       attemptRecords: [firstRecord],
+      timing: {
+        chainStartedAt: null,
+        firstPublicTraceAt: null,
+        draftAcceptedAt: null,
+        firstPublicTraceLatencyMs: null,
+        draftAcceptedLatencyMs: null,
+        firstPublicTraceTargetMet: null,
+        draftTargetMet: null,
+        hardDeadlineMet: null,
+      },
+      orchestration: {
+        activeConductorTurns: 0,
+        settlementSinkTurns: 1,
+        blockedSettlementSinkTurns: 1,
+      },
       failure: {
         code: 'PROVIDER_RESULT_LATE_QUARANTINED',
         message: 'PROVIDER_RESULT_LATE_QUARANTINED: probe-01 dispatch 1',

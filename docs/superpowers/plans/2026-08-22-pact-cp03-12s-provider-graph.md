@@ -64,7 +64,7 @@ Expected: plan/gate/evidence fixtures agree on `8 planned / 10 maximum`.
 - Modify: `apps/pact-agent-host/test/provider-real-runner.test.ts`
 - Modify if a reusable assertion is needed: `apps/pact-agent-host/src/durable-turn.ts`
 
-- [ ] **Step 1: Write failing runner tests**
+- [x] **Step 1: Write failing runner tests**
 
 Require:
 
@@ -76,7 +76,7 @@ Require:
 - settlement sinks end with `blocked` and the active Conductor has no child-settlement turn;
 - one retry yields nine streams and two-provider retry yields ten.
 
-- [ ] **Step 2: Run the focused red runner suite**
+- [x] **Step 2: Run the focused red runner suite**
 
 ```bash
 cd apps/pact-agent-host
@@ -85,19 +85,19 @@ npx vitest run test/provider-real-runner.test.ts
 
 Expected: FAIL against the serialized graph.
 
-- [ ] **Step 3: Track expected accepted tool names per assigned session**
+- [x] **Step 3: Track expected accepted tool names per assigned session**
 
 Correlate `tool/call` IDs to names and cancel only after every expected tool has a non-error `tool/result`. Clear tracking at assignment disposal/reassignment. Keep Probe 08's first-token cancellation separate.
 
-- [ ] **Step 4: Split active Conductor from child settlement parents**
+- [x] **Step 4: Split active Conductor from child settlement parents**
 
 Create dedicated parked parents for 01, 03, 04, 05, and 08. Wait for each child turn and its sink's blocked turn. Assert no settlement-created turn appears on the active Conductor.
 
-- [ ] **Step 5: Parallelize the representative wave**
+- [x] **Step 5: Parallelize the representative wave**
 
 Start Probe 02, Probe 04, and Probe 05 against the same `chainStartedAt` and `chainDeadlineAt`. After all three durable submissions pass, extract contribution refs and run Probe 06 as the Conductor's only second explicit turn.
 
-- [ ] **Step 6: Fail before later waves**
+- [x] **Step 6: Fail before later waves**
 
 Run `ledger.assertComplete()` after each completed wave. A late or invalid draft must throw before Probe 07 or Probe 08 starts.
 
@@ -112,19 +112,19 @@ Run `ledger.assertComplete()` after each completed wave. A late or invalid draft
 - Modify: `apps/pact-agent-host/test/provider-run-evidence.test.ts`
 - Modify: `apps/pact-agent-host/test/provider-real-command.test.ts`
 
-- [ ] **Step 1: Add red complete and partial timing assertions**
+- [x] **Step 1: Add red complete and partial timing assertions**
 
 The scripted clock must record chain start, first accepted public trace, accepted draft, both target booleans, and hard-deadline status. A 12,001 ms draft must be late/quarantined and stop before cancellation probes.
 
-- [ ] **Step 2: Implement immutable timing summaries**
+- [x] **Step 2: Implement immutable timing summaries**
 
 Use the runner's injected `now()` at domain-event observation time. Targets are diagnostic booleans; `hardDeadlineMet=false` is a runtime failure.
 
-- [ ] **Step 3: Validate timing evidence shape**
+- [x] **Step 3: Validate timing evidence shape**
 
 The evidence verifier must reject missing/inconsistent timing on a completed new run, while allowing a reported target miss to remain distinct from a hard-deadline failure.
 
-- [ ] **Step 4: Run runner, command, and evidence tests**
+- [x] **Step 4: Run runner, command, and evidence tests**
 
 ```bash
 cd apps/pact-agent-host
@@ -140,7 +140,7 @@ npx vitest run test/provider-real-runner.test.ts test/provider-real-command.test
 - Modify: this plan's checkbox/status fields
 - Test: Agent Host suite and Git/secret checks
 
-- [ ] **Step 1: Run proportional verification**
+- [x] **Step 1: Run proportional verification**
 
 ```bash
 cd apps/pact-agent-host

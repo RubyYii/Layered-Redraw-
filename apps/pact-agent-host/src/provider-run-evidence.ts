@@ -11,6 +11,7 @@ import type {
   ProviderRealRunApproval,
   ProviderRealRunPreflightFacts,
 } from './provider-real-run-gate.js';
+import { COMPATIBILITY_LIMITS } from './compatibility-config.js';
 import {
   COMPATIBILITY_PROBES,
   probePlanSummary,
@@ -33,6 +34,8 @@ type EvidenceCheck =
   | 'selection'
   | 'providerKind'
   | 'contracts'
+  | 'timing'
+  | 'orchestration'
   | 'secretScan';
 
 export interface ProviderRunEvidenceFinding {
@@ -98,6 +101,16 @@ const forbiddenSecretFields = new Set([
 const normalizedField = (value: string): string =>
   value.toLowerCase().replaceAll(/[^a-z0-9]/g, '');
 
+const exactTimestampMs = (value: unknown): number | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return undefined;
+  return new Date(parsed).toISOString() === value ? parsed : undefined;
+};
+
+const nonNegativeInteger = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0;
+
 const scanSecretFields = (
   value: unknown,
   path: string,
@@ -142,6 +155,8 @@ export const verifyProviderRunEvidence = (
     selection: 'PASS',
     providerKind: 'PASS',
     contracts: 'PASS',
+    timing: 'PASS',
+    orchestration: 'PASS',
     secretScan: 'PASS',
   };
   const findings: ProviderRunEvidenceFinding[] = [];
@@ -173,6 +188,8 @@ export const verifyProviderRunEvidence = (
       'selection',
       'providerKind',
       'contracts',
+      'timing',
+      'orchestration',
     ] as const) {
       add(check, 'ARCHIVE_UNAVAILABLE', '$');
     }
@@ -284,6 +301,127 @@ export const verifyProviderRunEvidence = (
     resultRecord.completedProbes !== plan.intendedProbes
   ) {
     add('completion', 'RUN_COMPLETION_MISMATCH', 'result');
+  }
+
+  const timingRecord = isRecord(resultRecord.timing)
+    ? resultRecord.timing
+    : undefined;
+  if (timingRecord === undefined) {
+    add('timing', 'REPRESENTATIVE_TIMING_MISSING', 'result.timing');
+  } else {
+    const chainStartedAt = exactTimestampMs(timingRecord.chainStartedAt);
+    const firstPublicTraceAt = exactTimestampMs(
+      timingRecord.firstPublicTraceAt,
+    );
+    const draftAcceptedAt = exactTimestampMs(timingRecord.draftAcceptedAt);
+    const traceLatency = timingRecord.firstPublicTraceLatencyMs;
+    const draftLatency = timingRecord.draftAcceptedLatencyMs;
+    const completedTiming =
+      chainStartedAt !== undefined &&
+      firstPublicTraceAt !== undefined &&
+      draftAcceptedAt !== undefined &&
+      nonNegativeInteger(traceLatency) &&
+      nonNegativeInteger(draftLatency) &&
+      typeof timingRecord.firstPublicTraceTargetMet === 'boolean' &&
+      typeof timingRecord.draftTargetMet === 'boolean' &&
+      typeof timingRecord.hardDeadlineMet === 'boolean';
+    if (resultRecord.status === 'COMPLETED' && !completedTiming) {
+      add('timing', 'REPRESENTATIVE_TIMING_INCOMPLETE', 'result.timing');
+    }
+    if (completedTiming) {
+      if (firstPublicTraceAt - chainStartedAt !== traceLatency) {
+        add(
+          'timing',
+          'PUBLIC_TRACE_LATENCY_INCONSISTENT',
+          'result.timing.firstPublicTraceLatencyMs',
+        );
+      }
+      if (draftAcceptedAt - chainStartedAt !== draftLatency) {
+        add(
+          'timing',
+          'DRAFT_LATENCY_INCONSISTENT',
+          'result.timing.draftAcceptedLatencyMs',
+        );
+      }
+      if (
+        timingRecord.firstPublicTraceTargetMet !==
+          (traceLatency <= COMPATIBILITY_LIMITS.firstPublicTraceMs)
+      ) {
+        add(
+          'timing',
+          'PUBLIC_TRACE_TARGET_FACT_INCONSISTENT',
+          'result.timing.firstPublicTraceTargetMet',
+        );
+      }
+      if (
+        timingRecord.draftTargetMet !==
+          (draftLatency <= COMPATIBILITY_LIMITS.targetDraftMs)
+      ) {
+        add(
+          'timing',
+          'DRAFT_TARGET_FACT_INCONSISTENT',
+          'result.timing.draftTargetMet',
+        );
+      }
+      if (
+        timingRecord.hardDeadlineMet !== true ||
+        draftLatency > COMPATIBILITY_LIMITS.deadlineMs
+      ) {
+        add(
+          'timing',
+          'REPRESENTATIVE_HARD_DEADLINE_MISSED',
+          'result.timing.hardDeadlineMet',
+        );
+      }
+    }
+  }
+
+  const orchestrationRecord = isRecord(resultRecord.orchestration)
+    ? resultRecord.orchestration
+    : undefined;
+  if (orchestrationRecord === undefined) {
+    add(
+      'orchestration',
+      'ORCHESTRATION_EVIDENCE_MISSING',
+      'result.orchestration',
+    );
+  } else {
+    const activeTurns = orchestrationRecord.activeConductorTurns;
+    const sinkTurns = orchestrationRecord.settlementSinkTurns;
+    const blockedSinkTurns = orchestrationRecord.blockedSettlementSinkTurns;
+    if (
+      !nonNegativeInteger(activeTurns) ||
+      !nonNegativeInteger(sinkTurns) ||
+      !nonNegativeInteger(blockedSinkTurns)
+    ) {
+      add(
+        'orchestration',
+        'ORCHESTRATION_COUNTS_INVALID',
+        'result.orchestration',
+      );
+    } else if (resultRecord.status === 'COMPLETED') {
+      if (activeTurns !== 2) {
+        add(
+          'orchestration',
+          'ACTIVE_CONDUCTOR_TURN_COUNT_INVALID',
+          'result.orchestration.activeConductorTurns',
+        );
+      }
+      if (sinkTurns !== 5) {
+        add(
+          'orchestration',
+          'SETTLEMENT_SINK_TURN_COUNT_INVALID',
+          'result.orchestration.settlementSinkTurns',
+        );
+      }
+      if (blockedSinkTurns !== 5) {
+        add(
+          'orchestration',
+          'BLOCKED_SETTLEMENT_SINK_COUNT_INVALID',
+          'result.orchestration.blockedSettlementSinkTurns',
+        );
+      }
+    }
   }
   const sentDispatches = typeof resultRecord.sentDispatches === 'number'
     ? resultRecord.sentDispatches

@@ -280,7 +280,10 @@ interface ScriptedRunOptions {
   readonly deepseekFailures?: ReadonlySet<string>;
   readonly deepseekFatalAuth?: ReadonlySet<string>;
   readonly geminiFailures?: ReadonlySet<string>;
-  readonly deepseekBeforeResponse?: ReadonlyMap<string, () => void>;
+  readonly deepseekBeforeResponse?: ReadonlyMap<
+    string,
+    () => void | Promise<void>
+  >;
   readonly geminiBeforeResponse?: ReadonlyMap<
     string,
     () => void | Promise<void>
@@ -364,17 +367,27 @@ describe('fixed real-provider DSH runner with local routing adapters', () => {
     expect(laterWaveStarted).toBe(false);
   }, 10_000);
 
-  it('completes eight logical probes through exactly twelve actual DSH streams', async () => {
+  it('completes eight logical probes through exactly eight actual DSH streams', async () => {
     const { result, deepseek, gemini } = await runScriptedCompatibility();
 
     expect(result).toMatchObject({
       status: 'COMPLETED',
       completedProbes: 8,
-      sentDispatches: 12,
+      sentDispatches: 8,
+      orchestration: {
+        activeConductorTurns: 2,
+        settlementSinkTurns: 5,
+        blockedSettlementSinkTurns: 5,
+      },
+      timing: {
+        firstPublicTraceTargetMet: true,
+        draftTargetMet: true,
+        hardDeadlineMet: true,
+      },
     });
-    expect(deepseek.requests).toHaveLength(8);
-    expect(gemini.requests).toHaveLength(4);
-    expect(result.attemptRecords).toHaveLength(12);
+    expect(deepseek.requests).toHaveLength(5);
+    expect(gemini.requests).toHaveLength(3);
+    expect(result.attemptRecords).toHaveLength(8);
     expect(result.attemptRecords.every((record) =>
       validateProviderCallEnvelope(record.contract) === record.contract
     )).toBe(true);
@@ -397,14 +410,14 @@ describe('fixed real-provider DSH runner with local routing adapters', () => {
     ]);
   }, 10_000);
 
-  it('uses one DeepSeek pre-side-effect transport retry and records thirteen dispatches', async () => {
+  it('uses one DeepSeek pre-side-effect transport retry and records nine dispatches', async () => {
     const { result, deepseek, gemini } = await runScriptedCompatibility({
       deepseekFailures: new Set(['probe-1:step-0']),
     });
 
-    expect(result.sentDispatches).toBe(13);
-    expect(deepseek.requests).toHaveLength(9);
-    expect(gemini.requests).toHaveLength(4);
+    expect(result.sentDispatches).toBe(9);
+    expect(deepseek.requests).toHaveLength(6);
+    expect(gemini.requests).toHaveLength(3);
     const retries = result.attemptRecords.filter((record) =>
       record.contract.retryOf !== null
     );
@@ -416,15 +429,15 @@ describe('fixed real-provider DSH runner with local routing adapters', () => {
     });
   }, 10_000);
 
-  it('uses at most one pre-side-effect retry per provider and records fourteen dispatches', async () => {
+  it('uses at most one pre-side-effect retry per provider and records ten dispatches', async () => {
     const { result, deepseek, gemini } = await runScriptedCompatibility({
       deepseekFailures: new Set(['probe-1:step-0']),
       geminiFailures: new Set(['probe-3:step-0']),
     });
 
-    expect(result.sentDispatches).toBe(14);
-    expect(deepseek.requests).toHaveLength(9);
-    expect(gemini.requests).toHaveLength(5);
+    expect(result.sentDispatches).toBe(10);
+    expect(deepseek.requests).toHaveLength(6);
+    expect(gemini.requests).toHaveLength(4);
     expect(result.attemptRecords.filter((record) =>
       record.contract.retryOf !== null
     ).map((record) => record.provider).sort()).toEqual([
@@ -433,40 +446,114 @@ describe('fixed real-provider DSH runner with local routing adapters', () => {
     ]);
   }, 10_000);
 
-  it('does not retry a continuation after that probe accepted a PACT tool', async () => {
-    await expect(runScriptedCompatibility({
+  it('does not open a continuation stream after a probe accepted its PACT tools', async () => {
+    const { result, deepseek } = await runScriptedCompatibility({
       deepseekFailures: new Set(['probe-2:step-1']),
-    })).rejects.toThrow(/probe-02/);
+    });
+
+    expect(result.status).toBe('COMPLETED');
+    expect(deepseek.requests.filter((request) => probeOf(request) === 2))
+      .toHaveLength(1);
+  }, 10_000);
+
+  it('starts route, Rewriter, and Guardian before any representative response completes', async () => {
+    const participants = new Set<string>();
+    let releaseBarrier: () => void = () => {};
+    const barrier = new Promise<void>((resolve) => {
+      releaseBarrier = resolve;
+    });
+    const enter = (name: string) => async (): Promise<void> => {
+      participants.add(name);
+      if (participants.size === 3) releaseBarrier();
+      await Promise.race([
+        barrier,
+        new Promise<never>((_resolve, reject) => {
+          setTimeout(() => reject(new Error('REPRESENTATIVE_WAVE_SERIALIZED')), 250);
+        }),
+      ]);
+    };
+
+    const { result } = await runScriptedCompatibility({
+      deepseekBeforeResponse: new Map([
+        ['probe-2:step-0', enter('route')],
+        ['probe-5:step-0', enter('guardian')],
+      ]),
+      geminiBeforeResponse: new Map([
+        ['probe-4:step-0', enter('rewriter')],
+      ]),
+    });
+
+    expect(result.status).toBe('COMPLETED');
+    expect([...participants].sort()).toEqual(['guardian', 'rewriter', 'route']);
+  }, 10_000);
+
+  it('records the first trace and accepted draft against the shared 2.5/8/12 clock', async () => {
+    const epoch = Date.parse('2026-08-22T18:00:00.000Z');
+    let now = epoch;
+    const { result } = await runScriptedCompatibility({
+      now: () => now,
+      chainDeadlineMs: 12_000,
+      deepseekBeforeResponse: new Map([
+        ['probe-2:step-0', () => {
+          now = epoch + 2_000;
+        }],
+        ['probe-6:step-0', () => {
+          now = epoch + 7_500;
+        }],
+      ]),
+    });
+
+    expect(result.timing).toEqual({
+      chainStartedAt: '2026-08-22T18:00:00.000Z',
+      firstPublicTraceAt: '2026-08-22T18:00:02.000Z',
+      draftAcceptedAt: '2026-08-22T18:00:07.500Z',
+      firstPublicTraceLatencyMs: 2_000,
+      draftAcceptedLatencyMs: 7_500,
+      firstPublicTraceTargetMet: true,
+      draftTargetMet: true,
+      hardDeadlineMet: true,
+    });
   }, 10_000);
 
   it('exposes partial ledger evidence when the representative chain exceeds its shared deadline', async () => {
-    let now = Date.parse('2026-08-22T18:00:00.000Z');
+    const epoch = Date.parse('2026-08-22T18:00:00.000Z');
+    let now = epoch;
     await expect(runScriptedCompatibility({
       now: () => now,
       chainDeadlineMs: 12_000,
       deepseekBeforeResponse: new Map([[
         'probe-6:step-0',
         () => {
-          now += 12_001;
+          now = epoch + 12_001;
         },
       ]]),
     })).rejects.toMatchObject({
       name: 'ProviderCompatibilityRuntimeError',
-      code: 'PROVIDER_SESSION_DISPATCH_PLAN_INCOMPLETE',
+      code: 'PROVIDER_RESULT_LATE_QUARANTINED',
       partialResult: {
         status: 'FAILED',
-        reachedProbes: 8,
-        sentDispatches: 11,
+        reachedProbes: 5,
+        sentDispatches: 6,
         attemptRecords: expect.arrayContaining([
           expect.objectContaining({
             probeId: 'probe-06',
             contract: expect.objectContaining({ lateQuarantined: true }),
           }),
         ]),
+        timing: {
+          chainStartedAt: '2026-08-22T18:00:00.000Z',
+          firstPublicTraceAt: '2026-08-22T18:00:00.000Z',
+          draftAcceptedAt: null,
+          firstPublicTraceLatencyMs: 0,
+          draftAcceptedLatencyMs: null,
+          firstPublicTraceTargetMet: true,
+          draftTargetMet: null,
+          hardDeadlineMet: false,
+        },
         failure: {
-          code: 'PROVIDER_SESSION_DISPATCH_PLAN_INCOMPLETE',
+          code: 'PROVIDER_RESULT_LATE_QUARANTINED',
           message:
-            'PROVIDER_SESSION_DISPATCH_PLAN_INCOMPLETE: probe-06 completed 1/2 dispatches',
+            'PROVIDER_RESULT_LATE_QUARANTINED: probe-06 dispatch 1',
         },
       },
     });

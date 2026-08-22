@@ -17,6 +17,23 @@ import {
 const fixedProbeIds = COMPATIBILITY_PROBES.map((probe) => probe.id);
 const plan = probePlanSummary(COMPATIBILITY_PROBES);
 
+const completedTiming = () => ({
+  chainStartedAt: '2026-08-22T18:01:00.000Z',
+  firstPublicTraceAt: '2026-08-22T18:01:01.000Z',
+  draftAcceptedAt: '2026-08-22T18:01:07.000Z',
+  firstPublicTraceLatencyMs: 1_000,
+  draftAcceptedLatencyMs: 7_000,
+  firstPublicTraceTargetMet: true,
+  draftTargetMet: true,
+  hardDeadlineMet: true,
+});
+
+const completedOrchestration = () => ({
+  activeConductorTurns: 2,
+  settlementSinkTurns: 5,
+  blockedSettlementSinkTurns: 5,
+});
+
 const approval = (): ProviderRealRunApproval => ({
   schemaVersion: 'cp03-provider-real-approval/0.1',
   approvalId: 'approval_cp03_evidence_20260822',
@@ -92,6 +109,8 @@ const archive = (): ProviderRunArchive => ({
     completedProbes: plan.intendedProbes,
     sentDispatches: plan.plannedDispatches,
     attemptRecords: attemptRecords(),
+    timing: completedTiming(),
+    orchestration: completedOrchestration(),
   },
 });
 
@@ -121,6 +140,95 @@ describe('provider run evidence verifier', () => {
         secretScan: 'PASS',
       },
       findings: [],
+    });
+  });
+
+  it('rejects a completed archive that omits the representative timing facts', () => {
+    const original = archive();
+    if (original.result.status !== 'COMPLETED') {
+      throw new Error('completed fixture required');
+    }
+    const { timing: _timing, ...withoutTiming } = original.result;
+    const report = verifyProviderRunEvidence(JSON.stringify({
+      ...original,
+      result: withoutTiming,
+    }), []);
+
+    expect(report.status).toBe('FAIL');
+    expect(report.checks.timing).toBe('FAIL');
+    expect(report.findings).toContainEqual({
+      code: 'REPRESENTATIVE_TIMING_MISSING',
+      path: 'result.timing',
+    });
+  });
+
+  it('rejects a completed archive that claims the hard deadline was missed', () => {
+    const original = archive();
+    if (original.result.status !== 'COMPLETED') {
+      throw new Error('completed fixture required');
+    }
+    const report = verifyProviderRunEvidence(JSON.stringify({
+      ...original,
+      result: {
+        ...original.result,
+        timing: {
+          ...original.result.timing,
+          hardDeadlineMet: false,
+        },
+      },
+    }), []);
+
+    expect(report.status).toBe('FAIL');
+    expect(report.checks.timing).toBe('FAIL');
+    expect(report.findings).toContainEqual({
+      code: 'REPRESENTATIVE_HARD_DEADLINE_MISSED',
+      path: 'result.timing.hardDeadlineMet',
+    });
+  });
+
+  it('reports a consistent design-target miss without confusing it with the hard gate', () => {
+    const original = archive();
+    if (original.result.status !== 'COMPLETED') {
+      throw new Error('completed fixture required');
+    }
+    const report = verifyProviderRunEvidence(JSON.stringify({
+      ...original,
+      result: {
+        ...original.result,
+        timing: {
+          ...original.result.timing,
+          draftAcceptedAt: '2026-08-22T18:01:09.000Z',
+          draftAcceptedLatencyMs: 9_000,
+          draftTargetMet: false,
+        },
+      },
+    }), []);
+
+    expect(report.status).toBe('PASS');
+    expect(report.checks.timing).toBe('PASS');
+  });
+
+  it('rejects a completed archive with an extra active Conductor turn', () => {
+    const original = archive();
+    if (original.result.status !== 'COMPLETED') {
+      throw new Error('completed fixture required');
+    }
+    const report = verifyProviderRunEvidence(JSON.stringify({
+      ...original,
+      result: {
+        ...original.result,
+        orchestration: {
+          ...original.result.orchestration,
+          activeConductorTurns: 3,
+        },
+      },
+    }), []);
+
+    expect(report.status).toBe('FAIL');
+    expect(report.checks.orchestration).toBe('FAIL');
+    expect(report.findings).toContainEqual({
+      code: 'ACTIVE_CONDUCTOR_TURN_COUNT_INVALID',
+      path: 'result.orchestration.activeConductorTurns',
     });
   });
 
