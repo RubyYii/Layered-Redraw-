@@ -7,9 +7,12 @@ declare module '@layered-redraw/pact-cp03-contracts' {
     import('./contract-types.js').AgentContribution;
   export type AgentActionDraft =
     import('./contract-types.js').AgentActionDraft;
+  export type ProviderCallEnvelope =
+    import('./contract-types.js').ProviderCallEnvelope;
 
   export const agentContributionSchema: Readonly<Record<string, unknown>>;
   export const agentActionDraftSchema: Readonly<Record<string, unknown>>;
+  export const providerCallEnvelopeSchema: Readonly<Record<string, unknown>>;
 
   export function canonicalJson(value: unknown): string;
   export function sha256Canonical(value: unknown): Promise<string>;
@@ -17,4 +20,7 @@ declare module '@layered-redraw/pact-cp03-contracts' {
     value: unknown,
   ): AgentContribution;
   export function validateAgentActionDraft(value: unknown): AgentActionDraft;
+  export function validateProviderCallEnvelope(
+    value: unknown,
+  ): ProviderCallEnvelope;
 }

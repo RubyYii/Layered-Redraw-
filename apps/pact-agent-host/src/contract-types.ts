@@ -36,3 +36,52 @@ export interface AgentActionDraft {
   readonly execution: Readonly<Record<string, unknown>>;
   readonly agency: Readonly<Record<string, unknown>>;
 }
+
+export interface ProviderToolCallReceipt {
+  readonly toolCallId: string;
+  readonly name: string;
+  readonly argumentsHash: string;
+  readonly status: 'observed' | 'accepted' | 'rejected';
+}
+
+export interface ProviderCallEnvelope {
+  readonly schemaVersion: 'cp03-foundation-gate/0.1';
+  readonly callId: string;
+  readonly providerRoute: string;
+  readonly modelId: string;
+  readonly adapterPackage: string;
+  readonly adapterVersion: string;
+  readonly providerKind: 'real' | 'scripted';
+  readonly inputClasses: readonly ('fictional_text' | 'synthetic_image')[];
+  readonly startedAt: string;
+  readonly firstChunkAt: string | null;
+  readonly firstPublicTraceAt: string | null;
+  readonly endedAt: string | null;
+  readonly latencyMs: number | null;
+  readonly usage: null | {
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+    readonly totalTokens: number;
+    readonly estimatedCostUsd: number | null;
+  };
+  readonly finish: {
+    readonly kind:
+      | 'pending'
+      | 'stop'
+      | 'tool_calls'
+      | 'length'
+      | 'aborted'
+      | 'error';
+    readonly detailCode?: string;
+  };
+  readonly toolCalls: readonly ProviderToolCallReceipt[];
+  readonly sessionEventRange: null | {
+    readonly sessionId: string;
+    readonly fromSequence: number;
+    readonly toSequence: number;
+  };
+  readonly retryOf: string | null;
+  readonly lateQuarantined: boolean;
+  readonly nativeResponseSchema:
+    'UNSUPPORTED_ON_DSH_ROOT_CONTINUABLE_RC6';
+}

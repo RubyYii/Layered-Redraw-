@@ -40,3 +40,12 @@ export {
 export { type PactRole } from './events.js';
 export { registerPactTools } from './pact-tools.js';
 export { SubmissionRegistry } from './submission-registry.js';
+export {
+  COMPATIBILITY_LIMITS,
+  inspectCompatibilityConfig,
+} from './compatibility-config.js';
+export {
+  COMPATIBILITY_PROBES,
+  probePlanSummary,
+} from './probe-plan.js';
+export { buildProviderPreflightReport } from './preflight-report.js';
