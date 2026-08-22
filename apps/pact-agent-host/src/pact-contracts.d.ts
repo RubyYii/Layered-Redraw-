@@ -1,6 +1,7 @@
 declare module '@layered-redraw/pact-cp03-contracts' {
   export const CP03_FOUNDATION_SCHEMA_VERSION:
     'cp03-foundation-gate/0.1';
+  export const CP03_RUNTIME_SCHEMA_VERSION: 'cp03-runtime/0.1';
 
   export type ContractRole = import('./contract-types.js').ContractRole;
   export type AgentContribution =

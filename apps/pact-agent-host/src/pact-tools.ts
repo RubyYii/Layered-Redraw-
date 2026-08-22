@@ -278,7 +278,7 @@ export const pactToolDefinitions = (
   const submitDraft = {
     name: 'pact_submit_draft',
     description:
-      'Submit one non-executable compatibility draft from the CaseConductor.',
+      'Submit one schema-constrained compatibility or executable proposal draft from the CaseConductor.',
     parameters: agentActionDraftSchema,
     output: receiptOutput,
     async execute(args: unknown, exec: ToolRunContext): Promise<SubmissionReceipt> {

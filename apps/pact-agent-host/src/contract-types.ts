@@ -22,7 +22,9 @@ export interface AgentContribution {
 export interface AgentActionDraft {
   readonly identity: {
     readonly draftId: string;
-    readonly schemaVersion: 'cp03-foundation-gate/0.1';
+    readonly schemaVersion:
+      | 'cp03-foundation-gate/0.1'
+      | 'cp03-runtime/0.1';
     readonly caseSessionId: string;
     readonly turnId: string;
     readonly parentSceneHash: string;

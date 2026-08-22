@@ -7,6 +7,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session';
 import {
   CP03_FOUNDATION_SCHEMA_VERSION,
+  CP03_RUNTIME_SCHEMA_VERSION,
   sha256Canonical,
 } from '@layered-redraw/pact-cp03-contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -83,6 +84,57 @@ const contribution = (
   assetRequests: [],
   dissent: [],
   toolReceiptRefs: [],
+});
+
+const runtimeDraft = (caseSessionId: string, turnId: string) => ({
+  identity: {
+    draftId: 'draft_runtime_dsh01',
+    schemaVersion: CP03_RUNTIME_SCHEMA_VERSION,
+    caseSessionId,
+    turnId,
+    parentSceneHash: 'a'.repeat(64),
+  },
+  decision: {
+    status: 'PROPOSED',
+    actionSequence: ['Reframe'],
+  },
+  creative: {
+    interpretation: 'Let the agent carry the cup while the remembered source stays fixed.',
+    unresolvedAmbiguities: ['The viewer did not specify which hand should carry it.'],
+    spatialIntent: 'Approach the registered cup and use its pickup affordance.',
+    visualIntent: 'Keep the act visibly provisional.',
+    cameraIntent: 'Keep the interaction readable.',
+    lightIntent: 'Preserve the room light.',
+    soundIntent: 'Preserve room tone.',
+    publicPoeticText: 'A hand borrows the cup; the archive does not move.',
+    seamsAndContradictionsToPreserve: ['The carried object remains a proposal.'],
+  },
+  materials: {
+    requestedAssetIds: [],
+    requestedSpatialBridgeIds: [],
+    provenanceAnchors: ['interaction-cup'],
+    rightsRequirements: ['Use only the registered local scene.'],
+  },
+  execution: {
+    executionMode: 'EXECUTABLE_PROPOSAL',
+    semanticCapabilityCalls: [{
+      capability: 'performRegisteredInteraction',
+      arguments: {
+        actorId: 'interaction-actor-a',
+        targetId: 'interaction-cup',
+        affordance: 'pickup',
+      },
+    }],
+    expectedChanges: ['interaction-actor-a', 'interaction-cup'],
+    forbiddenChanges: ['source-plane', 'evidence-overlay'],
+    rollbackRequirements: ['Discard the transient director overlay.'],
+    terminalIntent: null,
+  },
+  agency: {
+    contributions: [],
+    disagreements: [],
+    guardianChallenge: 'Do not mutate before the viewer approves this exact draft hash.',
+  },
 });
 
 const startRewriter = async (
@@ -354,6 +406,52 @@ describe('real DSH rc.6 foundation with a scripted adapter', () => {
     ).toHaveLength(0);
     const end = eventsOfType(conductor.agent.session.events, 'turn/end').at(-1);
     expect(['aborted', 'error']).toContain(end?.data.reason.kind);
+  });
+
+  it('carries one executable draft through the real DSH root without provider network calls', async () => {
+    const turnId = 'turn_agent_runtime01';
+    let submittedDraft: ReturnType<typeof runtimeDraft> | undefined;
+    const adapter = new ScriptedAdapter([
+      (options) => {
+        if (options.sessionId === undefined) throw new Error('missing conductor session id');
+        submittedDraft = runtimeDraft(String(options.sessionId), turnId);
+        return toolCallResponse(
+          'tool_runtime_draft',
+          'pact_submit_draft',
+          submittedDraft,
+        );
+      },
+      textResponse('executable proposal recorded for viewer review'),
+    ]);
+    const harness = await createFoundationHarness({
+      persistenceRoot: testRoot(),
+      scriptedAdapter: adapter,
+    });
+    harnesses.push(harness);
+    const conductor = await harness.createConductor(
+      SessionId(`case_${randomUUID().replaceAll('-', '')}`),
+      { parked: false },
+    );
+
+    conductor.agent.followup(createUserMessage({
+      content: [{ type: 'text', text: 'propose a registered cup interaction' }],
+      source: { kind: 'user' },
+    }));
+    await conductor.agent.whenIdle();
+    await harness.ctx.sessions.flush(conductor.agent.session);
+
+    expect(submittedDraft).toBeDefined();
+    const draftHash = await sha256Canonical(submittedDraft!);
+    expect(eventsOfType(conductor.agent.session.events, 'pact/draft')).toHaveLength(1);
+    expect(harness.registry.currentDraft(turnId)).toBe(draftHash);
+    expect(harness.registry.draftPayload(draftHash)).toEqual(submittedDraft);
+    expect(adapter.requests.every((request) => request.provider === 'pact-fake')).toBe(true);
+
+    const firstRead = harness.registry.draftPayload(draftHash) as unknown as {
+      creative: { interpretation: string };
+    };
+    firstRead.creative.interpretation = 'attempted caller mutation';
+    expect(harness.registry.draftPayload(draftHash)).toEqual(submittedDraft);
   });
 
   it('quarantines a contribution submitted after the turn deadline', async () => {

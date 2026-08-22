@@ -46,6 +46,7 @@ export class SubmissionRegistry {
   private readonly acceptedByTurn = new Map<string, string[]>();
   private readonly quarantinedByTurn = new Map<string, string[]>();
   private readonly currentDraftByTurn = new Map<string, string>();
+  private readonly draftPayloadByHash = new Map<string, AgentActionDraft>();
 
   bind(sessionId: SessionId, role: PactRole): () => void {
     const key = String(sessionId);
@@ -92,6 +93,11 @@ export class SubmissionRegistry {
 
   currentDraft(turnId: string): string | undefined {
     return this.currentDraftByTurn.get(turnId);
+  }
+
+  draftPayload(payloadHash: string): AgentActionDraft | undefined {
+    const payload = this.draftPayloadByHash.get(payloadHash);
+    return payload === undefined ? undefined : structuredClone(payload);
   }
 
   quarantined(turnId: string): readonly string[] {
@@ -182,6 +188,7 @@ export class SubmissionRegistry {
       payload: jsonValue(draft),
       payloadHash,
     });
+    this.draftPayloadByHash.set(payloadHash, structuredClone(draft));
     this.currentDraftByTurn.set(draft.identity.turnId, payloadHash);
     return { accepted: true, payloadHash };
   }
