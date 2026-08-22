@@ -96,6 +96,33 @@ describe("collision proxy solver", () => {
     expect(merged.maxPenetration).toBeCloseTo(0.4, 8);
     expect(merged.residualPenetration).toBe(0);
   });
+
+  it("keeps explicit proxy opt-outs and unconfigured decorative props outside the solver", () => {
+    const project = normalizeProject({
+      objects: [
+        {
+          id: "disabled-floor-detail",
+          type: "box",
+          position: [0, 0.02, 0],
+          dimensions: [3, 0.04, 3],
+          entity: createEntityConfig("environment"),
+          interactionSpec: { collisionProxy: { enabled: false } },
+        },
+        {
+          id: "decorative-prop",
+          type: "box",
+          position: [0, 0.15, 0],
+          dimensions: [0.5, 0.5, 0.5],
+          entity: createEntityConfig("prop"),
+        },
+      ],
+    });
+    const objects = statesFor(project);
+
+    expect(project.objects[0].interactionSpec?.collisionProxy).toEqual({ enabled: false });
+    expect(resolveCharacterCollisions(project, objects).resolvedCount).toBe(0);
+    expect(resolvePropCollisions(project, objects).resolvedCount).toBe(0);
+  });
 });
 
 describe("effector surface contact", () => {

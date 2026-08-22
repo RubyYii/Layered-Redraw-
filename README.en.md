@@ -29,6 +29,8 @@ v1.0 adds a continuous interaction-simulation slice. Director preview advances a
 
 v1.1 adds an auditable anti-penetration layer to that slice. Character roots use capsule proxies against static boxes, props receive a support-surface correction, and gray-box effectors meet opposite object surfaces and maintain contact through both carry segments instead of converging at the object centre. The preview HUD reports correction count and residual penetration; the 30fps renderer saves pickup, both carry, handoff, place, and placed audit frames and fails if any milestone retains penetration. This remains a discrete kinematic proxy, not continuous collision detection or a rigid-body world.
 
+v1.2 completes a deterministic full-screenplay render of *The Window That Wasn't There*. One continuous room carries 200 objects, four non-human agents, 19 shots, and 720 timeline clips through 166 seconds, with 30 English screen-text cues burned into a 4,980-frame, 1280×720, strict-30fps VP8 WebM. Character routes, evidence handling, and the photograph's lift–translate–lower motion were reblocked against penetration. The regression test evaluates all 4,981 inclusive frame-time samples and requires zero residual penetration and zero interaction-state violations. The result remains a stylised real-time 3D previz, not a claim of photoreal film rendering.
+
 Before production, the project can generate parameterized A/B/C proofs. The built-in output is a parameter contract, deltas, a low-detail schematic, and an external render request. It becomes image-effect evidence only after scene-specific renders are registered. Selection and promotion can guide the final 8–12 layers, but do not establish artistic quality on their own.
 
 The goal is not another brush picker. A style now changes crop, scale, negative space, depth, shape grammar, and value grouping before colour and surface treatment.
@@ -95,7 +97,7 @@ Open the local editor, select layers or frame a region, export `edit-request.jso
 
 - `$redraw-in-layers`, a Codex skill for guided vector drawing, layered image generation, and localized revision.
 - `$stage-in-3d`, a Codex skill that compiles screenplays, storyboards, or scene notes into editable continuous 3D blockouts, cinematic timelines, and deterministic previews.
-- An experimental 3D director with continuous scenes, fixed-60Hz preview, deterministic 30fps rendering, hierarchical characters, curved motion, object interaction anchors, legal ownership transitions, and an auditable agent-intent contract.
+- An experimental 3D director with continuous scenes, fixed-60Hz preview, deterministic 30fps rendering, hierarchical characters, curved motion, object interaction anchors, legal ownership transitions, opt-in collision proxies, and an auditable agent-intent contract; it includes the complete 166-second *Window That Wasn't There* fixture.
 - Reference intelligence for role-aware multi-RGB input, RGB-D pairing, optional monocular relative-depth estimation, immutable 16-bit depth evidence, 3–8 diagnostic bands, and prompt-directed 5–20-layer planning.
 - A 3D depth canvas that combines source texture and near-white relative depth as a WebGL height field with orbit controls, GPU displacement, mesh/perspective controls, and an auditable spatial-bridge export.
 - A painting-to-3D bridge that lets Scene Builder import `spatial-bridge.json` from a project folder, verify the RGB/depth-preview hashes and relative-scale contract, and mount a session-only textured height field through an editable carrier.

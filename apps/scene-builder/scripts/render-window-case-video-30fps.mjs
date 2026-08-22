@@ -143,7 +143,7 @@ try {
       .topbar,#director-dock,.statusbar,.library-panel,.inspector-panel{display:none!important}
       .workspace{display:block!important;width:1280px!important;height:720px!important}
       .viewport-shell{width:1280px!important;height:720px!important}
-      .viewport-tools,.camera-tools,.viewport-axis,#preview-indicator,#performance-indicator,.dialogue-overlay{display:none!important}
+      .viewport-tools,.camera-tools,.viewport-axis,#preview-indicator,#simulation-indicator,#performance-indicator,.dialogue-overlay{display:none!important}
     `,
   });
   await page.waitForTimeout(300);
@@ -170,7 +170,7 @@ try {
   }, start);
   await page.waitForTimeout(100);
 
-  const compositorState = await page.evaluate((shotCount) => {
+  const compositorState = await page.evaluate(({ shotCount, cues, renderContract, timelineStart }) => {
     const viewport = document.querySelector("#viewport");
     const overlay = document.createElement("div");
     overlay.id = "fixed-video-overlay";
@@ -184,15 +184,106 @@ try {
       background: "radial-gradient(ellipse at 50% 47%, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 42%, rgba(0,0,0,0.08) 72%, rgba(0,0,0,0.62) 100%)",
       boxShadow: "inset 0 24px 0 #020303, inset 0 -24px 0 #020303",
     });
+
+    const caption = document.createElement("section");
+    const eyebrow = document.createElement("div");
+    const body = document.createElement("div");
+    const note = document.createElement("div");
+    const source = document.createElement("div");
+    caption.append(eyebrow, body, note);
+    overlay.append(caption, source);
+
+    Object.assign(caption.style, {
+      position: "absolute",
+      color: "#f5f0e7",
+      textShadow: "0 2px 12px rgba(0,0,0,.95), 0 1px 2px rgba(0,0,0,.95)",
+      transition: "none",
+    });
+    Object.assign(eyebrow.style, {
+      marginBottom: "11px",
+      color: "#e2bd63",
+      font: "600 12px/1.25 ui-monospace, SFMono-Regular, Consolas, monospace",
+      letterSpacing: ".18em",
+    });
+    Object.assign(body.style, {
+      maxWidth: "760px",
+      font: "500 28px/1.28 Georgia, 'Times New Roman', serif",
+      letterSpacing: ".005em",
+      whiteSpace: "pre-line",
+    });
+    Object.assign(note.style, {
+      maxWidth: "760px",
+      marginTop: "12px",
+      color: "#d6d2c8",
+      font: "500 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace",
+      letterSpacing: ".08em",
+      whiteSpace: "pre-line",
+    });
+    Object.assign(source.style, {
+      position: "absolute",
+      right: "42px",
+      bottom: "33px",
+      color: "rgba(205,215,210,.72)",
+      font: "500 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace",
+      letterSpacing: ".12em",
+      textShadow: "0 1px 5px #000",
+    });
+    source.textContent = renderContract.sourceLine ?? "";
+
+    const cueAt = (time) => cues.find((cue) => time >= cue.start && time < cue.end) ?? null;
+    const update = (time) => {
+      const cue = cueAt(time);
+      source.style.opacity = time >= 12 ? "1" : "0";
+      if (!cue) {
+        caption.style.display = "none";
+        return;
+      }
+      const isCenter = cue.layout === "center";
+      Object.assign(caption.style, isCenter ? {
+        inset: "24px 0",
+        padding: "88px 150px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+        background: "linear-gradient(90deg, rgba(2,3,3,.22), rgba(2,3,3,.52) 28%, rgba(2,3,3,.52) 72%, rgba(2,3,3,.22))",
+      } : {
+        inset: "auto auto 58px 54px",
+        padding: "18px 22px 17px 20px",
+        display: "block",
+        textAlign: "left",
+        background: "linear-gradient(90deg, rgba(5,7,7,.86), rgba(5,7,7,.54) 74%, rgba(5,7,7,0))",
+      });
+      body.style.fontSize = isCenter ? "36px" : "28px";
+      eyebrow.textContent = cue.eyebrow ?? "";
+      eyebrow.style.display = cue.eyebrow ? "block" : "none";
+      body.textContent = cue.text ?? "";
+      note.textContent = cue.note ?? "";
+      note.style.display = cue.note ? "block" : "none";
+      const fadeIn = Math.min(1, Math.max(0, (time - cue.start) / 0.42));
+      const fadeOut = Math.min(1, Math.max(0, (cue.end - time) / 0.42));
+      caption.style.opacity = String(Math.min(fadeIn, fadeOut));
+    };
+
     viewport.append(overlay);
+    window.__windowCaseOverlay = { update };
+    update(timelineStart);
     const rect = viewport.getBoundingClientRect();
     return {
       width: Math.round(rect.width),
       height: Math.round(rect.height),
       transition: "hard cut",
       shotCount,
+      screenTextCues: cues.length,
+      screenLanguage: renderContract.screenLanguage ?? "en",
     };
-  }, manifest.shots.length);
+  }, {
+    shotCount: manifest.shots.length,
+    cues: manifest.screenText ?? [],
+    renderContract: manifest.renderContract ?? {},
+    timelineStart: start,
+  });
   if (compositorState.width !== 1280 || compositorState.height !== 720) {
     throw new Error(`视频视口尺寸异常：${JSON.stringify(compositorState)}`);
   }
@@ -225,6 +316,7 @@ try {
     await page.locator("#timeline-scrubber").evaluate((input, value) => {
       input.value = String(value);
       input.dispatchEvent(new Event("input", { bubbles: true }));
+      window.__windowCaseOverlay?.update(value);
     }, timelineTime);
     await page.evaluate(() => new Promise((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(resolve));

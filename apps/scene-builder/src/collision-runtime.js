@@ -3,7 +3,7 @@ import { rotateLocalOffset } from "./interaction-runtime.js";
 export const COLLISION_BACKEND = "collision-proxy-v1";
 
 const EPSILON = 1e-7;
-const MAX_ITERATIONS = 6;
+const MAX_ITERATIONS = 48;
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const maximum = (values) => values.length ? Math.max(...values) : 0;
@@ -150,6 +150,7 @@ const propEntries = (project, objects) => sourcesFor(project, objects, (source, 
   && !source.parentId
   && source.entity?.role === "prop"
   && source.entity?.physics?.bodyType !== "static"
+  && Boolean(source.interactionSpec?.collisionProxy)
 ));
 
 const staticEntries = (project, objects) => sourcesFor(project, objects, (source, state) => (

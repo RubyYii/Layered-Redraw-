@@ -118,7 +118,7 @@ try {
       .topbar,#director-dock,.statusbar,.library-panel,.inspector-panel{display:none!important}
       .workspace{display:block!important;width:1280px!important;height:720px!important}
       .viewport-shell{width:1280px!important;height:720px!important}
-      .viewport-tools,.camera-tools,.viewport-axis,#preview-indicator,#performance-indicator,.dialogue-overlay{display:none!important}
+      .viewport-tools,.camera-tools,.viewport-axis,#preview-indicator,#simulation-indicator,#performance-indicator,.dialogue-overlay{display:none!important}
     `,
   });
 

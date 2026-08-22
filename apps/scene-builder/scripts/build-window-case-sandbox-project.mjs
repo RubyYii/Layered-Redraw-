@@ -100,6 +100,7 @@ for (let index = 0; index < 10; index += 1) {
     position: [-4.5 + index, 0.015, 0.45], dimensions: [0.94, 0.035, 7.15],
     color: index % 2 ? "#4a372a" : "#554032", locked: true,
     render: material.wood, entity: environmentEntity(),
+    interactionSpec: { collisionProxy: { enabled: false } },
   }, ["room"]);
 }
 addObject("back_wall", "box", "ROOM · 始终封闭的后墙", {
@@ -126,6 +127,7 @@ for (const [index, stain] of [
   addObject(`wall_stain_${index}`, "box", "ROOM · 墙面旧痕", {
     position: stain[0], dimensions: stain[1], color: stain[2], locked: true,
     render: { ...material.wall, opacity: 0.36 }, entity: environmentEntity(),
+    interactionSpec: { collisionProxy: { enabled: false } },
   }, ["room"]);
 }
 
@@ -170,6 +172,10 @@ for (const x of [2.22, 4.08]) for (const z of [-2.42, 0.22]) {
 addObject("table_top", "box", "PROP · 证物木桌", {
   position: [-2.55, 0.92, 0.05], dimensions: [3.25, 0.18, 1.42], color: COLORS.wood,
   render: material.wood, entity: environmentEntity(),
+  interactionSpec: {
+    anchors: { surface: [0, 0.09, 0] },
+    collisionProxy: { shape: "box", support: true, margin: 0.015 },
+  },
 }, ["room", "table"]);
 for (const [index, x] of [-3.9, -1.2].entries()) for (const z of [-0.44, 0.54]) {
   addObject(`table_leg_${index}_${z}`, "box", "PROP · 桌腿", {
@@ -180,6 +186,10 @@ for (const [index, x] of [-3.9, -1.2].entries()) for (const z of [-0.44, 0.54]) 
 const photoFrame = addObject("photo_frame", "box", "PROP · 未改动照片相框", {
   position: [-2.95, 1.72, -0.12], dimensions: [2.35, 1.42, 0.07], color: COLORS.paper,
   rotation: [0, -3, 0], render: material.paper, entity: propEntity("原始证物 · 可搬运不可改图"),
+  interactionSpec: {
+    anchors: { grip: [0, 0, 0], bottom: [0, -0.71, 0] },
+    collisionProxy: { shape: "box", margin: 0.01 },
+  },
 }, ["photo", "evidence"]);
 const photoImage = addObject("photo_image", "box", "PROP · 唯一存世照片", {
   position: [-2.95, 1.72, -0.075], dimensions: [2.12, 1.19, 0.025], color: COLORS.white,
@@ -194,6 +204,7 @@ const recorder = addObject("recorder", "box", "PROP · 重演录音器", {
       inspect: [-0.18, 0.13, 0.34],
       interrupt: [0.34, 0.13, 0.34],
     },
+    collisionProxy: { shape: "box", margin: 0.01 },
     affordances: {
       inspect: {
         action: "inspect_reenactment",
@@ -224,6 +235,10 @@ for (const [index, height] of waveHeights.entries()) {
 const cupBody = addObject("cup_body", "cylinder", "PROP · 留存杯子", {
   position: [-1.1, 1.31, 0.02], dimensions: [0.48, 0.56, 0.48], color: "#a8a49a",
   render: { ...material.metal, metalness: 0.38 }, entity: propEntity("冲突时会被碰歪"),
+  interactionSpec: {
+    anchors: { grip: [0, 0.08, 0], bottom: [0, -0.28, 0] },
+    collisionProxy: { shape: "cylinder", margin: 0.005 },
+  },
 }, ["cup", "evidence"]);
 for (const [key, position, rotation] of [
   ["cup_handle_top", [-0.82, 1.48, 0.02], [0, 0, -18]],
@@ -288,6 +303,12 @@ const createAgent = (key, label, color, origin, state) => {
         gaze: [0, 1.36, -0.38],
         effector: [0.72, 1.06, 0],
         carry: [0, 0.92, -0.72],
+      },
+      collisionProxy: {
+        shape: "capsule",
+        dimensions: [0.92, 1.72, 0.82],
+        offset: [0, 0.86, 0],
+        margin: 0.045,
       },
     },
   }, [`agent_${key}`, "agents"]);
@@ -741,6 +762,39 @@ const shots = [
   { id: "B9-01", start: 154, duration: 12, from: [0.15, 1.72, 4.55], to: [0, 1.65, 10.25], lookFrom: [-0.4, 1.35, -0.8], lookTo: [0, 1.5, -1.15], fov: [38, 46], note: "证物归位，代理逐一离开，摄影机退出同一门框。" },
 ];
 
+const screenText = [
+  { start: 0, end: 4, layout: "center", text: "I want to see that room one more time." },
+  { start: 4, end: 12, layout: "center", text: "I want to see that room one more time.\n\nBut don't bring anyone back." },
+  { start: 12, end: 19, eyebrow: "EVIDENCE 01", text: "THE ONLY SURVIVING PHOTOGRAPH" },
+  { start: 19, end: 24, eyebrow: "EVIDENCE 01", text: "NO APERTURE VISIBLE" },
+  { start: 24, end: 30, eyebrow: "EVIDENCE 01", text: "THIS IMAGE WILL NOT CHANGE AT ANY POINT IN THIS FILM" },
+  { start: 30, end: 40, eyebrow: "BODY MEMORY", text: "The body remembers otherwise." },
+  { start: 40, end: 44, eyebrow: "BODY MEMORY", text: "Sunlight reached the bed in the afternoon." },
+  { start: 44, end: 48, eyebrow: "BODY MEMORY", text: "Sunlight reached the bed in the afternoon.", note: "THERE IS NO PHOTOGRAPH OF THIS" },
+  { start: 48, end: 55, eyebrow: "WITHHELD PHRASE", text: "A re-enacted phrase belongs to this case: close the window." },
+  { start: 55, end: 58, eyebrow: "WITHHELD PHRASE", text: "This version does not play it." },
+  { start: 58, end: 60, eyebrow: "WITHHELD PHRASE", text: "The system has no narrator who could grant that voice." },
+  { start: 60, end: 62, eyebrow: "WITHHELD PHRASE", text: "THE WITHHOLDING IS NOT A PLACEHOLDER.", note: "IT IS THE SAME RULE THE WORK RUNS ON." },
+  { start: 62, end: 68, layout: "center", text: "Should there be a window in this wall?" },
+  { start: 68, end: 72, layout: "center", text: "Should there be a window in this wall?", note: "NO CANONICAL ANSWER" },
+  { start: 72, end: 78, eyebrow: "PERMISSION MAP", text: "REWRITABLE", note: "THE WALL · THE WINDOW · THE BED · THE LIGHT · THE NARRATOR'S OWN RE-ENACTMENT" },
+  { start: 78, end: 84, eyebrow: "PERMISSION MAP", text: "FORBIDDEN", note: "RECOGNISABLE FACES · BODIES · CLONED VOICES · NEW DIALOGUE · NAMES · ADDRESSES" },
+  { start: 84, end: 87.8, eyebrow: "PERMISSION MAP", text: "The room may come back.\nThe person inside may not." },
+  { start: 87.8, end: 90, eyebrow: "PERMISSION MAP", text: "The narrator's position is held open, not filled." },
+  { start: 90, end: 98, eyebrow: "ACTION 01 / TRANSLATE", text: "The window becomes light.", note: "No opening is added." },
+  { start: 98, end: 106, eyebrow: "ACTION 02 / REFRAME", text: "The evidence is untouched.", note: "The world outside the frame is inferred." },
+  { start: 106, end: 114, eyebrow: "ACTION 03 / MERGE", text: "Both rooms are kept.", note: "The contradiction is not smoothed." },
+  { start: 114, end: 122, eyebrow: "ACTION 04 / CONTINUE", text: "No evidence exists.", note: "The window is allowed to grow." },
+  { start: 122, end: 130, eyebrow: "ACTION 05 / KEEP OPAQUE", text: "Inference stops at the surface.", note: "WILL NEVER CREATE A CLOUD TASK" },
+  { start: 130, end: 138, eyebrow: "ENDING 01 / AUTHORISED", text: "This is one interpretation of this round.", note: "NOT A FACTUAL RESTORATION" },
+  { start: 138, end: 146, eyebrow: "ENDING 02 / MISREADING", text: "Two years, two beds, one confident room.", note: "NOTHING WAS VIOLATED" },
+  { start: 146, end: 152, eyebrow: "ENDING 03 / OPACITY", text: "The wall kept the question.", note: "WITHHELD BY THE NARRATOR" },
+  { start: 152, end: 154, layout: "center", text: "THREE ENDINGS. EQUAL DURATION.\nEQUAL INTENSITY. NO WINNER." },
+  { start: 154, end: 161, layout: "center", text: "The audience does not decide whether the window existed.\nThey decide how much evidence a memory needs before it may be given a shape." },
+  { start: 161, end: 164, layout: "center", eyebrow: "CONCEPT SAMPLE · CASE 01", text: "Who May Rewrite a Memory?" },
+  { start: 164, end: 166, layout: "center", text: "NO GENERATED FACES. NO GENERATED BODIES.\nNO CLONED VOICES.", note: "NO REAL ABSENCE WAS USED TO TEST THIS SYSTEM." },
+];
+
 for (const shot of shots) addClip({
   type: "camera", track: "camera", label: `${shot.id} · 电影机位`, start: shot.start,
   duration: shot.duration, preset: "perspective", fromPreset: "perspective",
@@ -756,7 +810,7 @@ showGroup("agent_witness", 14.2, "见证代理从门外进入");
 moveAgent("witness", 14.2, 4.4, [-2.15, 0, 1.72], "见证代理驶向证物桌");
 extendProbe("witness", 18.7, 1.1, 2.2);
 pulse(agentDefinitions.get("witness").beacon, 20.2, 0.8, 1.8, "识别原始照片");
-moveAgent("witness", 23.5, 3.2, [-1.75, 0, 1.05], "绕到照片侧面核验");
+moveAgent("witness", 23.5, 3.2, [-1.75, 0, 1.42], "绕到照片侧面核验");
 extendProbe("witness", 26.5, 1.0, 1.8);
 
 // B3: remembered light moves through the same room and the Witness follows it to the bed.
@@ -764,11 +818,11 @@ visibility(memoryWall, 30.05, true, "身体记忆的光出现");
 move(memoryWall, 30.05, 8.6, [1.05, 2.1, -2.99], "墙面光随时间横移");
 showGroup("dust", 30.2, "光束显出尘埃");
 dustIds.forEach((id, index) => move(id, 30.2, 8.4, objectState.get(id).position.map((value, axis) => value + [0.3, 0.18 + (index % 3) * 0.08, 0.08][axis]), "尘埃在光中漂移"));
-moveAgent("witness", 31.0, 4.8, [-0.85, 0, 0.15], "见证代理追随墙面光");
+moveAgent("witness", 31.0, 4.8, [-0.2, 0, 0.2], "见证代理追随墙面光", [[-0.7, 0, 1.45], [-0.2, 0, 0.9]]);
 extendProbe("witness", 35.6, 1.5, 2.8);
 visibility(memoryFloor, 39.02, true, "光落到地面");
 scale(memoryFloor, 39.02, 2.8, [1, 1, 1], "地面光向床铺展开");
-moveAgent("witness", 39.8, 5.8, [1.65, 0, 0.35], "见证代理沿光移动到床边");
+moveAgent("witness", 39.8, 5.8, [1.35, 0, 0.35], "见证代理沿光移动到床边");
 extendProbe("witness", 44.0, 1.3, 2.5);
 pulse(agentDefinitions.get("witness").beacon, 45.5, 0.9, 2.0, "床面光被记录");
 visibility(memoryWall, 47.25, false, "身体记忆的光暂时退场");
@@ -813,24 +867,24 @@ move(cupBody, 57.82, 0.55, [-1.06, 1.23, 0.02], "杯体受碰撞位移");
 visibility(shield, 58.4, true, "许可屏障部署");
 scale(shield, 58.4, 0.9, [1, 1, 1], "屏障从地面升起");
 visibility(guardianBeam, 60.0, false, "切断动作完成");
+moveAgent("guardian", 60.1, 1.8, [0.1, 0, -0.7], "守护代理撤到许可边界", [[-0.2, 0, 0.7]]);
 
 // B5/B6: Rewriter and Archivist enter; all four agents negotiate the wall with physical positions.
 showGroup("agent_rewriter", 62.2, "改写代理进入");
-moveAgent("rewriter", 62.2, 4.0, [1.1, 0, 0.65], "改写代理驶向封闭墙");
+moveAgent("rewriter", 62.2, 4.0, [1.35, 0, 0.2], "改写代理驶向封闭墙", [[2.8, 0, 2.2], [1.35, 0, 1.3]]);
 visibility(rewriterBeam, 64.1, true, "改写投射束启动");
 scale(rewriterBeam, 64.1, 0.9, [1, 1, 1], "投射束抵达墙面");
 showGroup("hologram", 64.7, "假想窗被投到墙上");
 hologramIds.forEach((id, index) => pulse(id, 65.0 + index * 0.08, 0.8, 1.35, "窗框投影校准"));
-moveAgent("guardian", 66.0, 2.7, [0.25, 0, -0.35], "守护代理挡在投影与墙之间");
 scale(shield, 66.6, 1.0, [0.65, 1.15, 1], "屏障收紧到投影边界");
 hologramIds.forEach((id, index) => scale(id, 68.25 + index * 0.03, 0.75, [0.02, 0.02, 1], "第一次投影被撤回"));
 hideGroup("hologram", 69.1, "窗投影消失");
 visibility(rewriterBeam, 69.2, false, "改写束暂停");
 showGroup("agent_archivist", 71.95, "档案代理进入");
-moveAgent("archivist", 71.95, 3.5, [-0.45, 0, 1.9], "档案代理抵达证物区");
-moveAgent("witness", 72.3, 3.0, [-2.15, 0, 0.6], "见证代理给档案代理让位");
-moveAgent("rewriter", 73.0, 2.8, [1.7, 0, 0.0], "改写代理转入协商站位");
-moveAgent("guardian", 73.4, 2.4, [0.45, 0, 0.15], "守护代理守住墙前区域");
+moveAgent("archivist", 71.95, 3.5, [-0.45, 0, 1.9], "档案代理抵达证物区", [[-3.65, 0, 4.8], [0, 0, 4.8], [0, 0, 3.2]]);
+moveAgent("witness", 72.3, 3.0, [-2.15, 0, 1.45], "见证代理给档案代理让位");
+moveAgent("rewriter", 73.0, 2.8, [1.35, 0, 0.0], "改写代理转入协商站位");
+moveAgent("guardian", 73.4, 2.4, [-0.2, 0, -0.5], "守护代理守住墙前区域");
 pulse(agentDefinitions.get("archivist").beacon, 75.4, 0.9, 1.8, "档案代理确认来源");
 moveGroupBy("photo", 78.0, 2.2, [0.65, 0, 0.16], "见证与档案代理把照片推到协商中心");
 moveGroupBy("recorder", 78.4, 2.0, [0.42, 0, 0.18], "档案代理把录音器移出禁区");
@@ -845,10 +899,10 @@ scale(shield, 83.0, 0.8, [1, 0.03, 1], "边界暂时收起");
 visibility(shield, 83.85, false, "许可屏障退场");
 hideGroup("hologram", 83.7, "协商投影结束");
 visibility(rewriterBeam, 83.8, false, "改写束结束");
-moveAgent("witness", 84.0, 3.2, [-2.35, 0, 0.75], "见证代理进入动作站位");
-moveAgent("rewriter", 84.0, 3.2, [0.45, 0, 0.15], "改写代理进入动作站位");
-moveAgent("guardian", 84.0, 3.2, [2.0, 0, 0.65], "守护代理进入动作站位");
-moveAgent("archivist", 84.0, 3.2, [-0.75, 0, 1.75], "档案代理保持证物后方");
+moveAgent("witness", 84.0, 3.2, [-2.35, 0, 1.45], "见证代理进入动作站位");
+moveAgent("rewriter", 84.0, 3.2, [0.35, 0, -0.45], "改写代理进入动作站位");
+moveAgent("guardian", 84.0, 3.2, [1.35, 0, 0.65], "守护代理进入动作站位", [[-0.2, 0, 1.15], [1.35, 0, 1.15]]);
+moveAgent("archivist", 84.0, 3.2, [1.0, 0, 2.8], "档案代理保持证物后方", [[-0.45, 0, 2.8]]);
 
 // Five actions: each is caused by an agent and changes the shared room rather than swapping a card.
 visibility(rewriterBeam, 89.9, true, "TRANSLATE 投射开始");
@@ -858,13 +912,13 @@ glyphIds.forEach((id, index) => {
   scale(id, 90.15 + index * 0.43, 0.55, [1, 1, 1], "改写代理绘制光笔画");
 });
 moveAgent("rewriter", 90.2, 3.0, [0.4, 0, -0.35], "改写代理靠近投射墙");
-moveAgent("witness", 91.2, 4.0, [-1.5, 0, -0.1], "见证代理沿字形光检查");
+moveAgent("witness", 91.2, 4.0, [-0.2, 0, 0.7], "见证代理沿字形光检查", [[-0.55, 0, 1.45]]);
 extendProbe("witness", 94.5, 1.1, 2.7);
 glyphIds.forEach((id, index) => scale(id, 97.0 + index * 0.025, 0.7, [0.02, 0.02, 1], "字形光退回墙面"));
 hideGroup("glyphs", 97.8, "TRANSLATE 完成");
 visibility(rewriterBeam, 97.8, false, "投射束结束");
 
-moveAgent("witness", 98.0, 5.4, [-3.65, 0, 1.45], "见证代理带摄影机走出原画框");
+moveAgent("witness", 98.0, 5.4, [-3.65, 0, 1.45], "见证代理带摄影机走出原画框", [[-0.2, 0, 1.5], [-1.8, 0, 1.55]]);
 move(sideShutterA, 100.7, 2.1, [-4.67, 2.55, 0.9], "见证代理触发左遮板滑开");
 move(sideShutterB, 100.7, 2.1, [-4.67, 2.55, 2.38], "见证代理触发右遮板滑开");
 extendProbe("witness", 102.0, 1.2, 2.3);
@@ -875,7 +929,7 @@ visibility(mergeSeam, 106.0, true, "MERGE 版本接缝出现");
 moveGroupBy("mergeBed", 106.0, 5.1, [0, 0, 3.55], "改写代理把第二张床推入房间");
 scale(mergeSeam, 106.1, 1.4, [1, 1, 1], "版本接缝从地面长起");
 moveAgent("rewriter", 106.0, 4.8, [0.95, 0, -1.05], "改写代理随第二张床后退");
-moveAgent("guardian", 107.2, 3.6, [2.35, 0, -0.15], "守护代理监视矛盾版本");
+moveAgent("guardian", 107.2, 3.6, [1.35, 0, -0.15], "守护代理监视矛盾版本");
 pulse(agentDefinitions.get("guardian").beacon, 111.0, 0.9, 1.9, "接缝状态被标记");
 moveGroupBy("mergeBed", 113.0, 1.3, [0, 0, -3.2], "第二张床退回墙后");
 hideGroup("mergeBed", 114.25, "MERGE 暂停但不抹平历史");
@@ -886,12 +940,12 @@ scale(portalVoid, 114.0, 1.6, [1, 1, 1], "反事实入口向四周打开");
 portalIds.slice(1).forEach((id, index) => pulse(id, 114.8 + index * 0.055, 0.55, 1.22, "走廊递进框逐层点亮"));
 moveAgent("rewriter", 114.4, 4.5, [0.2, 0, -1.55], "改写代理走向反事实门槛");
 moveAgent("guardian", 116.4, 3.7, [1.25, 0, -0.95], "守护代理追到门槛侧方");
-moveAgent("archivist", 116.8, 3.4, [-1.15, 0, -0.25], "档案代理携来源状态靠近入口");
+moveAgent("archivist", 116.8, 3.4, [-1.5, 0, 1.45], "档案代理携来源状态靠近入口");
 visibility(shield, 120.05, true, "门槛许可屏障部署");
 scale(shield, 120.05, 0.85, [0.72, 1, 1], "屏障截断入口路径");
 pulse(agentDefinitions.get("guardian").beacon, 120.7, 0.9, 2.1, "入口权限被拒绝");
 
-moveAgent("guardian", 122.0, 2.0, [0.45, 0, -1.3], "守护代理进入入口正前方");
+moveAgent("guardian", 122.0, 2.0, [1.35, 0, -1.55], "守护代理进入入口正前方");
 scale(portalVoid, 122.4, 3.0, [0.02, 0.02, 1], "KEEP OPAQUE · 入口被压回墙面");
 portalIds.slice(1).forEach((id, index) => scale(id, 122.55 + index * 0.025, 1.0, [0.02, 0.02, 1], "走廊深度逐层撤回"));
 hideGroup("portal", 125.8, "反事实入口关闭");
@@ -899,8 +953,8 @@ wallWaveIds.slice(0, 8).forEach((id, index) => {
   visibility(id, 123.3 + index * 0.21, true, "被扣留波形回到墙面");
   scale(id, 123.3 + index * 0.21, 0.48, [1, 1, 1], "波形写到许可边界");
 });
-moveAgent("rewriter", 122.5, 3.3, [1.35, 0, 0.2], "改写代理从被关闭的入口后退");
-moveAgent("witness", 123.0, 3.3, [-1.45, 0, 0.25], "见证代理回到墙前观察位");
+moveAgent("rewriter", 122.5, 3.3, [-0.2, 0, -1.0], "改写代理从被关闭的入口后退");
+moveAgent("witness", 123.0, 3.3, [-0.2, 0, 0.25], "见证代理回到墙前观察位", [[-3.4, 0, 2.6], [0, 0, 2.6]]);
 scale(shield, 125.4, 1.6, [0.9, 0.025, 1], "守护屏障降回地面");
 visibility(shield, 127.2, false, "守护屏障收起");
 
@@ -914,10 +968,12 @@ for (const [index, id] of roughWindowIds.entries()) {
 }
 scale(roughPane, 130.8, 1.4, [1, 1, 1], "暂定窗面展开");
 seamIds.forEach((id, index) => pulse(id, 132.0 + index * 0.12, 0.75, 1.3, "缝合痕迹明确保留"));
-moveGroupAnchor("photo", photoImage, 130.0, 3.1, [-2.0, 2.12, -2.86], "见证与档案代理把原始照片搬到窗旁");
-moveAgent("witness", 130.0, 3.0, [-1.65, 0, -0.6], "见证代理护送原始照片");
-moveAgent("archivist", 130.2, 3.0, [-2.6, 0, -0.25], "档案代理确认照片与重建并置");
-moveAgent("guardian", 131.0, 2.8, [2.0, 0, -0.45], "守护代理检查缝合边界");
+moveGroupAnchor("photo", photoImage, 130.0, 0.6, [-2.3, 2.25, 0.085], "见证与档案代理先把原始照片抬离桌面");
+moveGroupAnchor("photo", photoImage, 130.6, 1.7, [-2.0, 2.25, -2.86], "原始照片保持抬升状态移到窗旁");
+moveGroupAnchor("photo", photoImage, 132.3, 0.8, [-2.0, 2.12, -2.86], "原始照片在缝合窗旁稳定落位");
+moveAgent("witness", 130.0, 3.0, [-0.2, 0, 0.25], "见证代理护送原始照片");
+moveAgent("archivist", 130.2, 3.0, [-1.6, 0, 1.45], "档案代理确认照片与重建并置");
+moveAgent("guardian", 131.0, 2.8, [2.2, 0, 1.45], "守护代理检查缝合边界", [[1.35, 0, 1.45]]);
 visibility(approvalLight, 133.5, true, "许可确认");
 pulse(approvalLight, 133.5, 2.2, 2.0, "许可状态持续可见");
 
@@ -927,27 +983,30 @@ perfectWindowIds.forEach((id, index) => scale(id, 138.0 + index * 0.055, 1.7, [1
 roughWindowIds.forEach((id, index) => scale(id, 138.1 + index * 0.035, 1.25, [0.02, 0.02, 1], "诚实缝合被漂亮表面吞没"));
 hideGroup("seams", 139.5, "缝合标记消失");
 visibility(approvalLight, 139.0, false, "许可确认被覆盖");
-moveGroupAnchor("photo", photoImage, 138.0, 3.0, [-1.45, 1.45, -0.75], "见证代理把被挤出的证物带离墙面");
-moveAgent("witness", 138.0, 3.0, [-1.2, 0, 0.3], "见证代理带原始照片后退");
-moveAgent("rewriter", 138.0, 3.2, [0.45, 0, -0.65], "改写代理站到完美窗前");
-moveAgent("guardian", 138.4, 3.2, [2.35, 0, 0.25], "守护代理被迫后退并报警");
+moveGroupAnchor("photo", photoImage, 138.0, 1.8, [0.45, 2.12, -0.75], "见证代理水平带走被挤出的证物");
+moveGroupAnchor("photo", photoImage, 139.8, 1.2, [0.45, 1.45, -0.75], "原始照片离墙后再缓慢降低");
+moveAgent("witness", 138.0, 2.4, [-0.2, 0, 0.8], "见证代理带原始照片后退");
+moveAgent("rewriter", 138.0, 2.3, [0.45, 0, -0.65], "改写代理站到完美窗前", [[1.15, 0, -0.9]]);
+moveAgent("guardian", 139.0, 2.0, [2.8, 0, 1.75], "守护代理被迫后退并报警");
 pulse(agentDefinitions.get("guardian").beacon, 141.2, 0.7, 2.4, "无缝结果触发红色警报");
 pulse(agentDefinitions.get("guardian").beacon, 142.3, 0.7, 2.4, "无缝结果持续报警");
 
-// OPACITY: Guardian returns and shuts the generated layer while all other agents give ground.
-moveAgent("guardian", 145.9, 2.8, [0.95, 0, -1.2], "守护代理重新冲到完美窗前");
+// OPACITY: Rewriter clears the lane before Guardian shuts the generated layer.
+moveAgent("rewriter", 145.8, 1.3, [0.5, 0, 2.8], "改写代理退出墙前区域", [[1.2, 0, -0.65], [1.2, 0, 2.8]]);
+moveAgent("guardian", 147.2, 2.4, [-0.3, 0, -1.5], "守护代理重新冲到完美窗前", [[1.3, 0, 1.3]]);
 visibility(shield, 147.2, true, "OPACITY 屏障重新部署");
 scale(shield, 147.2, 0.9, [0.82, 1.08, 1], "屏障覆盖无缝窗");
 perfectWindowIds.forEach((id, index) => scale(id, 148.0 + index * 0.045, 2.0, [0.02, 0.02, 1], "生成层被守护代理关闭"));
 hideGroup("perfectWindow", 150.2, "完美窗与无来源光撤回");
-moveAgent("rewriter", 147.0, 3.0, [1.65, 0, 0.45], "改写代理退出墙前区域");
-moveAgent("archivist", 147.2, 2.8, [-1.8, 0, 0.75], "档案代理回到证物一侧");
+moveAgent("archivist", 147.2, 2.8, [-1.8, 0, 1.45], "档案代理回到证物一侧");
 wallWaveIds.slice(0, 8).forEach((id, index) => pulse(id, 149.4 + index * 0.12, 0.55, 1.25, "被扣留波形保持同等强度"));
 scale(shield, 151.2, 1.6, [0.82, 0.02, 1], "守护屏障确认墙面封闭后收起");
 visibility(shield, 153.0, false, "OPACITY 完成");
 
 // B9: every interaction resolves in space. Evidence returns, agents exit, camera backs through the same doorway.
-moveGroupAnchor("photo", photoImage, 154.0, 2.7, [-2.95, 1.72, -0.075], "档案代理把原始照片归还原位");
+moveGroupAnchor("photo", photoImage, 154.0, 0.6, [0.45, 2.25, -0.75], "档案代理先把原始照片抬高");
+moveGroupAnchor("photo", photoImage, 154.6, 1.5, [-2.95, 2.25, -0.075], "原始照片越过桌缘回到证物位上方");
+moveGroupAnchor("photo", photoImage, 156.1, 0.6, [-2.95, 1.72, -0.075], "原始照片垂直落回原始桌面位置");
 moveGroupBy("recorder", 154.0, 2.0, [-0.42, 0, -0.18], "录音器归回证物桌");
 move(sideShutterA, 154.0, 2.0, [-4.67, 2.55, 1.25], "侧窗遮板关闭，恢复进入时状态");
 move(sideShutterB, 154.0, 2.0, [-4.67, 2.55, 2.03], "侧窗遮板关闭，恢复进入时状态");
@@ -968,13 +1027,13 @@ hideGroup("roughWindow", 154.2, "暂定重建撤回，墙面恢复唯一底板")
 visibility(memoryWall, 154.1, false, "记忆光离开墙面");
 visibility(memoryFloor, 154.1, false, "记忆光离开地面");
 hideGroup("dust", 154.1, "光尘退场");
-moveAgent("rewriter", 154.0, 3.1, [4.3, 0, 3.25], "改写代理首先离开房间");
+moveAgent("rewriter", 154.0, 3.1, [4.3, 0, 3.25], "改写代理首先离开房间", [[1.8, 0, 3.0], [3.0, 0, 3.1]]);
 hideGroup("agent_rewriter", 157.2, "改写代理退出门框");
 moveAgent("archivist", 155.0, 3.4, [-3.65, 0, 4.35], "档案代理完成归档后离开");
 hideGroup("agent_archivist", 158.5, "档案代理退出门框");
-moveAgent("guardian", 157.0, 3.7, [3.65, 0, 4.45], "许可守护代理最后确认墙面");
+moveAgent("guardian", 157.0, 3.7, [3.65, 0, 4.45], "许可守护代理最后确认墙面", [[1.0, 0, -1.5], [1.2, 0, 1.4], [2.0, 0, 2.0]]);
 hideGroup("agent_guardian", 160.8, "守护代理退出门框");
-moveAgent("witness", 159.0, 4.1, [-4.35, 0, 3.25], "见证代理看过原始照片后离开");
+moveAgent("witness", 159.0, 4.1, [-4.35, 0, 3.25], "见证代理看过原始照片后离开", [[0, 0, 1.5], [-2.5, 0, 1.7]]);
 hideGroup("agent_witness", 163.2, "见证代理退出，房间再次为空");
 
 const screenplaySummary = "同一房间连续表演：摄影机进入；见证代理检查照片；身体记忆的光移动；录音器写入后被许可守护代理切断；四个非人代理协商五种动作与三种结尾；证物归位，摄影机退出。";
@@ -1011,9 +1070,17 @@ const project = normalizeProject({
 });
 
 const manifest = {
-  version: 2,
+  version: 3,
   title: "不存在的窗 · 电影沙盒交互版",
   duration: 166,
+  renderContract: {
+    fps: 30,
+    resolution: [1280, 720],
+    screenLanguage: "en",
+    sourceLine: "CASE 01 · CONSTRUCTED TEST CASE · NO REAL NARRATOR YET",
+    roomContinuity: "one-continuous-world",
+  },
+  screenText,
   shots: shots.map(({ from, via, to, lookFrom, lookVia, lookTo, fov, ...shot }) => ({
     ...shot,
     preset: "perspective",
@@ -1073,6 +1140,14 @@ const manifest = {
 
 if (project.objects.length < 150) throw new Error(`沙盒对象不足：${project.objects.length}`);
 if (project.director.timeline.duration !== 166 || manifest.shots.length !== 19) throw new Error("时间线或镜头数异常。");
+for (const [index, cue] of manifest.screenText.entries()) {
+  if (!(cue.start >= 0 && cue.end > cue.start && cue.end <= manifest.duration)) {
+    throw new Error(`屏幕文字时码异常：${index + 1}`);
+  }
+  if (index > 0 && cue.start < manifest.screenText[index - 1].end) {
+    throw new Error(`屏幕文字发生重叠：${index + 1}`);
+  }
+}
 if (!project.director.timeline.clips.some((clip) => clip.type === "move" && clip.track === "character")) {
   throw new Error("缺少角色空间互动轨道。");
 }
@@ -1088,5 +1163,6 @@ process.stdout.write(`${JSON.stringify({
   characterClips: project.director.timeline.clips.filter((clip) => clip.track === "character").length,
   propClips: project.director.timeline.clips.filter((clip) => clip.track === "prop").length,
   shots: manifest.shots.length,
+  screenTextCues: manifest.screenText.length,
   duration: project.director.timeline.duration,
 }, null, 2)}\n`);

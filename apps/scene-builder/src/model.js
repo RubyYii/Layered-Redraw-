@@ -204,7 +204,8 @@ const normalizeAffordanceMap = (value, anchorNames, limit = 24) => {
 };
 
 const normalizeCollisionProxy = (value) => {
-  if (!value || typeof value !== "object" || Array.isArray(value) || value.enabled === false) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if (value.enabled === false) return { enabled: false };
   const shape = COLLISION_PROXY_SHAPES.has(value.shape) ? value.shape : "box";
   return {
     enabled: true,
