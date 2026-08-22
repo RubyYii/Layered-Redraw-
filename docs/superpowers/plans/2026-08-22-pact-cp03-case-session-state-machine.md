@@ -10,7 +10,7 @@
 
 **Spec:** `/Users/yhryzy/Documents/ChatGPT/艺术驻地项目/.worktrees/pact-cp00-cp01a-evidence/docs/superpowers/specs/2026-08-22-pact-cp03-agent-native-five-actions-design.md`
 
-**Plan status:** `draft_ready_for_execution`
+**Plan status:** `verified_local_no_network`
 
 ## Global Constraints
 

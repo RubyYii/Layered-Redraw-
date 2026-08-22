@@ -18,7 +18,12 @@ import {
 import { evaluateTimeline } from "../../scene-builder/src/director.js";
 import { createInteractionDemoProject } from "../../scene-builder/src/interaction-demo.js";
 import { hashProject } from "../../scene-builder/src/scene-patch-runtime.js";
-import { createFoundationHarness } from "../src/create-foundation-harness.js";
+import { CaseSessionLedger } from "../src/case-session.js";
+import { persistCaseSessionTransition } from "../src/case-session-persistence.js";
+import {
+  coldInspect,
+  createFoundationHarness,
+} from "../src/create-foundation-harness.js";
 import {
   ScriptedAdapter,
   textResponse,
@@ -87,7 +92,7 @@ const gateProject = () => {
 };
 
 describe("DSH to Ruby local CP03 vertical slice", () => {
-  it("executes the exact DSH registry payload only after hash-bound viewer approval", async () => {
+  it("persists the exact approved Ruby result in the root CaseSession", async () => {
     const project = gateProject();
     const parentSceneHash = await hashProject(project);
     const turnId = "turn_e2e_runtime01";
@@ -147,9 +152,55 @@ describe("DSH to Ruby local CP03 vertical slice", () => {
         plan,
         now: "2026-08-22T00:00:02.000Z",
       });
+      const cases = new CaseSessionLedger({
+        caseSessionId: storedDraft.identity.caseSessionId,
+        mode: "checkpoint",
+        rootDshSessionId: String(conductor.agent.id),
+        initialSceneHash: parentSceneHash,
+      });
+      const transition = cases.recordApprovedExecution({
+        caseSessionId: storedDraft.identity.caseSessionId,
+        turnId: storedDraft.identity.turnId,
+        draftHash,
+        approvalId: approval.approvalId,
+        receiptId: result.receipt.receiptId,
+        parentSceneHash: result.receipt.preconditionHash,
+        resultSceneHash: result.receipt.resultSceneHash,
+        actionSequence: storedDraft.decision.actionSequence,
+        settledAt: result.receipt.appliedAt,
+      });
+      const durable = await persistCaseSessionTransition({
+        ctx: harness.ctx,
+        session: conductor.agent.session,
+        transition,
+      });
       const finalFrame = evaluateTimeline(result.project, result.project.director.timeline.duration);
+      const persisted = await coldInspect(persistenceRoot, conductor.agent.id);
 
       expect(adapter.requests.every((request) => request.provider === "pact-fake")).toBe(true);
+      expect(cases.snapshot()).toMatchObject({
+        currentSceneHash: result.receipt.resultSceneHash,
+        accumulatedActions: ["Reframe"],
+        status: "OPEN",
+        terminalAction: null,
+      });
+      expect(durable).toMatchObject({
+        status: "DURABLE",
+        sessionId: conductor.agent.id,
+        transitionHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
+      expect(persisted.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          seq: durable.lastSeq,
+          type: "pact/case-transition",
+          data: expect.objectContaining({
+            caseSessionId: storedDraft.identity.caseSessionId,
+            turnId: storedDraft.identity.turnId,
+            kind: "APPROVED_EXECUTION",
+            transitionHash: durable.transitionHash,
+          }),
+        }),
+      ]));
       expect(plan.clips.map((clip) => clip.type)).toEqual(["move", "interaction"]);
       expect(finalFrame.simulation.ownership["interaction-cup"])
         .toMatchObject({ status: "held", holderId: "interaction-actor-a" });

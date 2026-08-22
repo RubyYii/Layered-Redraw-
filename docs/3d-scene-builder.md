@@ -132,6 +132,8 @@ DSH CaseConductor executable draft
   -> existing semantic intent planner
   -> existing navigation / interaction / ownership / collision runtime
   -> transient director overlay + linked receipt
+  -> immutable CaseSession transition
+  -> DSH append / flush / inspect durability barrier
 ```
 
 The first registered capability is `performRegisteredInteraction`. The draft can
@@ -146,17 +148,24 @@ Ruby's existing Scene Builder remains the only owner of path generation,
 contact phases, ownership transitions, collision correction, animation state
 and timeline evaluation. The CP03 adapter only preserves validated affordance
 metadata and appends the generated clips to a cloned director overlay; the
-source project is not mutated, and rollback is discarding that overlay.
+source project is not mutated, and rollback is discarding that overlay. The
+CaseSession layer records the resulting receipt IDs and pre/post scene hashes;
+it is not a parallel Ruby execution backend.
 
 The local integration test runs the real DSH rc.6 session/tool/event stack with
 the `pact-fake` scripted adapter. It proves that a root draft can be stored by
 canonical hash, approved, gated, executed by Ruby's deterministic 60Hz runtime,
-and received as a linked receipt. It does **not** prove real Gemini/DeepSeek
-structured-tool quality, text/image/audio interpretation, provider latency,
-multi-call sequencing, the five-action visual grammar, audience UI, checkpoint
-capture, artistic approval or public release. The current local Gate deliberately
-accepts one capability call per proposal while the wider schema reserves up to
-eight for the later orchestrator.
+received as a linked receipt, entered into the same root CaseSession, flushed,
+and cold-read as a durable bounded DSH event. Cumulative and terminal mechanics
+are unit-tested, but five visually distinct runtime effects are not implemented.
+Real-provider compatibility remains `0/8 ELIGIBLE`, `0 SENT` until the missing
+local configuration and a fresh exact approval exist. This test does **not**
+prove real Gemini/DeepSeek structured-tool quality, real multimodal
+interpretation, provider latency, multi-call sequencing, the five-action visual
+grammar, audience UI, a formal encounter suite, CP03 checkpoint archive,
+artistic approval or public release. The current local Gate deliberately accepts
+one capability call per proposal while the wider schema reserves up to eight for
+the later orchestrator.
 
 ## Current limits
 
