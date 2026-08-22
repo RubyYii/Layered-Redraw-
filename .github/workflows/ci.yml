@@ -17,13 +17,13 @@ jobs:
         os: [ubuntu-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
 
@@ -67,9 +67,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -101,4 +101,50 @@ jobs:
 
       - name: Build the production 3D application
         working-directory: apps/scene-builder
+        run: npm run build
+
+  cp03-agent:
+    name: CP03 Contracts and Agent Host
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            packages/pact-cp03-contracts/package-lock.json
+            apps/scene-builder/package-lock.json
+            apps/pact-agent-host/package-lock.json
+
+      - name: Install CP03 contract dependencies
+        working-directory: packages/pact-cp03-contracts
+        run: npm ci
+
+      - name: Test CP03 contracts
+        working-directory: packages/pact-cp03-contracts
+        run: npm test
+
+      # The DSH-to-Ruby integration suite imports Scene Builder source directly,
+      # so its local contract link must exist in a clean checkout as well.
+      - name: Install Scene Builder integration dependencies
+        working-directory: apps/scene-builder
+        run: npm ci
+
+      - name: Install Agent Host dependencies
+        working-directory: apps/pact-agent-host
+        run: npm ci
+
+      - name: Test Agent Host
+        working-directory: apps/pact-agent-host
+        run: npm test
+
+      - name: Type-check Agent Host
+        working-directory: apps/pact-agent-host
+        run: npm run typecheck
+
+      - name: Build Agent Host
+        working-directory: apps/pact-agent-host
         run: npm run build
