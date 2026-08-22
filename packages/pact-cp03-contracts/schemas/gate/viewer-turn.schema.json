@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://layered-redraw.local/cp03/gate/viewer-turn.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseSessionId", "turnId", "text", "parentSceneHash", "submittedAt"],
+  "properties": {
+    "schemaVersion": { "const": "cp03-foundation-gate/0.1" },
+    "caseSessionId": { "type": "string", "pattern": "^case_[A-Za-z0-9_-]{8,80}$" },
+    "turnId": { "type": "string", "pattern": "^turn_[A-Za-z0-9_-]{8,80}$" },
+    "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "parentSceneHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "submittedAt": { "type": "string", "format": "date-time" }
+  }
+}

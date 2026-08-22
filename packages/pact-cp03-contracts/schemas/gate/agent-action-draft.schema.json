@@ -1,0 +1,282 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://layered-redraw.local/cp03/gate/agent-action-draft.schema.json",
+  "$defs": {
+    "role": {
+      "enum": ["CaseConductor", "Witness", "Archivist", "Rewriter", "Guardian"]
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "creativeString": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "creativeArray": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/creativeString" }
+    },
+    "stableRef": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "refArray": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/stableRef" }
+    },
+    "nonterminalAction": {
+      "enum": ["Translate", "Reframe", "Merge"]
+    },
+    "terminalAction": {
+      "enum": ["Continue", "KeepOpaque"]
+    },
+    "actionSequence": {
+      "type": "array",
+      "oneOf": [
+        {
+          "minItems": 1,
+          "maxItems": 5,
+          "items": { "$ref": "#/$defs/nonterminalAction" }
+        },
+        {
+          "minItems": 1,
+          "maxItems": 1,
+          "prefixItems": [{ "$ref": "#/$defs/terminalAction" }],
+          "items": false
+        },
+        {
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/terminalAction" }
+          ],
+          "items": false
+        },
+        {
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/terminalAction" }
+          ],
+          "items": false
+        },
+        {
+          "minItems": 4,
+          "maxItems": 4,
+          "prefixItems": [
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/terminalAction" }
+          ],
+          "items": false
+        },
+        {
+          "minItems": 5,
+          "maxItems": 5,
+          "prefixItems": [
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/terminalAction" }
+          ],
+          "items": false
+        }
+      ]
+    },
+    "contributionRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "childSessionId", "contributionHash"],
+      "properties": {
+        "role": { "$ref": "#/$defs/role" },
+        "childSessionId": { "type": "string", "format": "uuid" },
+        "contributionHash": { "$ref": "#/$defs/hash" }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["identity", "decision", "creative", "materials", "execution", "agency"],
+  "properties": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["draftId", "schemaVersion", "caseSessionId", "turnId", "parentSceneHash"],
+      "properties": {
+        "draftId": { "type": "string", "pattern": "^draft_[A-Za-z0-9_-]{8,80}$" },
+        "schemaVersion": { "const": "cp03-foundation-gate/0.1" },
+        "caseSessionId": { "type": "string", "pattern": "^case_[A-Za-z0-9_-]{8,80}$" },
+        "turnId": { "type": "string", "pattern": "^turn_[A-Za-z0-9_-]{8,80}$" },
+        "parentSceneHash": { "$ref": "#/$defs/hash" }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "actionSequence"],
+      "properties": {
+        "status": { "enum": ["DRAFT", "NEEDS_CLARIFICATION", "PROPOSED", "WITHHELD"] },
+        "actionSequence": { "$ref": "#/$defs/actionSequence" }
+      }
+    },
+    "creative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "interpretation",
+        "unresolvedAmbiguities",
+        "spatialIntent",
+        "visualIntent",
+        "cameraIntent",
+        "lightIntent",
+        "soundIntent",
+        "publicPoeticText",
+        "seamsAndContradictionsToPreserve"
+      ],
+      "properties": {
+        "interpretation": { "$ref": "#/$defs/creativeString" },
+        "unresolvedAmbiguities": { "$ref": "#/$defs/creativeArray" },
+        "spatialIntent": { "$ref": "#/$defs/creativeString" },
+        "visualIntent": { "$ref": "#/$defs/creativeString" },
+        "cameraIntent": { "$ref": "#/$defs/creativeString" },
+        "lightIntent": { "$ref": "#/$defs/creativeString" },
+        "soundIntent": { "$ref": "#/$defs/creativeString" },
+        "publicPoeticText": { "$ref": "#/$defs/creativeString" },
+        "seamsAndContradictionsToPreserve": { "$ref": "#/$defs/creativeArray" }
+      }
+    },
+    "materials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requestedAssetIds", "requestedSpatialBridgeIds", "provenanceAnchors", "rightsRequirements"],
+      "properties": {
+        "requestedAssetIds": { "$ref": "#/$defs/refArray" },
+        "requestedSpatialBridgeIds": { "$ref": "#/$defs/refArray" },
+        "provenanceAnchors": { "$ref": "#/$defs/refArray" },
+        "rightsRequirements": { "$ref": "#/$defs/creativeArray" }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executionMode",
+        "semanticCapabilityCalls",
+        "expectedChanges",
+        "forbiddenChanges",
+        "rollbackRequirements",
+        "terminalIntent"
+      ],
+      "properties": {
+        "executionMode": { "const": "NON_EXECUTABLE_COMPATIBILITY" },
+        "semanticCapabilityCalls": { "type": "array", "maxItems": 0 },
+        "expectedChanges": { "type": "array", "maxItems": 0 },
+        "forbiddenChanges": { "const": ["no scene mutation in provider gate"] },
+        "rollbackRequirements": { "type": "array", "maxItems": 0 },
+        "terminalIntent": { "enum": [null, "Continue", "KeepOpaque"] }
+      }
+    },
+    "agency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contributions", "disagreements", "guardianChallenge"],
+      "properties": {
+        "contributions": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/contributionRef" }
+        },
+        "disagreements": { "$ref": "#/$defs/creativeArray" },
+        "guardianChallenge": { "$ref": "#/$defs/creativeString" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "type": "object",
+            "properties": {
+              "actionSequence": {
+                "type": "array",
+                "contains": { "const": "Continue" }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "execution": {
+            "type": "object",
+            "properties": {
+              "terminalIntent": { "const": "Continue" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "type": "object",
+            "properties": {
+              "actionSequence": {
+                "type": "array",
+                "contains": { "const": "KeepOpaque" }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "execution": {
+            "type": "object",
+            "properties": {
+              "terminalIntent": { "const": "KeepOpaque" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "type": "object",
+            "properties": {
+              "actionSequence": {
+                "type": "array",
+                "not": {
+                  "contains": { "$ref": "#/$defs/terminalAction" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "execution": {
+            "type": "object",
+            "properties": {
+              "terminalIntent": { "type": "null" }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
