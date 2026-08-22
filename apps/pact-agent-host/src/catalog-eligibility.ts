@@ -57,6 +57,10 @@ export interface ProviderCatalogRequest {
   readonly geminiModel: string;
 }
 
+export interface CompatibilityProviderAdapterRequest {
+  readonly geminiRoute: string;
+}
+
 const catalogFact = (
   model: LlmResolvedModelInfo,
   options: {
@@ -101,6 +105,39 @@ const endpointForGeminiRoute = (route: string): string => {
 };
 
 /**
+ * Mount the exact provider adapters used by both keyless catalog inspection
+ * and the separately authorised real DSH runner. Mounting resolves no
+ * credential and opens no provider stream.
+ */
+export const mountCompatibilityProviderAdapters = async (
+  ctx: Context,
+  request: CompatibilityProviderAdapterRequest,
+): Promise<void> => {
+  endpointForGeminiRoute(request.geminiRoute);
+  await ctx.plugin(DeepSeekLlm, {
+    apiKeyEnv: 'DEEPSEEK_API_KEY',
+    thinking: 'disabled',
+    reasoningEffort: 'off',
+    maxTokens: COMPATIBILITY_LIMITS.maxOutputTokensPerDispatch,
+    streamIdleTimeoutMs: COMPATIBILITY_LIMITS.deadlineMs,
+    retryPolicy: { mode: 'normal', maxRetries: 0 },
+  });
+  // Keep the optional pi-ai provider SDK types out of the host's public type
+  // graph. The locked runtime plugin remains the implementation authority.
+  const piAiLlm = await import(PI_AI_ADAPTER);
+  await ctx.plugin(piAiLlm, {
+    providers: {
+      [request.geminiRoute]: {
+        apiKeyEnv: 'GEMINI_API_KEY',
+        streamIdleTimeoutMs: COMPATIBILITY_LIMITS.deadlineMs,
+        timeoutMs: COMPATIBILITY_LIMITS.deadlineMs,
+        retryPolicy: { mode: 'normal', maxRetries: 0 },
+      },
+    },
+  });
+};
+
+/**
  * Mount the exact locked DSH adapters and query only their local catalogs.
  * No stream is opened, no credential is resolved, and no provider request is
  * sent. Catalog eligibility remains explicitly distinct from compatibility.
@@ -112,26 +149,8 @@ export const resolveProviderCatalog = async (
   let active = true;
   try {
     await ctx.plugin(LlmRuntime);
-    await ctx.plugin(DeepSeekLlm, {
-      apiKeyEnv: 'DEEPSEEK_API_KEY',
-      thinking: 'disabled',
-      reasoningEffort: 'off',
-      maxTokens: COMPATIBILITY_LIMITS.maxOutputTokensPerDispatch,
-      streamIdleTimeoutMs: COMPATIBILITY_LIMITS.deadlineMs,
-      retryPolicy: { mode: 'normal', maxRetries: 0 },
-    });
-    // Keep the optional pi-ai provider SDK types out of the host's public type
-    // graph. The locked runtime plugin remains the implementation authority.
-    const piAiLlm = await import(PI_AI_ADAPTER);
-    await ctx.plugin(piAiLlm, {
-      providers: {
-        [request.geminiRoute]: {
-          apiKeyEnv: 'GEMINI_API_KEY',
-          streamIdleTimeoutMs: COMPATIBILITY_LIMITS.deadlineMs,
-          timeoutMs: COMPATIBILITY_LIMITS.deadlineMs,
-          retryPolicy: { mode: 'normal', maxRetries: 0 },
-        },
-      },
+    await mountCompatibilityProviderAdapters(ctx, {
+      geminiRoute: request.geminiRoute,
     });
 
     const [deepseekModels, geminiModels, deepseekModel, geminiModel] =

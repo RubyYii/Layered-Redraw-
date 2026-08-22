@@ -42,10 +42,30 @@ const roleForContinuableChild = (session: Session): Exclude<PactRole, 'CaseCondu
   return role;
 };
 
-export interface FoundationHarnessOptions {
+interface FoundationHarnessCommonOptions {
   readonly persistenceRoot: string;
-  readonly scriptedAdapter: LlmAdapter;
 }
+
+export interface ScriptedFoundationHarnessOptions
+  extends FoundationHarnessCommonOptions {
+  readonly scriptedAdapter: LlmAdapter;
+  readonly mountAdapters?: never;
+  readonly conductorSelection?: never;
+}
+
+export interface ProviderFoundationHarnessOptions
+  extends FoundationHarnessCommonOptions {
+  readonly scriptedAdapter?: never;
+  readonly mountAdapters: (ctx: Context) => void | Promise<void>;
+  readonly conductorSelection: {
+    readonly provider: string;
+    readonly model: string;
+  };
+}
+
+export type FoundationHarnessOptions =
+  | ScriptedFoundationHarnessOptions
+  | ProviderFoundationHarnessOptions;
 
 export interface FoundationHarness {
   readonly ctx: Context;
@@ -85,7 +105,15 @@ export const createFoundationHarness = async (
   ctx.on('session/created', (session) => {
     sessions.set(String(session.id), session);
   });
-  ctx.llm.registerAdapter(['pact-fake'], options.scriptedAdapter);
+  if (options.scriptedAdapter !== undefined) {
+    ctx.llm.registerAdapter(['pact-fake'], options.scriptedAdapter);
+  } else {
+    await options.mountAdapters(ctx);
+  }
+  const conductorSelection = options.conductorSelection ?? {
+    provider: 'pact-fake',
+    model: 'pact-fake',
+  };
   const registry = new SubmissionRegistry();
   registerPactTools(ctx, registry);
   ctx.subagents.registerContinuableSetup((childCtx) => {
@@ -102,7 +130,7 @@ export const createFoundationHarness = async (
     createConductor: async (sessionId, conductorOptions = {}) => {
       const handle = await ctx.agents.create({
         sessionId,
-        agentOptions: { provider: 'pact-fake', model: 'pact-fake' },
+        agentOptions: conductorSelection,
         setup(agentCtx) {
           const conductor = agentCtx.agent;
           if (conductor === undefined) {

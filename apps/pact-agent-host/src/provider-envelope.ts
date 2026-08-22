@@ -43,6 +43,7 @@ export interface ProviderDispatchRequest {
   readonly expectedOutcome: ProbeExpectedOutcome;
   readonly expectedTools?: readonly PactCompatibilityTool[];
   readonly attachmentId?: string;
+  readonly providerKind?: 'real' | 'scripted';
 }
 
 export interface ProviderAttemptRecord {
@@ -95,7 +96,7 @@ const pendingContract = (
     modelId: request.model,
     adapterPackage: adapter.adapterPackage,
     adapterVersion: adapter.adapterVersion,
-    providerKind: 'scripted',
+    providerKind: request.providerKind ?? 'scripted',
     inputClasses: request.attachmentId === undefined
       ? ['fictional_text']
       : ['fictional_text', 'synthetic_image'],
