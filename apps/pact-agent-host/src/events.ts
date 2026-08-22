@@ -15,6 +15,7 @@ export const PACT_SESSION_EVENT_TYPES = [
   'pact/contribution',
   'pact/draft',
   'pact/quarantine',
+  'pact/case-transition',
 ] as const;
 
 declare module '@deepseek-ai/dsh-session/types' {
@@ -39,6 +40,17 @@ declare module '@deepseek-ai/dsh-session/types' {
       turnId: string;
       reason: string;
       payloadHash?: string;
+    };
+    'pact/case-transition': {
+      caseSessionId: string;
+      turnId: string | null;
+      kind:
+        | 'APPROVED_EXECUTION'
+        | 'FAILED_NO_MUTATION'
+        | 'LOCAL_KEEP_OPAQUE'
+        | 'CHECKPOINT_RESET';
+      payload: JsonValue;
+      transitionHash: string;
     };
   }
 }

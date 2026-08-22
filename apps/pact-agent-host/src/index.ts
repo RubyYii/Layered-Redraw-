@@ -64,3 +64,7 @@ export {
   type FailureNoMutationInput,
   type LocalKeepOpaqueInput,
 } from './case-session.js';
+export {
+  persistCaseSessionTransition,
+  type CaseSessionTransitionDurabilityReceipt,
+} from './case-session-persistence.js';
