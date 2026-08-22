@@ -1,0 +1,20 @@
+{
+  "name": "@layered-redraw/pact-cp03-contracts",
+  "version": "0.0.0-gate.1",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.js",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1"
+  },
+  "devDependencies": {
+    "vitest": "4.1.10"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  }
+}

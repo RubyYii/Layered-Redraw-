@@ -13,6 +13,7 @@
     "test:camera-editor": "node scripts/smoke-test-camera-editor.mjs",
     "test:cp02": "node scripts/smoke-test-cp02.mjs",
     "test:simulation-replay": "node scripts/smoke-test-delivery-replay.mjs --package artifacts/interaction-simulation/interaction-simulation-30fps.simulation-package --screenshot artifacts/interaction-simulation/replay-smoke.png --seek 6",
+    "test:cp03:foundation": "node scripts/smoke-test-cp03-foundation.mjs",
     "build:interaction-demo": "node scripts/build-interaction-demo-project.mjs",
     "build:window-case": "node scripts/build-window-case-sandbox-project.mjs",
     "build:window-case:cp02": "node scripts/derive-window-case-cp02.mjs",
@@ -25,6 +26,7 @@
     "render:window-case:video30": "npm run build:window-case && node scripts/render-window-case-video-30fps.mjs"
   },
   "dependencies": {
+    "@layered-redraw/pact-cp03-contracts": "file:../../packages/pact-cp03-contracts",
     "three": "^0.185.1"
   },
   "devDependencies": {

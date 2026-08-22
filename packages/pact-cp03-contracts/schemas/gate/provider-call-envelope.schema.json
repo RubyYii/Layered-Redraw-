@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://layered-redraw.local/cp03/gate/provider-call-envelope.schema.json",
+  "$defs": {
+    "nullableTimestamp": {
+      "anyOf": [
+        { "type": "string", "format": "date-time" },
+        { "type": "null" }
+      ]
+    },
+    "nullableNonnegativeInteger": {
+      "anyOf": [
+        { "type": "integer", "minimum": 0 },
+        { "type": "null" }
+      ]
+    },
+    "usage": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["inputTokens", "outputTokens", "totalTokens", "estimatedCostUsd"],
+          "properties": {
+            "inputTokens": { "type": "integer", "minimum": 0 },
+            "outputTokens": { "type": "integer", "minimum": 0 },
+            "totalTokens": { "type": "integer", "minimum": 0 },
+            "estimatedCostUsd": {
+              "anyOf": [
+                { "type": "number", "minimum": 0 },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "finish": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["pending", "stop", "tool_calls", "length", "aborted", "error"] },
+        "detailCode": { "type": "string", "pattern": "^[A-Z0-9_]{1,80}$" }
+      }
+    },
+    "toolCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["toolCallId", "name", "argumentsHash", "status"],
+      "properties": {
+        "toolCallId": { "type": "string", "pattern": "^tool_[A-Za-z0-9_-]{8,120}$" },
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,80}$" },
+        "argumentsHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "status": { "enum": ["observed", "accepted", "rejected"] }
+      }
+    },
+    "sessionEventRange": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sessionId", "fromSequence", "toSequence"],
+          "properties": {
+            "sessionId": { "type": "string", "format": "uuid" },
+            "fromSequence": { "type": "integer", "minimum": 0 },
+            "toSequence": { "type": "integer", "minimum": 0 }
+          }
+        }
+      ]
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "callId",
+    "providerRoute",
+    "modelId",
+    "adapterPackage",
+    "adapterVersion",
+    "providerKind",
+    "inputClasses",
+    "startedAt",
+    "firstChunkAt",
+    "firstPublicTraceAt",
+    "endedAt",
+    "latencyMs",
+    "usage",
+    "finish",
+    "toolCalls",
+    "sessionEventRange",
+    "retryOf",
+    "lateQuarantined",
+    "nativeResponseSchema"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "cp03-foundation-gate/0.1" },
+    "callId": { "type": "string", "pattern": "^call_[A-Za-z0-9_-]{8,120}$" },
+    "providerRoute": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+    "modelId": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\s]+$" },
+    "adapterPackage": { "type": "string", "pattern": "^@[a-z0-9-]+/[a-z0-9-]+$" },
+    "adapterVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
+    "providerKind": { "enum": ["real", "scripted"] },
+    "inputClasses": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": { "enum": ["fictional_text", "synthetic_image"] }
+    },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "firstChunkAt": { "$ref": "#/$defs/nullableTimestamp" },
+    "firstPublicTraceAt": { "$ref": "#/$defs/nullableTimestamp" },
+    "endedAt": { "$ref": "#/$defs/nullableTimestamp" },
+    "latencyMs": { "$ref": "#/$defs/nullableNonnegativeInteger" },
+    "usage": { "$ref": "#/$defs/usage" },
+    "finish": { "$ref": "#/$defs/finish" },
+    "toolCalls": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/toolCall" }
+    },
+    "sessionEventRange": { "$ref": "#/$defs/sessionEventRange" },
+    "retryOf": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^call_[A-Za-z0-9_-]{8,120}$" }
+      ]
+    },
+    "lateQuarantined": { "type": "boolean" },
+    "nativeResponseSchema": { "const": "UNSUPPORTED_ON_DSH_ROOT_CONTINUABLE_RC6" }
+  }
+}

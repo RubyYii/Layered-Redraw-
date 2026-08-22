@@ -194,16 +194,29 @@ export function archivePreviousArtifacts(runId) {
 const commandText = (command, args) => execFileSync(command, args, { encoding: "utf8" }).trim();
 
 export function readTargetMachine() {
-  const profile = commandText("system_profiler", ["SPHardwareDataType"]);
-  const field = (label) => profile.match(new RegExp(`^\\s*${label}:\\s*(.+)$`, "m"))?.[1]?.trim() ?? null;
-  const machine = {
-    modelName: field("Model Name"),
-    modelIdentifier: field("Model Identifier"),
-    chip: field("Chip"),
-    memory: field("Memory"),
-    architecture: os.arch(),
-    os: commandText("sw_vers", []),
-  };
+  let machine;
+  if (process.platform === "darwin") {
+    const profile = commandText("system_profiler", ["SPHardwareDataType"]);
+    const field = (label) => profile.match(new RegExp(`^\\s*${label}:\\s*(.+)$`, "m"))?.[1]?.trim() ?? null;
+    machine = {
+      modelName: field("Model Name"),
+      modelIdentifier: field("Model Identifier"),
+      chip: field("Chip"),
+      memory: field("Memory"),
+      architecture: os.arch(),
+      os: commandText("sw_vers", []),
+    };
+  } else {
+    const processor = os.cpus().at(0)?.model ?? null;
+    machine = {
+      modelName: process.env.COMPUTERNAME ?? os.hostname(),
+      modelIdentifier: process.env.PROCESSOR_IDENTIFIER ?? processor,
+      chip: processor,
+      memory: `${Math.round(os.totalmem() / (1024 ** 3))} GB`,
+      architecture: os.arch(),
+      os: `${os.type()} ${os.release()}`,
+    };
+  }
   machine.matches = machine.modelName === exactTarget.modelName && machine.chip === exactTarget.chip;
   machine.expected = { ...exactTarget };
   return machine;

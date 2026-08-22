@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://layered-redraw.local/cp03/gate/agent-contribution.schema.json",
+  "$defs": {
+    "role": {
+      "enum": ["CaseConductor", "Witness", "Archivist", "Rewriter", "Guardian"]
+    },
+    "creativeString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "stableRef": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "creativeArray": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/creativeString" }
+    },
+    "refArray": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/stableRef" }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "role",
+    "childSessionId",
+    "turnId",
+    "publicTrace",
+    "proposal",
+    "uncertainties",
+    "evidenceAnchors",
+    "assetRequests",
+    "dissent",
+    "toolReceiptRefs"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "cp03-foundation-gate/0.1" },
+    "role": { "$ref": "#/$defs/role" },
+    "childSessionId": { "type": "string", "format": "uuid" },
+    "turnId": { "type": "string", "pattern": "^turn_[A-Za-z0-9_-]{8,80}$" },
+    "publicTrace": { "$ref": "#/$defs/creativeString" },
+    "proposal": { "$ref": "#/$defs/creativeString" },
+    "uncertainties": { "$ref": "#/$defs/creativeArray" },
+    "evidenceAnchors": { "$ref": "#/$defs/refArray" },
+    "assetRequests": { "$ref": "#/$defs/refArray" },
+    "dissent": { "$ref": "#/$defs/creativeArray" },
+    "toolReceiptRefs": { "$ref": "#/$defs/refArray" }
+  }
+}

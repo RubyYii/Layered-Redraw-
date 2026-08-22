@@ -15,6 +15,12 @@ const round = (value, precision = 4) => Number(value.toFixed(precision));
 const clamp01 = (value) => Math.min(1, Math.max(0, value));
 const sameVector = (left, right) => left?.length === right?.length && left.every((value, index) => value === right[index]);
 const cameraCurveCache = new WeakMap();
+const blockedRuntimeAssetStates = new Set([
+  "SOURCE_LOCKED",
+  "EVIDENCE_LOCKED",
+  "STAGE_LOCKED",
+  "WITHHELD",
+]);
 
 const governanceEdgeStyle = (state, mode, evidenceOverlayEnabled, renderEdge = true) => {
   if (!state) return { visible: mode === "edit" && renderEdge, color: 0x151817, opacity: 0.38 };
@@ -821,6 +827,10 @@ export class ThreeSceneAdapter {
     const object = this.store.getState().project.objects.find((candidate) => candidate.id === id);
     const carrier = this.meshes.get(id);
     if (!object || !carrier) throw new Error("请先选择一个仍在场景中的物体。");
+    const governanceState = object.governance?.state ?? null;
+    if (blockedRuntimeAssetStates.has(governanceState)) {
+      throw new Error(`${governanceState} 载体禁止附加运行时素材。`);
+    }
     const token = Symbol(id);
     this.assetLoadTokens.set(id, token);
     const controller = await createController(object);

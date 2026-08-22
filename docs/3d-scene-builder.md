@@ -25,6 +25,8 @@ New bridges are marked `ready-for-import`. Select a Scene Builder carrier, choos
 
 The contract checksum is retained as the handoff fingerprint while the importer independently validates all executable contract fields and both consumed artifact hashes. It does not silently turn the height field into collision geometry, infer hidden surfaces, or claim calibrated world scale. Authored scene objects, character rigs, navigation, and interaction anchors remain separate Scene Builder data. Clearing the session asset restores the original placeholder without changing project JSON or screenplay tracks.
 
+Runtime attachment is also subordinate to scene governance. Generic OBJ, GLB, and RGB-D attachment rejects `SOURCE_LOCKED`, `EVIDENCE_LOCKED`, `STAGE_LOCKED`, and `WITHHELD` carriers before reading asset bytes or creating a replacement controller; only an authorised or otherwise mutable carrier may accept a session asset. In the CP02 route, the Case Pack manifest and source lock remain authoritative, ScenePatch validation still controls project mutations, and receipt-bound undo still restores the exact project hash. A successful RGB-D import therefore proves a governed, reversible display substitution on one permitted carrier—not permission to rewrite the source photograph or bypass the CP02 protocol.
+
 ## Stable replacement contract
 
 Characters are addressed through a root object rather than individual placeholder meshes. `asset.nodes` maps semantic slots such as `root`, `head`, `effector`, and `statusLight`; `asset.animations` maps `idle`, `move`, `interact`, and `react`; `asset.bones` maps common rig roles such as `hips`, `head`, and both hands; `asset.expressions` maps roles such as `smile`, blinks, and `mouthOpen` to morph-target names. The importer replaces the placeholder hierarchy for the current session while preserving screenplay tracks and object interactions. Explicit bindings win when present; otherwise conservative name matching reports missing slots instead of inventing them.
@@ -117,6 +119,45 @@ miss is retained as `FAIL`. Only `PASS` can become `RUNTIME_TESTED` after archiv
 verification; screenshots and controller inspection never populate the artist's
 `ARTISTICALLY_APPROVED` decision.
 
+## CP03 agent-to-Ruby execution seam
+
+CP03 now has one local, no-network executable seam that preserves the division
+between creative agency and mechanical authority:
+
+```text
+DSH CaseConductor executable draft
+  -> canonical draft hash
+  -> hash- and scene-bound viewer approval
+  -> deterministic Capability Gate
+  -> existing semantic intent planner
+  -> existing navigation / interaction / ownership / collision runtime
+  -> transient director overlay + linked receipt
+```
+
+The first registered capability is `performRegisteredInteraction`. The draft can
+name only a stable actor ID, target ID, target-declared affordance, and—when the
+affordance requires it—a registered recipient or placement target. Raw
+coordinates, transforms, paths, code, scripts, URLs, undeclared fields and
+unregistered affordances cannot cross the schema/Gate boundary. The Gate also
+requires a viewer `APPROVE` decision for the exact canonical draft hash and the
+current project hash. It does not repair or reinterpret an invalid proposal.
+
+Ruby's existing Scene Builder remains the only owner of path generation,
+contact phases, ownership transitions, collision correction, animation state
+and timeline evaluation. The CP03 adapter only preserves validated affordance
+metadata and appends the generated clips to a cloned director overlay; the
+source project is not mutated, and rollback is discarding that overlay.
+
+The local integration test runs the real DSH rc.6 session/tool/event stack with
+the `pact-fake` scripted adapter. It proves that a root draft can be stored by
+canonical hash, approved, gated, executed by Ruby's deterministic 60Hz runtime,
+and received as a linked receipt. It does **not** prove real Gemini/DeepSeek
+structured-tool quality, text/image/audio interpretation, provider latency,
+multi-call sequencing, the five-action visual grammar, audience UI, checkpoint
+capture, artistic approval or public release. The current local Gate deliberately
+accepts one capability call per proposal while the wider schema reserves up to
+eight for the later orchestrator.
+
 ## Current limits
 
 - OBJ and GLB loading are connected for local session files. CP02 additionally supports one fixed same-origin local Case Pack, but its binary files remain intentionally ignored and are not yet packaged for transfer or remote recovery.
@@ -126,10 +167,15 @@ verification; screenshots and controller inspection never populate the artist's
 - The ownership solver is deterministic kinematics. It constrains authored anchors, corrects configured proxy penetration, and rejects illegal transitions, but it does not simulate gravity, impulses, frictional stacking, or Rapier contacts.
 - Semantic effectors select animation/node bindings, but full-body and hand IK are not connected yet.
 - Camera splines and procedural secondary motion improve continuity but do not replace authored animation.
-- The agent runtime validates semantic intents but does not call a language model.
+- The Scene Builder agent runtime validates semantic intents but does not itself call a language model; CP03 receives a validated DSH draft across the separate Gate.
 - CP02 understands only the two frozen bilingual fixture statements; Gemini, DeepSeek, and DSH are not live dependencies in this checkpoint.
 - CP02's three selected public assets have separate source, technical and local artistic records and are loaded from the fixed ignored Case Pack. This does not generalise to arbitrary catalog entries and does not authorise public display.
 - The example is real-time stylized blockout, not photoreal final rendering.
 - RGB-D height fields are session-only textured 2.5D surfaces. They are not packaged with project JSON and do not provide backs, watertight topology, metric scale, collision, rigging, or navigation geometry.
 
-The next vertical slice should persist/package imported OBJ/GLB/RGB-D assets, add a retargeting profile and real hand IK to this verified pickup/handoff fixture, then replace the kinematic physics adapter with a Rapier-backed capsule/controller world while keeping the semantic ownership contract unchanged.
+The immediate CP03 vertical slice is the bounded real-provider compatibility
+gate, followed on `GO` by the five-action effect runtime, loopback privacy/evidence
+host and audience proposal UI. The separate 3D-hardening track still needs
+persisted asset packaging, a retargeting profile, real hand IK and—only if the
+installation requires physical dynamics—a Rapier-backed controller while
+keeping the semantic ownership contract unchanged.

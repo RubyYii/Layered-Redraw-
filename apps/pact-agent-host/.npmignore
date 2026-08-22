@@ -1,0 +1,8 @@
+node_modules/
+artifacts/
+src/
+test/
+scripts/
+lib/src/
+lib/test/
+*.tgz

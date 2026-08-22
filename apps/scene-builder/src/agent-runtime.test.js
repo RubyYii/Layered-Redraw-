@@ -12,6 +12,7 @@ import {
   validateAssetIntent,
   validateAgentIntent,
 } from "./agent-runtime.js";
+import { createInteractionDemoProject } from "./interaction-demo.js";
 import { createEntityConfig, normalizeProject } from "./model.js";
 import { evaluateTimeline } from "./director.js";
 
@@ -45,6 +46,14 @@ const createAgentProject = (actorPosition = [0, 0, 1]) => normalizeProject({
     },
   ],
 });
+
+const createOwnershipProject = () => {
+  const project = createInteractionDemoProject();
+  project.director.timeline.clips = [];
+  project.director.timeline.duration = 0;
+  project.objects.find((object) => object.id === "interaction-actor-a").position = [-1.25, 0, 0];
+  return project;
+};
 
 describe("LLM agent intent boundary", () => {
   it("builds a semantic observation without exposing transform write commands", () => {
@@ -110,6 +119,67 @@ describe("LLM agent intent boundary", () => {
     expect(clips[0].start).toBe(2);
     expect(clips[1].start).toBeGreaterThan(clips[0].start);
     expect(compileAgentPlan(plan, 3)[0].id).not.toBe(clips[0].id);
+  });
+
+  it("preserves registered ownership metadata in Ruby's interaction clip", () => {
+    const project = createOwnershipProject();
+    const frame = evaluateTimeline(project, 0);
+    const plan = planAgentIntent(project, frame, {
+      kind: "interact",
+      actorId: "interaction-actor-a",
+      targetId: "interaction-cup",
+      affordance: "pickup",
+    });
+    const interactionClip = compileAgentPlan(plan, 0).find((clip) => clip.type === "interaction");
+
+    expect(interactionClip).toMatchObject({
+      ownershipMode: "claim",
+      holderAnchor: "carry",
+      itemAnchor: "grip",
+      actorContactAnchor: "grip",
+    });
+  });
+
+  it("requires registered semantic targets for transfer and release affordances", () => {
+    const project = createOwnershipProject();
+    const frame = evaluateTimeline(project, 0);
+    const base = {
+      kind: "interact",
+      actorId: "interaction-actor-a",
+      targetId: "interaction-cup",
+    };
+
+    expect(validateAgentIntent(project, frame, { ...base, affordance: "handoff" }))
+      .toMatchObject({ ok: false, code: "missing_recipient" });
+    expect(validateAgentIntent(project, frame, {
+      ...base,
+      affordance: "handoff",
+      recipientId: "interaction-destination-table",
+    })).toMatchObject({ ok: false, code: "invalid_recipient" });
+    expect(validateAgentIntent(project, frame, {
+      ...base,
+      affordance: "handoff",
+      recipientId: "interaction-actor-b",
+    })).toMatchObject({
+      ok: true,
+      intent: { ownershipMode: "transfer", recipientId: "interaction-actor-b" },
+    });
+
+    expect(validateAgentIntent(project, frame, { ...base, affordance: "place" }))
+      .toMatchObject({ ok: false, code: "missing_placement_target" });
+    expect(validateAgentIntent(project, frame, {
+      ...base,
+      affordance: "place",
+      placementTargetId: "interaction-actor-b",
+    })).toMatchObject({ ok: false, code: "invalid_placement_target" });
+    expect(validateAgentIntent(project, frame, {
+      ...base,
+      affordance: "place",
+      placementTargetId: "interaction-destination-table",
+    })).toMatchObject({
+      ok: true,
+      intent: { ownershipMode: "release", placementTargetId: "interaction-destination-table" },
+    });
   });
 
   it("exposes one callback boundary for a future model provider", async () => {
