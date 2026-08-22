@@ -5,8 +5,8 @@ import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local';
 
 import { COMPATIBILITY_LIMITS } from '../src/compatibility-config.js';
 import { buildProviderPreflightReport } from '../src/preflight-report.js';
+import { executeProviderRealCommand } from '../src/provider-real-command.js';
 import {
-  executeAuthorizedProviderRun,
   type ProviderRealRunApproval,
 } from '../src/provider-real-run-gate.js';
 import { COMPATIBILITY_PROBES } from '../src/probe-plan.js';
@@ -65,14 +65,11 @@ if (mode !== 'preflight' && mode !== 'real') {
         },
         inputClasses: ['fictional_text', 'synthetic_checkerboard'],
       };
-      const result = await executeAuthorizedProviderRun({
+      const result = await executeProviderRealCommand({
+        cwd: process.cwd(),
+        env: process.env,
         preflight: report,
         approval,
-        execute: async () => ({
-          status: 'REFUSED' as const,
-          code: 'REAL_PROVIDER_TRANSPORT_NOT_IMPLEMENTED' as const,
-          providerRequestsMade: 0 as const,
-        }),
       });
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       if ('status' in result && result.status === 'REFUSED') {
