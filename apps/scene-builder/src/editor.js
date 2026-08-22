@@ -882,6 +882,24 @@ export class ThreeSceneAdapter {
       mesh.position.copy(mesh.parent ? mesh.parent.worldToLocal(world) : world);
       if (mesh.userData.objectId) this.timelineInteractionObjectIds.add(mesh.userData.objectId);
     };
+    const moveEffector = (rootSource, targetWorld, nodeRole, weight) => {
+      if (!rootSource || this.assetControllers.has(rootSource.id) || weight <= 0) return;
+      const configuredRole = String(rootSource.asset?.nodes?.[nodeRole] ?? "").toLowerCase();
+      const roleCandidates = new Set([
+        String(nodeRole ?? "").toLowerCase(),
+        configuredRole,
+      ].filter(Boolean));
+      const effectorSource = objects.find((object) => (
+        isDescendantOf(object, rootSource.id)
+        && roleCandidates.has(String(object.nodeRole ?? "").toLowerCase())
+      ));
+      const effectorMesh = effectorSource ? this.meshes.get(effectorSource.id) : null;
+      const effectorBase = effectorMesh?.userData.previewBase;
+      if (!effectorMesh || !effectorBase) return;
+      const reachedWorld = effectorMesh.getWorldPosition(new THREE.Vector3()).lerp(targetWorld, weight);
+      effectorMesh.position.copy(effectorMesh.parent ? effectorMesh.parent.worldToLocal(reachedWorld) : reachedWorld);
+      this.timelineInteractionObjectIds.add(effectorSource.id);
+    };
 
     for (const interaction of interactions) {
       const actorMesh = this.meshes.get(interaction.actorId);
@@ -891,34 +909,31 @@ export class ThreeSceneAdapter {
       if (!actorMesh || !targetMesh || !actorSource || !targetSource) continue;
 
       const actorWorld = actorMesh.getWorldPosition(new THREE.Vector3());
-      const targetWorld = targetMesh.getWorldPosition(new THREE.Vector3());
-      const targetQuaternion = targetMesh.getWorldQuaternion(new THREE.Quaternion());
-      const anchor = targetSource.interactionSpec?.anchors?.[interaction.targetAnchor] ?? [0, 0, 0];
+      const contactSource = sourceById.get(interaction.contactTargetId) ?? targetSource;
+      const contactMesh = this.meshes.get(contactSource.id) ?? targetMesh;
+      const targetWorld = contactMesh.getWorldPosition(new THREE.Vector3());
+      const targetQuaternion = contactMesh.getWorldQuaternion(new THREE.Quaternion());
+      const anchorName = interaction.contactAnchor ?? interaction.targetAnchor;
+      const anchor = contactSource.interactionSpec?.anchors?.[anchorName] ?? [0, 0, 0];
       targetWorld.add(new THREE.Vector3().fromArray(anchor).applyQuaternion(targetQuaternion));
       const pose = proceduralInteractionPose(actorWorld.toArray(), targetWorld.toArray(), interaction.phase);
 
       setWorldOffset(actorMesh, pose.actorOffset);
-      setWorldOffset(targetMesh, pose.targetOffset);
-      targetMesh.scale.multiplyScalar(pose.targetScale);
-      this.timelineInteractionObjectIds.add(targetSource.id);
+      if (!interaction.ownershipMode || interaction.ownershipMode === "none") {
+        setWorldOffset(targetMesh, pose.targetOffset);
+        targetMesh.scale.multiplyScalar(pose.targetScale);
+        this.timelineInteractionObjectIds.add(targetSource.id);
+      }
       this.scene.updateMatrixWorld(true);
-
-      if (this.assetControllers.has(actorSource.id) || pose.effectorWeight <= 0) continue;
-      const configuredRole = String(actorSource.asset?.nodes?.[interaction.actorNode] ?? "").toLowerCase();
-      const roleCandidates = new Set([
-        String(interaction.actorNode ?? "").toLowerCase(),
-        configuredRole,
-      ].filter(Boolean));
-      const effectorSource = objects.find((object) => (
-        isDescendantOf(object, actorSource.id)
-        && roleCandidates.has(String(object.nodeRole ?? "").toLowerCase())
-      ));
-      const effectorMesh = effectorSource ? this.meshes.get(effectorSource.id) : null;
-      const effectorBase = effectorMesh?.userData.previewBase;
-      if (!effectorMesh || !effectorBase) continue;
-      const reachedWorld = effectorMesh.getWorldPosition(new THREE.Vector3()).lerp(targetWorld, pose.effectorWeight);
-      effectorMesh.position.copy(effectorMesh.parent ? effectorMesh.parent.worldToLocal(reachedWorld) : reachedWorld);
-      this.timelineInteractionObjectIds.add(effectorSource.id);
+      moveEffector(actorSource, targetWorld, interaction.actorNode, pose.effectorWeight);
+      if (interaction.recipientId) {
+        moveEffector(
+          sourceById.get(interaction.recipientId),
+          targetWorld,
+          interaction.actorNode,
+          pose.effectorWeight,
+        );
+      }
     }
   }
 

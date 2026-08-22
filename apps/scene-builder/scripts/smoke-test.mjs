@@ -204,6 +204,7 @@ const referenceScreenshot = path.join(artifactDir, "blockout-studio-reference.pn
 const directorErrorScreenshot = path.join(artifactDir, "blockout-studio-director-error.png");
 const assetScreenshot = path.join(artifactDir, "blockout-studio-asset-runtime.png");
 const spatialScreenshot = path.join(artifactDir, "blockout-studio-spatial-bridge.png");
+const interactionScreenshot = path.join(artifactDir, "blockout-studio-interaction-simulation.png");
 const failureScreenshot = path.join(artifactDir, "blockout-studio-failure.png");
 
 try {
@@ -404,6 +405,47 @@ try {
   assert(saved.objects.some((object) => object.name === "测试细节物体" && object.entity.role === "character"), "实体组件未进入项目数据。");
   assert(saved.director?.timeline?.clips?.length >= 7, "编译后的时间线未进入项目数据。");
 
+  await page.locator("#more-menu").click();
+  await page.locator("#load-interaction-demo").click();
+  await page.waitForSelector("#simulation-indicator:not([hidden])");
+  assert(await page.locator("#project-name").inputValue() === "十秒交互仿真实验室", "交互仿真实验室未载入。");
+  assert(await page.locator(".hierarchy-row").count() === 19, "交互仿真实验室物体数量异常。");
+  assert((await page.locator("#simulation-phase").textContent())?.includes("SIM 60Hz"), "固定 60Hz 仿真状态未显示。");
+  assert(await page.locator("#timeline-duration").textContent() === "00:10:00", "十秒验收时间线长度异常。");
+
+  const seekInteraction = async (time) => {
+    await page.locator("#timeline-scrubber").evaluate((input, value) => {
+      input.value = String(value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }, time);
+    await page.waitForTimeout(80);
+  };
+
+  await seekInteraction(3);
+  assert((await page.locator("#simulation-phase").textContent())?.includes("接触约束"), "抓取接触阶段未显示。");
+  assert((await page.locator("#simulation-detail").textContent())?.includes("抓取"), "抓取语义未显示。");
+  await seekInteraction(4.2);
+  assert((await page.locator("#simulation-phase").textContent())?.includes("持续持有"), "角色 A 持有状态未保持。");
+  assert((await page.locator("#simulation-detail").textContent())?.includes("角色 A"), "角色 A 所有权未显示。");
+  await seekInteraction(5.95);
+  assert((await page.locator("#simulation-detail").textContent())?.includes("交接"), "角色交接语义未显示。");
+  assert(await page.locator("#simulation-indicator").getAttribute("data-state") === "contact", "交接没有进入接触状态。");
+  await page.waitForTimeout(2200);
+  await page.screenshot({ path: interactionScreenshot, fullPage: true });
+  await seekInteraction(7.2);
+  assert((await page.locator("#simulation-detail").textContent())?.includes("角色 B"), "角色 B 所有权未显示。");
+  await seekInteraction(8.65);
+  assert((await page.locator("#simulation-detail").textContent())?.includes("放置"), "放置语义未显示。");
+  await seekInteraction(9.6);
+  assert((await page.locator("#simulation-phase").textContent())?.includes("放置完成"), "物品没有稳定释放到接触面。");
+
+  await seekInteraction(0);
+  await page.locator("#timeline-play").click();
+  await page.waitForTimeout(280);
+  await page.locator("#timeline-play").click();
+  const fixedStepTime = Number(await page.locator("#timeline-scrubber").inputValue());
+  assert(fixedStepTime >= 0.2 && fixedStepTime <= 0.35, `固定步进播放推进异常：${fixedStepTime}s。`);
+
   await page.waitForTimeout(2400);
   await page.locator("#timeline-play").focus();
   const performanceState = {
@@ -433,6 +475,7 @@ try {
     directorErrorScreenshot,
     assetScreenshot,
     spatialScreenshot,
+    interactionScreenshot,
     desktopScreenshot,
     tabletScreenshot,
   }, null, 2)}\n`);

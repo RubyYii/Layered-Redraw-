@@ -25,6 +25,8 @@ v0.8 connects depth to the painting editor itself. The active RGB and paired rel
 
 v0.9 closes the painting-to-stage loop. Scene Builder can now select a Layered Redraw project folder, read `spatial-bridge.json`, resolve and SHA-256-check the declared RGB/depth preview, then mount it as a movable, rotatable, scalable textured height field. The importer preserves the hard relative-2.5D, non-metric, no-hidden-backside, no-collision-by-default boundary and stays separate from OBJ/GLB character rigs, actions, and prop-interaction interfaces.
 
+v1.0 adds a continuous interaction-simulation slice. Director preview advances at a fixed 60Hz; semantic interactions can perform legal `claim → transfer → release` ownership transitions; and prop position is continuously solved from character hold, item grip, and contact-surface anchors. A menu command loads a ten-second approach–pickup–carry–handoff–place lab, which has its own deterministic 30fps frame renderer. The current backend is explicitly kinematic and does not claim Rapier rigid bodies, gravity, or full hand IK.
+
 Before production, the project can generate parameterized A/B/C proofs. The built-in output is a parameter contract, deltas, a low-detail schematic, and an external render request. It becomes image-effect evidence only after scene-specific renders are registered. Selection and promotion can guide the final 8–12 layers, but do not establish artistic quality on their own.
 
 The goal is not another brush picker. A style now changes crop, scale, negative space, depth, shape grammar, and value grouping before colour and surface treatment.
@@ -91,7 +93,7 @@ Open the local editor, select layers or frame a region, export `edit-request.jso
 
 - `$redraw-in-layers`, a Codex skill for guided vector drawing, layered image generation, and localized revision.
 - `$stage-in-3d`, a Codex skill that compiles screenplays, storyboards, or scene notes into editable continuous 3D blockouts, cinematic timelines, and deterministic previews.
-- An experimental 3D director with continuous scenes, cinematic timelines, fixed-step 30fps rendering, hierarchical characters, curved motion, object interaction anchors, and an auditable agent-intent contract.
+- An experimental 3D director with continuous scenes, fixed-60Hz preview, deterministic 30fps rendering, hierarchical characters, curved motion, object interaction anchors, legal ownership transitions, and an auditable agent-intent contract.
 - Reference intelligence for role-aware multi-RGB input, RGB-D pairing, optional monocular relative-depth estimation, immutable 16-bit depth evidence, 3–8 diagnostic bands, and prompt-directed 5–20-layer planning.
 - A 3D depth canvas that combines source texture and near-white relative depth as a WebGL height field with orbit controls, GPU displacement, mesh/perspective controls, and an auditable spatial-bridge export.
 - A painting-to-3D bridge that lets Scene Builder import `spatial-bridge.json` from a project folder, verify the RGB/depth-preview hashes and relative-scale contract, and mount a session-only textured height field through an editable carrier.
@@ -161,9 +163,11 @@ Open the local URL printed by Vite to use blockout editing, the director timelin
 ```powershell
 npm run build:window-case
 npm run render:window-case:video30
+npm run build:interaction-demo
+npm run render:interaction-demo:video30
 ```
 
-The editor can now import OBJ or a self-contained GLB for a selected object during the browser session and fit it inside the placeholder without distorting its proportions. OBJ is treated as static geometry. A GLB additionally reports skins, bones, animation clips, and morph targets, then infers semantic nodes, `idle/move/interact/react` actions, common rig bones, and expression slots. The runtime exposes `playAssetAction`, `setAssetExpression`, and `setAssetBonePose`, so a future character swap does not have to rewrite scene tracks. Expanded static collision bounds can also produce a deterministic approach path for an out-of-range agent intent. Model files are not packaged with project JSON yet; hand IK, animation retargeting, a navigation mesh, and rigid-body solving remain follow-up work.
+The editor can now import OBJ or a self-contained GLB for a selected object during the browser session and fit it inside the placeholder without distorting its proportions. OBJ is treated as static geometry. A GLB additionally reports skins, bones, animation clips, and morph targets, then infers semantic nodes, `idle/move/interact/react` actions, common rig bones, and expression slots. The runtime exposes `playAssetAction`, `setAssetExpression`, and `setAssetBonePose`, so a future character swap does not have to rewrite scene tracks. Expanded static bounds produce deterministic approach paths, while the kinematic interaction layer rejects handoffs or releases by a non-owner and keeps prop anchors constrained. Model files are not packaged with project JSON yet; real hand IK, animation retargeting, a navigation mesh, gravity, and Rapier rigid-body solving remain follow-up work.
 
 You can also invoke the 3D skill directly:
 
@@ -366,7 +370,7 @@ npm test
 npm run build
 ```
 
-The tests cover SVG, raster, pixel art, both design interfaces, custom presets, parameterized proofs, complete style systems, direction boards, masks, history diff/restore, hybrid sources, and OpenRaster round trips. The 3D application separately covers scene schema, timelines, arc-length motion, semantic interactions, and the model-intent boundary.
+The tests cover SVG, raster, pixel art, both design interfaces, custom presets, parameterized proofs, complete style systems, direction boards, masks, history diff/restore, hybrid sources, and OpenRaster round trips. The 3D application separately covers scene schema, fixed stepping, arc-length motion, pickup/handoff/place constraints, illegal ownership transitions, and the model-intent boundary.
 
 ---
 

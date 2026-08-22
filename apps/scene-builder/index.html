@@ -78,6 +78,7 @@
           <div id="project-menu" class="project-menu" hidden>
             <button id="new-project" type="button">新建空场景</button>
             <button id="load-demo" type="button">恢复示例场景</button>
+            <button id="load-interaction-demo" type="button">载入十秒交互仿真</button>
           </div>
           <input id="project-file" type="file" accept="application/json,.json" hidden />
         </div>
@@ -201,6 +202,10 @@
             <img id="reference-backdrop" class="reference-backdrop" alt="场景概念图叠加参考" hidden />
             <div id="preview-indicator" class="preview-indicator" hidden>
               <span></span> 导演预览
+            </div>
+            <div id="simulation-indicator" class="simulation-indicator" data-state="idle" hidden aria-live="polite">
+              <strong id="simulation-phase">SIM 60Hz</strong>
+              <span id="simulation-detail">等待交互</span>
             </div>
             <div id="performance-indicator" class="performance-indicator" hidden aria-live="off">
               <strong id="performance-fps">-- FPS</strong>

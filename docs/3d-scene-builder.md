@@ -7,10 +7,11 @@
 1. **Scene schema** — versioned JSON stores stable object IDs, parent relationships, transforms, render metadata, entity capabilities, motion profiles, asset bindings, and semantic interaction anchors.
 2. **Director** — absolute-time clips evaluate movement, rotation, visibility, attachments, dialogue, cameras, and interactions without mutating source project data.
 3. **Motion** — minimum-jerk easing and arc-length path sampling prevent abrupt acceleration and uneven speed across control points. Path tangents drive root yaw, lean, and bank.
-4. **Renderer/editor** — Three.js groups preserve character hierarchy; cached camera position/look-at curves avoid rebuilding Catmull–Rom data every frame. Preview transforms bypass material work, timeline highlighting is incremental, and measured frame pacing can lower pixel ratio and temporarily simplify shadows/local lights on weak or software renderers. Fixed-step and keyframe render scripts opt into full quality so deliverables do not vary with interactive performance.
-5. **Asset runtime** — a local OBJ or self-contained GLB can replace a selected placeholder for the browser session without non-uniformly distorting the source. OBJ provides static geometry. GLB can additionally provide skins, bones, animation clips, and morph targets; the runtime reports those capabilities and infers semantic nodes, actions, rig bones, and expression slots. `AnimationMixer` crossfades between `idle`, `move`, `interact`, and `react` states supplied by the deterministic timeline.
-6. **Spatial bridge runtime** — a selected carrier can load a Layered Redraw project folder containing `spatial-bridge.json`. The importer resolves the declared RGB and near-white depth-preview paths, verifies both SHA-256 digests, checks dimensions and hard relative-depth invariants, then creates an aspect-preserving textured height field. XY fitting keeps shallow carriers from crushing the authored display depth. The result remains session-only and is never added to collision or navigation data.
-7. **Agent boundary** — an observation builder exposes only visible semantic affordances. The validator rejects direct model control of transforms, paths, scripts, code, or asset URLs; the planner can deterministically add a collision-aware ground path before an out-of-range interaction. `runAgentTurn` is the single callback boundary for a future provider and returns validated timeline clips rather than executing model-authored transforms.
+4. **Interaction simulation** — preview advances through a 60Hz fixed-step clock. Ownership clips perform legal `claim`, `transfer`, and `release` transitions; item roots are solved from character hold, item grip, and placement-surface anchors. Invalid transitions are reported instead of silently teleporting a prop. This backend is deterministic kinematics, not rigid-body dynamics.
+5. **Renderer/editor** — Three.js groups preserve character hierarchy; cached camera position/look-at curves avoid rebuilding Catmull–Rom data every frame. Preview transforms bypass material work, timeline highlighting is incremental, and measured frame pacing can lower pixel ratio and temporarily simplify shadows/local lights on weak or software renderers. Fixed-step and keyframe render scripts opt into full quality so deliverables do not vary with interactive performance.
+6. **Asset runtime** — a local OBJ or self-contained GLB can replace a selected placeholder for the browser session without non-uniformly distorting the source. OBJ provides static geometry. GLB can additionally provide skins, bones, animation clips, and morph targets; the runtime reports those capabilities and infers semantic nodes, actions, rig bones, and expression slots. `AnimationMixer` crossfades between `idle`, `move`, `interact`, and `react` states supplied by the deterministic timeline.
+7. **Spatial bridge runtime** — a selected carrier can load a Layered Redraw project folder containing `spatial-bridge.json`. The importer resolves the declared RGB and near-white depth-preview paths, verifies both SHA-256 digests, checks dimensions and hard relative-depth invariants, then creates an aspect-preserving textured height field. XY fitting keeps shallow carriers from crushing the authored display depth. The result remains session-only and is never added to collision or navigation data.
+8. **Agent boundary** — an observation builder exposes only visible semantic affordances. The validator rejects direct model control of transforms, paths, scripts, code, or asset URLs; the planner can deterministically add a collision-aware ground path before an out-of-range interaction. `runAgentTurn` is the single callback boundary for a future provider and returns validated timeline clips rather than executing model-authored transforms.
 
 ## Incoming depth-painting bridge
 
@@ -37,7 +38,7 @@ editor.clearAssetBonePose(objectId, "head");
 
 Actions, expressions, and bones accept either a semantic slot or the original GLB name. `assetReport` exposes the source format, geometry/skin/bone counts, clip and morph-target names, inferred bindings, capability flags, warnings, and current overrides. A future behavior tree or model provider should inspect this report and issue constrained semantic commands rather than writing transforms or model URLs directly.
 
-Props declare local `interactionSpec.anchors` and named `affordances`. A timeline interaction records actor, target, actor node, target anchor, action, and resulting state. It exposes anticipation, reach, contact, and recovery phases; gray-box effectors procedurally approach anchors while targets receive a bounded contact response, and carried offsets rotate in the holder's local frame. Imported rigs use their mapped animation clip instead of the gray-box effector pose. The deterministic runtime remains responsible for reach distance, movement, collision planning, and animation state.
+Props declare local `interactionSpec.anchors` and named `affordances`. A timeline interaction records actor, target, actor node, target anchor, action, and resulting state. Ownership-aware clips additionally declare `ownershipMode`, holder/item anchors, and either a recipient or placement target. They expose anticipation, reach, contact, and recovery phases; gray-box effectors approach the contact point while the simulation continuously resolves the prop constraint. Imported rigs use their mapped animation clip instead of gray-box articulation. The deterministic runtime remains responsible for reach distance, legal ownership, movement, collision-aware approach planning, and animation state.
 
 ## Run and verify
 
@@ -45,12 +46,14 @@ Props declare local `interactionSpec.anchors` and named `affordances`. A timelin
 cd apps/scene-builder
 npm ci
 npm test
+npm run build:interaction-demo
+npm run render:interaction-demo:video30
 npm run build:window-case
 npm run build
 npm run dev
 ```
 
-The bundled `projects/window-case` fixture contains one continuous room, four non-human agents, 19 camera shots, and a 166-second director timeline. Fixed-step video rendering is available through `npm run render:window-case:video30`; generated frames and videos stay under the ignored `artifacts/` directory.
+The bundled `projects/interaction-lab` fixture contains two gray-box agents, one prop, three legal ownership transitions, one continuous camera, and a ten-second timeline. `npm run render:interaction-demo:video30` renders exactly 300 frames at 1280×720. The larger `projects/window-case` fixture contains one continuous room, four non-human agents, 19 camera shots, and a 166-second director timeline. Generated frames and videos stay under the ignored `artifacts/` directory.
 
 ## Current limits
 
@@ -58,10 +61,11 @@ The bundled `projects/window-case` fixture contains one continuous room, four no
 - OBJ is intentionally static: its common interchange form has no portable skin, skeletal animation, or morph-expression contract. Animated characters should use a self-contained GLB; external OBJ MTL/texture references are ignored.
 - GLB bone overrides are local-pose controls, not animation retargeting or inverse kinematics.
 - The ground planner expands axis-aligned static bounds by actor radius; it is not a navigation mesh and does not replace a rigid-body or character-controller solver.
+- The ownership solver is deterministic kinematics. It constrains authored anchors and rejects illegal transitions, but it does not simulate gravity, impulses, frictional stacking, or Rapier contacts.
 - Semantic effectors select animation/node bindings, but full-body and hand IK are not connected yet.
 - Camera splines and procedural secondary motion improve continuity but do not replace authored animation.
 - The agent runtime validates semantic intents but does not call a language model.
 - The example is real-time stylized blockout, not photoreal final rendering.
 - RGB-D height fields are session-only textured 2.5D surfaces. They are not packaged with project JSON and do not provide backs, watertight topology, metric scale, collision, rigging, or navigation geometry.
 
-The next vertical slice should persist/package imported OBJ/GLB/RGB-D assets, add a retargeting profile and hand IK for one pickup interaction, and connect a Rapier-backed capsule controller while keeping the semantic interaction contract unchanged.
+The next vertical slice should persist/package imported OBJ/GLB/RGB-D assets, add a retargeting profile and real hand IK to this verified pickup/handoff fixture, then replace the kinematic physics adapter with a Rapier-backed capsule/controller world while keeping the semantic ownership contract unchanged.

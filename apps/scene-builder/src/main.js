@@ -10,6 +10,7 @@ import {
   serializeProject,
 } from "./model.js";
 import { ThreeSceneAdapter } from "./editor.js";
+import { createInteractionDemoProject } from "./interaction-demo.js";
 import {
   DirectorRuntime,
   SCREENPLAY_SYNTAX,
@@ -95,6 +96,7 @@ const elements = {
   projectMenu: $("#project-menu"),
   newProject: $("#new-project"),
   loadDemo: $("#load-demo"),
+  loadInteractionDemo: $("#load-interaction-demo"),
   duplicate: $("#duplicate-object"),
   delete: $("#delete-object"),
   libraryToggle: $("#toggle-library"),
@@ -184,6 +186,9 @@ const elements = {
   timelinePlayhead: $("#timeline-playhead"),
   timelineScrubber: $("#timeline-scrubber"),
   previewIndicator: $("#preview-indicator"),
+  simulationIndicator: $("#simulation-indicator"),
+  simulationPhase: $("#simulation-phase"),
+  simulationDetail: $("#simulation-detail"),
   performanceIndicator: $("#performance-indicator"),
   performanceFps: $("#performance-fps"),
   performanceQuality: $("#performance-quality"),
@@ -646,6 +651,62 @@ const timelineTrackFor = (track) => track === "camera"
       ? "dialogue"
       : "world";
 
+const SIMULATION_PHASE_LABELS = Object.freeze({
+  anticipation: "预备",
+  reach: "伸手",
+  contact: "接触约束",
+  recovery: "恢复",
+});
+
+const SIMULATION_MODE_LABELS = Object.freeze({
+  claim: "抓取",
+  transfer: "交接",
+  release: "放置",
+});
+
+const renderSimulationStatus = (frame) => {
+  const simulation = frame.simulation ?? {};
+  const clockHz = simulation.clock?.hz ?? simulation.hz ?? 60;
+  const violation = simulation.violations?.[0];
+  const interaction = frame.interactions?.find((item) => item.ownershipMode && item.ownershipMode !== "none")
+    ?? frame.interactions?.[0];
+  const names = new Map(currentState.project.objects.map((object) => [object.id, object.name]));
+  let state = "idle";
+  let phase = "等待交互";
+  let detail = "确定性运动学后端 · 尚未接入刚体动力学";
+
+  if (violation) {
+    state = "error";
+    phase = "转换被拒绝";
+    detail = violation.message;
+  } else if (interaction) {
+    state = interaction.phase?.name ?? "active";
+    phase = SIMULATION_PHASE_LABELS[interaction.phase?.name] ?? "语义交互";
+    const mode = SIMULATION_MODE_LABELS[interaction.ownershipMode] ?? interaction.action ?? "交互";
+    const actorName = names.get(interaction.actorId) ?? interaction.actorId;
+    const targetName = names.get(interaction.targetId) ?? interaction.targetId;
+    const error = Number(interaction.constraintError);
+    const errorLabel = Number.isFinite(error) ? ` · 约束误差 ${error.toFixed(3)}m` : "";
+    detail = `${mode} · ${actorName} → ${targetName}${errorLabel}`;
+  } else {
+    const heldEntry = Object.entries(simulation.ownership ?? {}).find(([, value]) => value.status === "held");
+    const placedEntry = Object.entries(simulation.ownership ?? {}).find(([, value]) => value.status === "placed");
+    if (heldEntry) {
+      state = "held";
+      phase = "持续持有";
+      detail = `${names.get(heldEntry[0]) ?? heldEntry[0]} · 持有者 ${names.get(heldEntry[1].holderId) ?? heldEntry[1].holderId}`;
+    } else if (placedEntry) {
+      state = "placed";
+      phase = "放置完成";
+      detail = `${names.get(placedEntry[0]) ?? placedEntry[0]} · 接触面 ${names.get(placedEntry[1].placementTargetId) ?? placedEntry[1].placementTargetId}`;
+    }
+  }
+
+  elements.simulationIndicator.dataset.state = state;
+  elements.simulationPhase.textContent = `SIM ${clockHz}Hz · ${phase}`;
+  elements.simulationDetail.textContent = detail;
+};
+
 const updateTimelineFrame = (frame) => {
   currentFrame = frame;
   if (directorMode === "preview") {
@@ -660,6 +721,7 @@ const updateTimelineFrame = (frame) => {
     elements.dialogueOverlay.hidden = true;
     lastDialogueClipId = null;
   }
+  if (directorMode === "preview") renderSimulationStatus(frame);
 
   const uiDelta = Math.abs(frame.time - lastTimelineUiTime);
   if (runtime?.playing && uiDelta < 1 / 30) return;
@@ -817,6 +879,7 @@ const setDirectorMode = (mode) => {
   });
   elements.app.classList.toggle("is-preview", directorMode === "preview");
   elements.previewIndicator.hidden = directorMode !== "preview";
+  elements.simulationIndicator.hidden = directorMode !== "preview";
   elements.performanceIndicator.hidden = directorMode !== "preview";
   editor.setDirectorMode(directorMode);
 
@@ -1312,6 +1375,19 @@ elements.loadDemo.addEventListener("click", () => {
   store.replaceProject(ensureInitialTimeline(createStarterProject()));
   editor.setCameraPreset("perspective");
   showToast("示例灰模已恢复");
+});
+
+elements.loadInteractionDemo.addEventListener("click", () => {
+  elements.projectMenu.hidden = true;
+  elements.moreMenuButton.setAttribute("aria-expanded", "false");
+  setDirectorMode("edit");
+  runtime?.stop();
+  store.replaceProject(createInteractionDemoProject());
+  editor.setCameraPreset("perspective");
+  setLibraryMode("screenplay");
+  setDirectorMode("preview");
+  runtime?.seek(0);
+  showToast("已载入十秒交互仿真：走近、抓取、交接、放置");
 });
 
 const closeDrawers = () => {
