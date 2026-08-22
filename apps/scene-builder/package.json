@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:ui": "node scripts/smoke-test.mjs",
     "test:cp02": "node scripts/smoke-test-cp02.mjs",
+    "test:cp03:foundation": "node scripts/smoke-test-cp03-foundation.mjs",
     "build:interaction-demo": "node scripts/build-interaction-demo-project.mjs",
     "build:window-case": "node scripts/build-window-case-sandbox-project.mjs",
     "build:window-case:cp02": "node scripts/derive-window-case-cp02.mjs",
