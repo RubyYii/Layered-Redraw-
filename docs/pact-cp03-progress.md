@@ -38,7 +38,7 @@ The viewer does not directly drive a character with keyboard/game controls in th
 | CP00 Reference Grammar | visual/theoretical grammar and checkpoint media | `ARCHIVED`; human visual direction recorded | preserve as source, not final 3D proof |
 | CP01 Asset Bake-off | compare public and generated 3D candidates | `PARTIAL`; preflight and fixed public candidates exist, formal model bake-off incomplete | decide whether a generated challenger is still needed |
 | CP02 Mutable Room / One Reframe | source-locked room, governed add/move/undo/reject, real local assets | `CHECKPOINT_ARCHIVED`, runtime tested, artistic `R2 KEEP`, public release false | frozen; do not rewrite its evidence |
-| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `FOUNDATION_TESTED + LOCAL_EXECUTABLE_SLICE_TESTED`; Ruby merge, contracts, CaseSession mechanics/durability, approval-gated provider runner/evidence verifier and one approved role-interaction seam exist | eligible and separately approved real-provider run, multi-role orchestration, audience UI, five visually distinct effects, formal encounters and archive |
+| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `FOUNDATION_TESTED + LOCAL_EXECUTABLE_SLICE_TESTED + FAILED_PARTIAL_LIVE_RUN`; Ruby merge, contracts, CaseSession mechanics/durability, approval-gated provider runner/evidence verifier and one approved role-interaction seam exist; first live run stopped after 3 dispatches | repaired and separately re-approved real-provider rerun, multi-role orchestration, audience UI, five visually distinct effects, formal encounters and archive |
 | CP04 Rights-aware Retrieval | local semantic search over cleared asset registry | `NOT_STARTED`; three fixed Case Pack assets are not a vector database | source records, embeddings, retrieval/Guardian UI |
 | CP05 Generated Gap Asset | one approved offline generated asset | `NOT_STARTED` | separately authorised model/API or local generation bake-off |
 | CP06 Four Positions | 0/1/4-person role and takeover behaviour | `NOT_STARTED` | participant protocol and role runtime |
@@ -80,6 +80,7 @@ Ruby owns the 3D execution primitives and authored stage. New CP03 code should c
 | `747872b` | post-run evidence integrity and secret-leak verifier | blocks secret-bearing raw archives and refuses incomplete/mislabeled evidence |
 | `8c93476` | pure CaseSession state machine | cumulative and terminal mechanics, failure/no-mutation, local stop and terminal reset unit-tested |
 | `29a8d2e` | CaseSession transition durability | one bounded transition crosses the real local DSH append/flush/inspect JSONL barrier |
+| `fa2c6b3` | settled-session provider lifecycle repair | verifies detached child durability from storage and stops after a failed first wave before later dispatches |
 
 Haorui/Codex owns viewer approval, governance, agent/session contracts, deterministic authority checks, evidence and checkpoint integration. It does not own Ruby's 3D authorship.
 
@@ -108,7 +109,7 @@ This is roughly the first third of the full CP00-CP08 production route. It is no
 | A. Ruby + CP02 governed runtime | `COMPLETE` | history-preserving merge and combined tests |
 | B1. Shared compatibility contracts | `COMPLETE` | schemas and unit tests |
 | B2. DSH root/continuable + CaseSession durability | `COMPLETE` | scripted adapter, bounded case transition, flush and cold JSONL read |
-| B3. Real provider compatibility | `INFRASTRUCTURE_TESTED / REAL RUN NOT ELIGIBLE` | fresh preflight `0/8 ELIGIBLE`, `0 SENT`; required model/route/cost configuration and separate exact approval absent |
+| B3. Real provider compatibility | `FAILED_PARTIAL LIVE RUN / NOT PASSED` | Keychain-backed preflight reached `8/8 ELIGIBLE`; approved run sent 3 dispatches: 2 DeepSeek `AUTH`, 1 Gemini structured success; local lifecycle mask repaired, but no second live run is authorised or completed |
 | C1. Draft/approval/Gate to Ruby role interaction | `LOCAL_SLICE_TESTED` | real DSH root with scripted provider → hash approval → Gate → Ruby navigation/ownership → receipt → durable CaseSession transition |
 | C2. Five-action effect runtime | `STATE_RULES_TESTED / EFFECTS NOT_STARTED` | cumulative and terminal mechanics are unit-tested; five visually distinct runtime effects are not implemented |
 | C3. Loopback host, privacy and evidence API | `NOT_STARTED` | follows provider contract validation |
@@ -129,7 +130,7 @@ The architecture is technically feasible with current components:
 
 Current successful tests prove local contracts, cumulative/terminal CaseSession mechanics, real DSH session/tool/event plumbing with a scripted provider, deterministic Gate checks, Ruby navigation/ownership execution, and local scripted DSH → approval → Ruby execution → CaseSession durability. They do not yet prove:
 
-- real DeepSeek/Gemini structured tool reliability;
+- real DeepSeek structured-tool reliability or a complete mixed-provider run; one Gemini text-only structured contribution succeeded, which is insufficient for compatibility;
 - real multimodal interpretation quality;
 - the 8-second target or 12-second hard deadline under live provider load;
 - an audience-facing proposal/approval UI;
@@ -152,16 +153,16 @@ under the DSH session directory.
 | Layer | Result | Scope |
 |---|---|---|
 | Shared CP03 contracts | `15/15 PASS` | dual execution schema, approval authority, forbidden raw controls |
-| PACT DSH host | `typecheck PASS`, `build PASS`, `84/84 PASS` | CaseSession unit/durability plus scripted DSH → approval → Ruby receipt → durable transition; real-run approval, retry/cancel, evidence-integrity and leak-blocking tests |
+| PACT DSH host | `typecheck PASS`, `build PASS`, `86/86 PASS` | CaseSession unit/durability plus scripted DSH → approval → Ruby receipt → durable transition; real-run approval, retry/cancel, settled-child durability, first-wave fail-fast, evidence-integrity and leak-blocking tests |
 | Ruby Scene Builder | `168/168 PASS`, `build PASS` | combined runtime after Ruby's latest merge |
 | Browser engineering smoke | `PASS` | CP02 59.88 median FPS; CP03 source-lock/RGB-D; 19-shot camera editor; 300-frame simulation package and replay |
-| Provider preflight | `0/8 ELIGIBLE`, `0 SENT` | intended 8, excluded 8, planned 12, hard maximum 14; no provider data sent |
-| Provider network | `ZERO CALLS` | all provider execution tests remain scripted; preflight is local-only |
+| Provider preflight | `8/8 ELIGIBLE`, `0 SENT` | Keychain-backed credential presence, exact model catalogs and `0.50 USD` cap passed locally; catalog eligibility is not compatibility |
+| Provider network | `FAILED_PARTIAL`, `3 SENT` | first approved run: two DeepSeek 401 `AUTH`, one Gemini structured contribution success; five probes and all multimodal/cancel probes not sent |
+| Provider run archive | `PARTIAL REPORT TRACKED / RAW LOCAL ONLY` | tracked report under `checkpoints/cp03/provider-compatibility/`; normal raw/evidence report absent because the runner threw before archive publication |
 | CP03 visual/archive gate | `FOUNDATION SMOKE ONLY / FORMAL NOT RUN` | ignored engineering video/stills exist; no formal checkpoint copy package or human CP03 decision |
 
-Remote truth was re-read with `git ls-remote` after the full local matrix and
-before the Task 3 commit. The shared CP03 branch remains at `90747db`, the
-published plan commit and an ancestor of the two new local milestone commits.
+Remote truth was re-read with `git ls-remote` before the lifecycle repair push.
+The shared CP03 branch now includes repair commit `fa2c6b3`.
 The four named collaborator tips remain `2136710`, `722b699`, `eacab0c`, and
 `1691e8e`; none moved during this implementation slice, so no fetch integration
 was required. Ruby's newer Case Pack repair, delivery-package and camera-editor
@@ -172,11 +173,12 @@ ledger records existing Gate/Ruby receipt facts only.
 ## Immediate Sequence
 
 1. Keep Ruby's merged 3D/camera/delivery work and the DSH → approval → Gate → Ruby seam frozen as the integration baseline.
-2. Resolve the five missing preflight items: `PACT_DEEPSEEK_MODEL`, `PACT_GEMINI_ROUTE`, `PACT_GEMINI_MODEL`, `PACT_COMPAT_MAX_USD`, and `GEMINI_API_KEY`; then present the exact live scope again.
-3. Only after a fresh exact approval record, run the bounded 8-probe / 12-planned / 14-maximum Gemini + DeepSeek compatibility gate and inspect the evidence report.
-4. On a real-provider `GO`, implement five-role orchestration and five-action effects, then the loopback API/privacy boundary and audience UI.
-5. Add cleared image/audio ingestion paths and test multimodal interpretation without granting those inputs execution authority.
-6. Run formal encounters, archive videos/stills/copy/receipts, and request separate human technical and artistic decisions.
+2. Preserve Live Run 01 as `FAILED_PARTIAL`: 3 sent, 2 DeepSeek `AUTH`, 1 Gemini structured success, no multimodal dispatch, no compatibility claim.
+3. For the next zero-call preflight, source both provider credentials from their exact Keychain entries rather than preferring the stale inherited DeepSeek environment value.
+4. Only after a fresh exact approval record, rerun the bounded 8-probe / 12-planned / 14-maximum Gemini + DeepSeek compatibility gate and inspect the normal evidence report.
+5. On a real-provider `GO`, implement five-role orchestration and five-action effects, then the loopback API/privacy boundary and audience UI.
+6. Add cleared image/audio ingestion paths and test multimodal interpretation without granting those inputs execution authority.
+7. Run formal encounters, archive videos/stills/copy/receipts, and request separate human technical and artistic decisions.
 
 ## Evidence Vocabulary
 
