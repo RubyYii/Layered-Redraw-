@@ -93,13 +93,13 @@ const validatePlacement = (placement, assetId) => {
   throw new Error(`Case Pack asset ${assetId} placement mode 未批准。`);
 };
 
-export function validateCasePackManifest(input) {
+const validateCasePackManifestAgainstCatalog = (input, approvedCatalog, approvedCasePackId) => {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("Case Pack manifest 缺失或格式无效。");
   }
   if (input.schemaVersion !== 1) throw new Error("Case Pack manifest schemaVersion 未批准。");
-  if (requireText(input.casePackId, "casePackId") !== "pact-cp02-v1") {
-    throw new Error(`Case Pack ID 不在 CP02 批准 catalog：${input.casePackId}`);
+  if (requireText(input.casePackId, "casePackId") !== approvedCasePackId) {
+    throw new Error(`Case Pack ID 不在当前批准 catalog：${input.casePackId}`);
   }
   if (input.publicReleaseAuthorized !== false) {
     throw new Error("本地 Case Pack 不得自行声明公开发布批准状态。");
@@ -115,7 +115,7 @@ export function validateCasePackManifest(input) {
       throw new Error("Case Pack asset record 格式无效。");
     }
     const assetId = requireText(rawAsset.assetId, "assetId");
-    const approved = CP02_APPROVED_CATALOG[assetId];
+    const approved = approvedCatalog[assetId];
     if (!approved) throw new Error(`Case Pack asset 不在 CP02 批准 catalog：${assetId}`);
     if (requireText(rawAsset.sourceAssetId, `${assetId} sourceAssetId`) !== approved.sourceAssetId) {
       throw new Error(`Case Pack asset ${assetId} sourceAssetId 与批准 catalog 不一致。`);
@@ -163,7 +163,23 @@ export function validateCasePackManifest(input) {
   });
 
   return { ...input, assets };
+};
+
+export function createCasePackValidator(approvedCatalog, options = {}) {
+  if (!approvedCatalog || typeof approvedCatalog !== "object" || Array.isArray(approvedCatalog)) {
+    throw new Error("Case Pack approved catalog 格式无效。");
+  }
+  const approvedCasePackId = requireText(options.casePackId ?? "pact-cp02-v1", "approved casePackId");
+  const catalogSnapshot = Object.freeze(Object.fromEntries(
+    Object.entries(approvedCatalog).map(([assetId, record]) => [assetId, Object.freeze({
+      ...record,
+      placement: Object.freeze({ ...(record?.placement ?? {}) }),
+    })]),
+  ));
+  return (input) => validateCasePackManifestAgainstCatalog(input, catalogSnapshot, approvedCasePackId);
 }
+
+export const validateCasePackManifest = createCasePackValidator(CP02_APPROVED_CATALOG);
 
 export function assertLocalOrSameOrigin(rootUrl, locationHref = globalThis.location?.href) {
   const pageHref = requireText(locationHref, "page URL");
@@ -202,7 +218,9 @@ const sha256Hex = async (bytes) => {
 };
 
 export async function loadCasePack(rootUrl, manifestInput, options = {}) {
-  const manifest = validateCasePackManifest(manifestInput);
+  const validateManifestImpl = options.validateManifestImpl ?? validateCasePackManifest;
+  if (typeof validateManifestImpl !== "function") throw new Error("当前运行时没有可用的 Case Pack policy 验证器。 ");
+  const manifest = validateManifestImpl(manifestInput);
   const root = assertLocalOrSameOrigin(rootUrl, options.locationHref);
   const fetchImpl = options.fetchImpl ?? globalThis.fetch?.bind(globalThis);
   const loadGlbBytesImpl = options.loadGlbBytesImpl ?? loadGlbBytes;

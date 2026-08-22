@@ -70,6 +70,13 @@ the table and chair carriers load exact hash-bound local GLBs, the cup remains a
 project-authored proxy, and the artist-kept thermos is loaded only as a separate
 additive object. The ignored local Case Pack is not public-release clearance.
 
+Case Pack validation is policy-bound. Production uses the fixed CP02 catalog;
+additional application-authored catalogs can create an immutable validator for
+their own approved records, but a manifest cannot select or mutate that policy.
+The unit suite uses this boundary with a generated minimal GLB, so repository
+tests do not depend on ignored private binaries while still exercising real
+SHA-256 and filesystem checks.
+
 The R2 viewport makes the intentional duplication explicit: the existing
 evidence table and retained cup are rendered as a muted archive layer, while the
 bedside table, chair, proposal cup and thermos occupy a dynamic mutable layer.

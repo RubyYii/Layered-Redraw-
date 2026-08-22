@@ -1,7 +1,8 @@
 # PACT CP02 Mutable Room
 
 This project is a deterministic derivative of the collaborator-authored
-`window-case` fixture pinned in `source-lock.json`. It preserves all 200 source
+`window-case` fixture pinned in `source-lock.json` at Ruby's full-screenplay
+commit `1691e8e`. It preserves all 200 source
 objects and the source photograph bytes, while adding object-level governance
 metadata and replacing the 166-second authored film timeline with a 60-second,
 event-driven CP02 interaction timeline.
@@ -74,3 +75,11 @@ For automated evidence, the route exposes only
 `window.__PACT_CP02_EVIDENCE__.snapshot()`. It returns a structured clone of
 current hashes, receipt state, governance counts, and the renderer's existing
 performance report. It exposes no mutating method.
+
+The ordinary `npm test` suite is intentionally independent of the ignored local
+Case Pack. It builds a minimal self-contained GLB, binds it to an immutable
+code-authored test catalog, and exercises the same byte count, SHA-256, path,
+extra-file, missing-file, and symlink rejection flow. The formal `npm run
+test:cp02` and `npm run render:window-case:cp02` gates still require the real
+hash-bound local Case Pack; a missing pack is missing private evidence input,
+not permission to substitute test bytes or claim a checkpoint pass.

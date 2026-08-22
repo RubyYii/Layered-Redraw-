@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import baseProject from "../projects/window-case/window-that-wasnt-there.blockout.json" with { type: "json" };
 import sourceLock from "../projects/window-case-cp02/source-lock.json" with { type: "json" };
-import { deriveCp02Project } from "./derive-window-case-cp02.mjs";
+import { deriveCp02Project, verifyPinnedInputs } from "./derive-window-case-cp02.mjs";
 
 describe("CP02 project derivation", () => {
+  it("pins the integrated full-screenplay source before deriving mutable state", () => {
+    expect(sourceLock.runtimeCommit).toBe("1691e8eda8f7030f6817aa678120715d4a1935b7");
+    expect(() => verifyPinnedInputs(sourceLock)).not.toThrow();
+  });
+
   it("preserves all 200 collaborator objects and source identities", () => {
     const result = deriveCp02Project(baseProject, sourceLock);
 

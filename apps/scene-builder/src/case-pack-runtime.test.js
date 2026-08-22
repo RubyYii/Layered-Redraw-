@@ -1,23 +1,35 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   assertLocalOrSameOrigin,
+  createCasePackValidator,
   loadCasePack,
   validateCasePackManifest,
 } from "./case-pack-runtime.js";
 import { syncCasePack } from "../scripts/sync-pact-cp02-case-pack.mjs";
 
 const temporaryRoots = [];
-const approvedTablePath = fileURLToPath(new URL(
-  "../public/case-packs/pact-cp02/assets/WoodenTable_01.glb",
-  import.meta.url,
-));
-const approvedTableBytes = () => fs.readFileSync(approvedTablePath);
+
+const glbWithDocument = (document) => {
+  const rawJson = Buffer.from(JSON.stringify(document));
+  const padding = (4 - (rawJson.length % 4)) % 4;
+  const json = Buffer.concat([rawJson, Buffer.alloc(padding, 0x20)]);
+  const output = Buffer.alloc(20 + json.length);
+  output.writeUInt32LE(0x46546c67, 0);
+  output.writeUInt32LE(2, 4);
+  output.writeUInt32LE(output.length, 8);
+  output.writeUInt32LE(json.length, 12);
+  output.writeUInt32LE(0x4e4f534a, 16);
+  json.copy(output, 20);
+  return output;
+};
+
+const testTableBytes = () => glbWithDocument({ asset: { version: "2.0" }, scenes: [{}], scene: 0 });
 
 const approvedManifest = () => ({
   schemaVersion: 1,
@@ -48,7 +60,25 @@ const approvedManifest = () => ({
   }],
 });
 
-const makeSourceDirectory = (manifest, bytes = approvedTableBytes()) => {
+const testManifestAndValidator = () => {
+  const bytes = testTableBytes();
+  const manifest = approvedManifest();
+  manifest.assets[0].bytes = bytes.byteLength;
+  manifest.assets[0].sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
+  const asset = manifest.assets[0];
+  const validateManifestImpl = createCasePackValidator({
+    [asset.assetId]: {
+      sourceAssetId: asset.sourceAssetId,
+      filename: asset.filename,
+      bytes: asset.bytes,
+      sha256: asset.sha256,
+      placement: { ...asset.placement },
+    },
+  });
+  return { bytes, manifest, validateManifestImpl };
+};
+
+const makeSourceDirectory = (manifest, bytes = testTableBytes()) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pact-case-pack-source-"));
   temporaryRoots.push(root);
   fs.mkdirSync(path.join(root, "assets"));
@@ -78,6 +108,47 @@ describe("hash-bound local Case Pack runtime", () => {
       publicDisplay: false,
       placement: { mode: "REPLACE_PROXY", slotId: "memory-table-bedside" },
     });
+  });
+
+  it("snapshots a code-authored catalog so later mutations cannot weaken its policy", () => {
+    const { manifest } = testManifestAndValidator();
+    const asset = manifest.assets[0];
+    const catalog = {
+      [asset.assetId]: {
+        sourceAssetId: asset.sourceAssetId,
+        filename: asset.filename,
+        bytes: asset.bytes,
+        sha256: asset.sha256,
+        placement: { ...asset.placement },
+      },
+    };
+    const validateManifest = createCasePackValidator(catalog);
+    catalog[asset.assetId].sha256 = "0".repeat(64);
+    catalog[asset.assetId].placement.slotId = "unapproved-slot";
+
+    expect(validateManifest(manifest).assets[0]).toMatchObject({
+      sha256: asset.sha256,
+      placement: { slotId: "memory-table-bedside" },
+    });
+  });
+
+  it("lets a separately authored policy bind its own stable Case Pack ID", () => {
+    const { manifest } = testManifestAndValidator();
+    const asset = manifest.assets[0];
+    manifest.casePackId = "future-room-v1";
+    const validateManifest = createCasePackValidator({
+      [asset.assetId]: {
+        sourceAssetId: asset.sourceAssetId,
+        filename: asset.filename,
+        bytes: asset.bytes,
+        sha256: asset.sha256,
+        placement: { ...asset.placement },
+      },
+    }, { casePackId: "future-room-v1" });
+
+    expect(validateManifest(manifest).casePackId).toBe("future-room-v1");
+    manifest.casePackId = "unapproved-room";
+    expect(() => validateManifest(manifest)).toThrow(/ID|catalog|批准/i);
   });
 
   it("keeps the thermos additive and forbids it from replacing the existing cup", () => {
@@ -176,12 +247,12 @@ describe("hash-bound local Case Pack runtime", () => {
   });
 
   it("verifies size and SHA-256 before passing bytes to the GLB loader", async () => {
-    const bytes = approvedTableBytes();
-    const manifest = approvedManifest();
+    const { bytes, manifest, validateManifestImpl } = testManifestAndValidator();
     const calls = [];
     let fetchCalls = 0;
     const pack = await loadCasePack("/case-packs/pact-cp02/", manifest, {
       locationHref: "http://127.0.0.1:5173/?case=pact-cp02",
+      validateManifestImpl,
       fetchImpl: async () => {
         fetchCalls += 1;
         return { ok: true, arrayBuffer: async () => bytes };
@@ -203,19 +274,31 @@ describe("hash-bound local Case Pack runtime", () => {
 
     const badPack = await loadCasePack("/case-packs/pact-cp02/", manifest, {
       locationHref: "http://127.0.0.1:5173/",
+      validateManifestImpl,
       fetchImpl: async () => ({ ok: true, arrayBuffer: async () => Buffer.from("tampered") }),
       loadGlbBytesImpl: async () => ({ loaded: true }),
     });
     await expect(badPack.asset("PH-TABLE-WOODEN-001")).rejects.toThrow(/size|bytes|大小|SHA-256/i);
+
+    const badHashPack = await loadCasePack("/case-packs/pact-cp02/", manifest, {
+      locationHref: "http://127.0.0.1:5173/",
+      validateManifestImpl,
+      fetchImpl: async () => ({
+        ok: true,
+        arrayBuffer: async () => Buffer.from(bytes.map((value, index) => index === 24 ? value ^ 0xff : value)),
+      }),
+      loadGlbBytesImpl: async () => ({ loaded: true }),
+    });
+    await expect(badHashPack.asset("PH-TABLE-WOODEN-001")).rejects.toThrow(/SHA-256/i);
   });
 
   it("copies an exact verified pack and rejects extra GLBs, missing files, hash drift, and symlinks", async () => {
-    const bytes = approvedTableBytes();
-    const manifest = approvedManifest();
+    const { bytes, manifest, validateManifestImpl } = testManifestAndValidator();
     const cleanSource = makeSourceDirectory(manifest, bytes);
     const target = makeTargetDirectory();
+    const testPolicy = { validateManifestImpl };
 
-    await expect(syncCasePack({ sourceRoot: cleanSource, targetRoot: target })).resolves.toMatchObject({
+    await expect(syncCasePack({ sourceRoot: cleanSource, targetRoot: target }, testPolicy)).resolves.toMatchObject({
       assetCount: 1,
       casePackId: "pact-cp02-v1",
     });
@@ -223,22 +306,29 @@ describe("hash-bound local Case Pack runtime", () => {
 
     const extraSource = makeSourceDirectory(manifest, bytes);
     fs.writeFileSync(path.join(extraSource, "assets", "unregistered.glb"), bytes);
-    await expect(syncCasePack({ sourceRoot: extraSource, targetRoot: makeTargetDirectory() }))
+    await expect(syncCasePack({ sourceRoot: extraSource, targetRoot: makeTargetDirectory() }, testPolicy))
       .rejects.toThrow(/extra|unexpected|未登记/i);
 
     const missingSource = makeSourceDirectory(manifest, bytes);
     fs.unlinkSync(path.join(missingSource, manifest.assets[0].path));
-    await expect(syncCasePack({ sourceRoot: missingSource, targetRoot: makeTargetDirectory() }))
+    await expect(syncCasePack({ sourceRoot: missingSource, targetRoot: makeTargetDirectory() }, testPolicy))
       .rejects.toThrow(/missing|缺少/i);
 
     const driftSource = makeSourceDirectory(manifest, Buffer.from("tampered"));
-    await expect(syncCasePack({ sourceRoot: driftSource, targetRoot: makeTargetDirectory() }))
+    await expect(syncCasePack({ sourceRoot: driftSource, targetRoot: makeTargetDirectory() }, testPolicy))
       .rejects.toThrow(/size|bytes|大小|SHA-256/i);
+
+    const hashDriftBytes = Buffer.from(bytes);
+    hashDriftBytes[24] ^= 0xff;
+    const hashDriftSource = makeSourceDirectory(manifest, hashDriftBytes);
+    await expect(syncCasePack({ sourceRoot: hashDriftSource, targetRoot: makeTargetDirectory() }, testPolicy))
+      .rejects.toThrow(/SHA-256/i);
 
     const symlinkSource = makeSourceDirectory(manifest, bytes);
     const assetPath = path.join(symlinkSource, manifest.assets[0].path);
     fs.unlinkSync(assetPath);
-    fs.symlinkSync(path.join(cleanSource, manifest.assets[0].path), assetPath);
+    if (process.platform === "win32") fs.symlinkSync(cleanSource, assetPath, "junction");
+    else fs.symlinkSync(path.join(cleanSource, manifest.assets[0].path), assetPath, "file");
     await expect(syncCasePack({ sourceRoot: symlinkSource, targetRoot: makeTargetDirectory() }))
       .rejects.toThrow(/symlink|symbolic|符号链接/i);
   });

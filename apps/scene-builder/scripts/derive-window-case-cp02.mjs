@@ -42,7 +42,7 @@ function assertPinnedFile(record, label) {
 }
 
 export function verifyPinnedInputs(sourceLock) {
-  if (sourceLock?.runtimeCommit !== "24b4c3b4c6c287378eb20d8b586e5064b59df256") {
+  if (sourceLock?.runtimeCommit !== "1691e8eda8f7030f6817aa678120715d4a1935b7") {
     throw new Error("Unexpected collaborator runtime commit");
   }
 

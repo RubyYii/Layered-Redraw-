@@ -41,10 +41,12 @@ const assertTargetAbsent = async (targetRoot) => {
   }
 };
 
-export async function syncCasePack({ sourceRoot, targetRoot }) {
+export async function syncCasePack({ sourceRoot, targetRoot }, options = {}) {
   const source = path.resolve(String(sourceRoot ?? ""));
   const target = path.resolve(String(targetRoot ?? ""));
+  const validateManifestImpl = options.validateManifestImpl ?? validateCasePackManifest;
   if (!sourceRoot || !targetRoot) throw new Error("syncCasePack 需要 sourceRoot 与 targetRoot。 ");
+  if (typeof validateManifestImpl !== "function") throw new Error("syncCasePack 需要有效的 Case Pack policy 验证器。 ");
   if (source === target || target.startsWith(`${source}${path.sep}`)) {
     throw new Error("Case Pack target 不能位于 source 内部。 ");
   }
@@ -58,7 +60,7 @@ export async function syncCasePack({ sourceRoot, targetRoot }) {
   } catch {
     throw new Error("Case Pack case-pack.json 不是有效 JSON。 ");
   }
-  const manifest = validateCasePackManifest(manifestInput);
+  const manifest = validateManifestImpl(manifestInput);
   const expectedFiles = new Set(["case-pack.json", ...manifest.assets.map((asset) => asset.path)]);
   const missing = [...expectedFiles].filter((filename) => !files.includes(filename));
   if (missing.length) throw new Error(`Case Pack missing/缺少登记文件：${missing.join(", ")}`);
