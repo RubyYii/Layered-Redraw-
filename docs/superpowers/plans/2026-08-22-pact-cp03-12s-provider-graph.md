@@ -10,7 +10,7 @@
 
 **Spec:** `/Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/docs/superpowers/specs/2026-08-22-pact-cp03-12s-provider-graph-design.md`
 
-**Plan status:** `in_progress_local_no_network`
+**Plan status:** `verified_local_no_network`
 
 **Authorization:** The user selected option A after Live Run 02. This authorizes the local redesign, tests, progress update, milestone commits, remote synchronization checks, and push to the current collaboration branch. It does not authorize provider calls or Live Run 03.
 
@@ -159,10 +159,10 @@ Record the local 8/10 graph as scripted and verified, keep Live Run 02 as failed
 
 Stage explicit files only. Use small descriptive commits for design/plan, implementation, and evidence/progress.
 
-- [ ] **Step 4: Synchronize with Ruby before push**
+- [x] **Step 4: Synchronize with Ruby before push**
 
 Fetch origin, compare current branch and Ruby branch tips, integrate only if the current branch changed remotely, and re-run affected checks after any integration.
 
-- [ ] **Step 5: Push and verify remote truth**
+- [x] **Step 5: Push and verify remote truth**
 
 Push `codex/pact-cp03-agent-native`, then use `git ls-remote` to verify the remote branch SHA. Report local tested, committed, pushed, and real-provider-not-run as separate evidence tiers.

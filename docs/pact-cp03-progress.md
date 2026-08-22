@@ -173,11 +173,11 @@ session directory.
 | Provider run archive | `TWO FAILURE REPORTS TRACKED / RAW LOCAL ONLY` | Run 01 and Run 02 reports are tracked under `checkpoints/cp03/provider-compatibility/`; their ignored DSH logs remain local; `a15db83` adds automatic secret-scanned partial archives for future failures only |
 | CP03 visual/archive gate | `FOUNDATION SMOKE ONLY / FORMAL NOT RUN` | ignored engineering video/stills exist; no formal checkpoint copy package or human CP03 decision |
 
-Remote truth was fetched before this implementation slice; the CP03 remote was
-then `2538a4a`, with no collaborator movement. The locally verified graph now
-extends through `1558a01`; the documentation commit containing this snapshot
-follows it in history. A final fetch and `git ls-remote` check remain required
-before reporting the implementation as pushed.
+Remote truth was fetched before the final implementation push; the CP03 remote
+was then `2538a4a`, with no collaborator movement. The locally verified graph
+extends through `1558a01`, and the progress snapshot through `ef0ff72` was
+pushed and verified with `git ls-remote`. This closeout-only documentation
+commit follows it and is rechecked after push.
 The four named collaborator tips remain `2136710`, `722b699`, `eacab0c`, and
 `1691e8e`; none moved during this implementation slice, so no fetch integration
 was required. Ruby's newer Case Pack repair, delivery-package and camera-editor
