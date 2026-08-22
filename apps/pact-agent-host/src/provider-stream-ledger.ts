@@ -32,6 +32,7 @@ export interface ProviderStreamAssignment {
   readonly model: string;
   readonly dispatches: readonly ProbeDispatch[];
   readonly attachmentId?: string;
+  readonly deadlineAt?: number;
 }
 
 export interface ProviderDispatchLedgerOptions {
@@ -193,6 +194,8 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
         ]);
       } else if (event.type === 'pact/draft') {
         this.observeAcceptedDomainTool(sessionId, ['pact_submit_draft']);
+      } else if (event.type === 'pact/quarantine') {
+        this.observeQuarantinedDomainTool(sessionId);
       }
     });
   }
@@ -250,6 +253,12 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
           throw new CompatibilityDispatchError(
             'PROVIDER_ATTEMPT_RECORD_MISSING',
             `PROVIDER_ATTEMPT_RECORD_MISSING: ${state.assignment.probeId} dispatch ${index + 1}`,
+          );
+        }
+        if (record.contract.lateQuarantined) {
+          throw new CompatibilityDispatchError(
+            'PROVIDER_RESULT_LATE_QUARANTINED',
+            `PROVIDER_RESULT_LATE_QUARANTINED: ${state.assignment.probeId} dispatch ${index + 1}`,
           );
         }
         if (dispatch.expectedOutcome === 'structured-tool') {
@@ -346,7 +355,11 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
         `${state.assignment.probeId} requested ${request.provider}/${request.model}`,
       );
     }
-    if (this.now() >= this.deadlineAt) {
+    const assignmentDeadlineAt = Math.min(
+      this.deadlineAt,
+      state.assignment.deadlineAt ?? this.deadlineAt,
+    );
+    if (this.now() >= assignmentDeadlineAt) {
       throw new CompatibilityDispatchError(
         'COMPATIBILITY_DEADLINE_EXCEEDED',
         `deadline reached before ${state.assignment.probeId}`,
@@ -387,7 +400,7 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
         : {}),
     }, this.options.runId, previousRecord === undefined
       ? 1
-      : previousRecord.attempt + 1, nextOrdinal, this.deadlineAt,
+      : previousRecord.attempt + 1, nextOrdinal, assignmentDeadlineAt,
     startedAt, previousRecord?.contract.callId ?? null);
     this.sent = nextOrdinal;
     if (retry === undefined) {
@@ -414,7 +427,10 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
       state.assignment.route !== providerRoute ||
       this.pendingRetryBySession.has(sessionId) ||
       this.retriedProviders.has(state.assignment.provider) ||
-      this.now() >= this.deadlineAt ||
+      this.now() >= Math.min(
+        this.deadlineAt,
+        state.assignment.deadlineAt ?? this.deadlineAt,
+      ) ||
       this.sent >= this.options.maximumDispatches
     ) return false;
     const dispatchIndex = state.nextDispatch - 1;
@@ -473,6 +489,8 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
           latencyMs: Math.max(0, Date.parse(endedAt) - startedMs),
           usage: envelopeUsage(usage),
           finish: envelopeFinish(finish, thrown),
+          lateQuarantined:
+            record.contract.lateQuarantined || this.now() > record.deadlineAt,
         });
       }
     }
@@ -511,7 +529,12 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     this.replaceContract(recordIndex, {
       toolCalls: record.contract.toolCalls.map((receipt) =>
         receipt.toolCallId === toolCallId
-          ? { ...receipt, status: rejected ? 'rejected' : 'accepted' }
+          ? {
+              ...receipt,
+              status: rejected || receipt.status === 'rejected'
+                ? 'rejected'
+                : 'accepted',
+            }
           : receipt
       ),
     });
@@ -555,6 +578,22 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
       pending.push([...acceptedNames]);
       this.pendingAcceptedDomainTools.set(sessionId, pending);
     }
+  }
+
+  private observeQuarantinedDomainTool(sessionId: string): void {
+    const recordIndex = this.latestRecordBySession.get(sessionId);
+    if (recordIndex === undefined) return;
+    const record = this.records[recordIndex];
+    if (record === undefined) return;
+    let rejected = false;
+    this.replaceContract(recordIndex, {
+      lateQuarantined: true,
+      toolCalls: record.contract.toolCalls.map((receipt) => {
+        if (rejected || receipt.status !== 'observed') return receipt;
+        rejected = true;
+        return { ...receipt, status: 'rejected' };
+      }),
+    });
   }
 
   private consumePendingDomainAcceptance(

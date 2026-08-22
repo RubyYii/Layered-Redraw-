@@ -48,6 +48,8 @@ export class SubmissionRegistry {
   private readonly currentDraftByTurn = new Map<string, string>();
   private readonly draftPayloadByHash = new Map<string, AgentActionDraft>();
 
+  constructor(private readonly now: () => number = Date.now) {}
+
   bind(sessionId: SessionId, role: PactRole): () => void {
     const key = String(sessionId);
     const existing = this.bindings.get(key);
@@ -197,6 +199,6 @@ export class SubmissionRegistry {
     const state = this.deadlines.get(turnId);
     if (state === undefined) return false;
     if (state.closed) return true;
-    return state.deadlineAt !== undefined && Date.now() > state.deadlineAt;
+    return state.deadlineAt !== undefined && this.now() > state.deadlineAt;
   }
 }

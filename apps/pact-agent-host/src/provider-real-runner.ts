@@ -42,6 +42,8 @@ export interface ProviderCompatibilityRuntimeOptions {
   readonly dshHome: string;
   readonly providerKind: 'real' | 'scripted';
   readonly cancellationDelayMs: number;
+  readonly chainDeadlineMs?: number;
+  readonly now?: () => number;
   readonly mountAdapters: (ctx: Context) => void | Promise<void>;
 }
 
@@ -82,7 +84,10 @@ const selectionFor = (
 const assignmentFor = (
   config: ConfiguredCompatibility,
   probeId: ProbeId,
-  attachmentId?: string,
+  options: {
+    readonly attachmentId?: string;
+    readonly deadlineAt: number;
+  },
 ): PendingAssignment => {
   const probe = requireProbe(probeId);
   const selection = selectionFor(config, probe.provider);
@@ -92,7 +97,10 @@ const assignmentFor = (
     route: selection.route,
     model: selection.model,
     dispatches: probe.dispatches,
-    ...(attachmentId === undefined ? {} : { attachmentId }),
+    deadlineAt: options.deadlineAt,
+    ...(options.attachmentId === undefined
+      ? {}
+      : { attachmentId: options.attachmentId }),
   };
 };
 
@@ -145,12 +153,23 @@ export const runProviderCompatibilityRuntime = async (
   options: ProviderCompatibilityRuntimeOptions,
 ): Promise<ProviderCompatibilityRuntimeResult> => {
   const config = requireConfiguredCompatibility(options.config);
+  const now = options.now ?? Date.now;
+  const chainDeadlineMs = options.chainDeadlineMs ??
+    COMPATIBILITY_LIMITS.deadlineMs;
   if (!Number.isFinite(options.cancellationDelayMs) || options.cancellationDelayMs <= 0) {
     throw new Error('COMPATIBILITY_CANCELLATION_DELAY_INVALID');
+  }
+  if (
+    !Number.isFinite(chainDeadlineMs) ||
+    chainDeadlineMs <= 0 ||
+    chainDeadlineMs > COMPATIBILITY_LIMITS.deadlineMs
+  ) {
+    throw new Error('COMPATIBILITY_CHAIN_DEADLINE_INVALID');
   }
   const plan = probePlanSummary(COMPATIBILITY_PROBES);
   const harness = await createFoundationHarness({
     persistenceRoot: options.persistenceRoot,
+    now,
     async mountAdapters(ctx) {
       await ctx.plugin(LocalAttachmentStore, {
         dshHome: options.dshHome,
@@ -166,6 +185,15 @@ export const runProviderCompatibilityRuntime = async (
       model: config.deepseek.model,
     },
   });
+  const openedTurns = new Set<string>();
+  const openTurn = (turnId: string, deadlineAt: number): void => {
+    harness.registry.openTurn(turnId, deadlineAt);
+    openedTurns.add(turnId);
+  };
+  const closeTurn = (turnId: string): void => {
+    harness.registry.closeTurn(turnId);
+    openedTurns.delete(turnId);
+  };
 
   try {
     const synthetic = await saveSyntheticCheckerboard(harness.ctx.attachments);
@@ -173,7 +201,8 @@ export const runProviderCompatibilityRuntime = async (
       runId: options.runId,
       maximumDispatches: plan.maximumDispatches,
       providerKind: options.providerKind,
-      deadlineAt: Date.now() + COMPATIBILITY_LIMITS.deadlineMs,
+      deadlineAt: now() + COMPATIBILITY_LIMITS.deadlineMs * 4,
+      now,
     });
     const pendingByLabel = new Map<string, PendingAssignment[]>();
     const cancelAfterAcceptedToolResult = new Set<string>();
@@ -240,12 +269,18 @@ export const runProviderCompatibilityRuntime = async (
       readonly prompt: ContentBlock[];
       readonly tools: readonly string[];
       readonly attachmentId?: string;
+      readonly deadlineAt: number;
     }): Promise<StartedProbeChild> => {
       const probe = requireProbe(input.probeId);
       const selection = selectionFor(config, probe.provider);
       queueChildAssignment(
         input.label,
-        assignmentFor(config, input.probeId, input.attachmentId),
+        assignmentFor(config, input.probeId, {
+          deadlineAt: input.deadlineAt,
+          ...(input.attachmentId === undefined
+            ? {}
+            : { attachmentId: input.attachmentId }),
+        }),
       );
       const started = await harness.ctx.subagents.startContinuable({
         provider: 'spawn',
@@ -273,8 +308,14 @@ export const runProviderCompatibilityRuntime = async (
     });
     const probe1Parent = await harness.createConductor(caseSessionId());
     const probe3Parent = await harness.createConductor(caseSessionId());
+    const chainDeadlineAt = now() + chainDeadlineMs;
+    const probe1DeadlineAt = now() + chainDeadlineMs;
+    const probe3DeadlineAt = now() + chainDeadlineMs;
+    openTurn('turn_chain_01', chainDeadlineAt);
+    openTurn('turn_probe_01', probe1DeadlineAt);
+    openTurn('turn_probe_03', probe3DeadlineAt);
     ledger.assignSession({
-      ...assignmentFor(config, 'probe-02'),
+      ...assignmentFor(config, 'probe-02', { deadlineAt: chainDeadlineAt }),
       sessionId: chainConductor.agent.id,
     });
 
@@ -284,6 +325,7 @@ export const runProviderCompatibilityRuntime = async (
       probeId: 'probe-01',
       prompt: promptForContribution('probe-01', 'turn_probe_01', 'Rewriter'),
       tools: ['pact_submit_contribution'],
+      deadlineAt: probe1DeadlineAt,
     });
     const probe3Promise = startChild({
       parent: probe3Parent,
@@ -291,6 +333,7 @@ export const runProviderCompatibilityRuntime = async (
       probeId: 'probe-03',
       prompt: promptForContribution('probe-03', 'turn_probe_03', 'Archivist'),
       tools: ['pact_submit_contribution'],
+      deadlineAt: probe3DeadlineAt,
     });
     chainConductor.agent.followup(createUserMessage({
       content: [{
@@ -316,6 +359,8 @@ export const runProviderCompatibilityRuntime = async (
     completed.add('probe-01');
     completed.add('probe-02');
     completed.add('probe-03');
+    closeTurn('turn_probe_01');
+    closeTurn('turn_probe_03');
 
     const [probe4, probe5] = await Promise.all([
       startChild({
@@ -328,6 +373,7 @@ export const runProviderCompatibilityRuntime = async (
         ],
         tools: ['pact_submit_contribution'],
         attachmentId: synthetic.messageBlock.attachment.attachmentId,
+        deadlineAt: chainDeadlineAt,
       }),
       startChild({
         parent: chainConductor,
@@ -335,6 +381,7 @@ export const runProviderCompatibilityRuntime = async (
         probeId: 'probe-05',
         prompt: promptForContribution('probe-05', 'turn_chain_01', 'Guardian'),
         tools: ['pact_submit_contribution'],
+        deadlineAt: chainDeadlineAt,
       }),
     ]);
     await Promise.all([
@@ -350,7 +397,7 @@ export const runProviderCompatibilityRuntime = async (
       contributionRef(probe5.session, 'turn_chain_01'),
     ];
     ledger.assignSession({
-      ...assignmentFor(config, 'probe-06'),
+      ...assignmentFor(config, 'probe-06', { deadlineAt: chainDeadlineAt }),
       sessionId: chainConductor.agent.id,
     });
     chainConductor.agent.followup(createUserMessage({
@@ -372,13 +419,16 @@ export const runProviderCompatibilityRuntime = async (
     );
     await flushSessions(harness, [chainConductor.agent.session]);
     completed.add('probe-06');
+    closeTurn('turn_chain_01');
 
     const timeoutConductor = await harness.createConductor(caseSessionId(), {
       parked: false,
     });
     const cancelParent = await harness.createConductor(caseSessionId());
+    const probe7DeadlineAt = now() + chainDeadlineMs;
+    const probe8DeadlineAt = now() + chainDeadlineMs;
     ledger.assignSession({
-      ...assignmentFor(config, 'probe-07'),
+      ...assignmentFor(config, 'probe-07', { deadlineAt: probe7DeadlineAt }),
       sessionId: timeoutConductor.agent.id,
     });
     timeoutConductor.agent.followup(createUserMessage({
@@ -404,6 +454,7 @@ export const runProviderCompatibilityRuntime = async (
           'The caller will cancel after the first visible token.',
       }],
       tools: [],
+      deadlineAt: probe8DeadlineAt,
     });
     try {
       await Promise.all([
@@ -440,6 +491,7 @@ export const runProviderCompatibilityRuntime = async (
       attemptRecords: ledger.attemptRecords(),
     };
   } finally {
+    for (const turnId of openedTurns) harness.registry.closeTurn(turnId);
     await harness.dispose();
   }
 };

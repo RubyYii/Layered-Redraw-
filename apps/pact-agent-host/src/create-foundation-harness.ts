@@ -44,6 +44,7 @@ const roleForContinuableChild = (session: Session): Exclude<PactRole, 'CaseCondu
 
 interface FoundationHarnessCommonOptions {
   readonly persistenceRoot: string;
+  readonly now?: () => number;
 }
 
 export interface ScriptedFoundationHarnessOptions
@@ -114,7 +115,7 @@ export const createFoundationHarness = async (
     provider: 'pact-fake',
     model: 'pact-fake',
   };
-  const registry = new SubmissionRegistry();
+  const registry = new SubmissionRegistry(options.now);
   registerPactTools(ctx, registry);
   ctx.subagents.registerContinuableSetup((childCtx) => {
     const child = childCtx.agent;

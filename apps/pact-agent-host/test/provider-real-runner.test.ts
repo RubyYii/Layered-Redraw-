@@ -182,7 +182,10 @@ class ProbeRoutingAdapter extends LlmAdapter {
   private readonly steps = new Map<string, number>();
   private readonly failed = new Set<string>();
 
-  constructor(private readonly failOnceAt: ReadonlySet<string> = new Set()) {
+  constructor(
+    private readonly failOnceAt: ReadonlySet<string> = new Set(),
+    private readonly beforeResponse: ReadonlyMap<string, () => void> = new Map(),
+  ) {
     super();
   }
 
@@ -197,6 +200,7 @@ class ProbeRoutingAdapter extends LlmAdapter {
       this.failed.add(failureKey);
       throw new LlmError('scripted transport reset before completion', 'TRANSPORT');
     }
+    this.beforeResponse.get(failureKey)?.();
     this.steps.set(stepKey, step + 1);
 
     let chunks: readonly StreamChunk[];
@@ -264,16 +268,26 @@ class ProbeRoutingAdapter extends LlmAdapter {
   }
 }
 
+interface ScriptedRunOptions {
+  readonly deepseekFailures?: ReadonlySet<string>;
+  readonly geminiFailures?: ReadonlySet<string>;
+  readonly deepseekBeforeResponse?: ReadonlyMap<string, () => void>;
+  readonly now?: () => number;
+  readonly chainDeadlineMs?: number;
+}
+
 const runScriptedCompatibility = async (
-  deepseekFailures: ReadonlySet<string> = new Set(),
-  geminiFailures: ReadonlySet<string> = new Set(),
+  options: ScriptedRunOptions = {},
 ) => {
   const root = join(tmpdir(), `pact-real-runner-${randomUUID()}`);
   const persistenceRoot = join(root, 'sessions');
   const dshHome = join(root, 'dsh');
   mkdirSync(root, { recursive: true });
-  const deepseek = new ProbeRoutingAdapter(deepseekFailures);
-  const gemini = new ProbeRoutingAdapter(geminiFailures);
+  const deepseek = new ProbeRoutingAdapter(
+    options.deepseekFailures,
+    options.deepseekBeforeResponse,
+  );
+  const gemini = new ProbeRoutingAdapter(options.geminiFailures);
   const result = await runProviderCompatibilityRuntime({
     runId: 'compat_scripted_eight_probe01',
     config: inspectCompatibilityConfig(completeEnv()),
@@ -281,6 +295,10 @@ const runScriptedCompatibility = async (
     dshHome,
     providerKind: 'scripted',
     cancellationDelayMs: 10,
+    ...(options.now === undefined ? {} : { now: options.now }),
+    ...(options.chainDeadlineMs === undefined
+      ? {}
+      : { chainDeadlineMs: options.chainDeadlineMs }),
     mountAdapters(ctx) {
       ctx.llm.registerAdapter(['deepseek-official'], deepseek);
       ctx.llm.registerAdapter(['google'], gemini);
@@ -324,9 +342,9 @@ describe('fixed real-provider DSH runner with local routing adapters', () => {
   }, 10_000);
 
   it('uses one DeepSeek pre-side-effect transport retry and records thirteen dispatches', async () => {
-    const { result, deepseek, gemini } = await runScriptedCompatibility(
-      new Set(['probe-1:step-0']),
-    );
+    const { result, deepseek, gemini } = await runScriptedCompatibility({
+      deepseekFailures: new Set(['probe-1:step-0']),
+    });
 
     expect(result.sentDispatches).toBe(13);
     expect(deepseek.requests).toHaveLength(9);
@@ -343,10 +361,10 @@ describe('fixed real-provider DSH runner with local routing adapters', () => {
   }, 10_000);
 
   it('uses at most one pre-side-effect retry per provider and records fourteen dispatches', async () => {
-    const { result, deepseek, gemini } = await runScriptedCompatibility(
-      new Set(['probe-1:step-0']),
-      new Set(['probe-3:step-0']),
-    );
+    const { result, deepseek, gemini } = await runScriptedCompatibility({
+      deepseekFailures: new Set(['probe-1:step-0']),
+      geminiFailures: new Set(['probe-3:step-0']),
+    });
 
     expect(result.sentDispatches).toBe(14);
     expect(deepseek.requests).toHaveLength(9);
@@ -360,8 +378,22 @@ describe('fixed real-provider DSH runner with local routing adapters', () => {
   }, 10_000);
 
   it('does not retry a continuation after that probe accepted a PACT tool', async () => {
-    await expect(runScriptedCompatibility(
-      new Set(['probe-2:step-1']),
-    )).rejects.toThrow(/probe-02/);
+    await expect(runScriptedCompatibility({
+      deepseekFailures: new Set(['probe-2:step-1']),
+    })).rejects.toThrow(/probe-02/);
+  }, 10_000);
+
+  it('quarantines a representative-chain tool that finishes after the shared deadline', async () => {
+    let now = Date.parse('2026-08-22T18:00:00.000Z');
+    await expect(runScriptedCompatibility({
+      now: () => now,
+      chainDeadlineMs: 12_000,
+      deepseekBeforeResponse: new Map([[
+        'probe-6:step-0',
+        () => {
+          now += 12_001;
+        },
+      ]]),
+    })).rejects.toThrow(/DEADLINE|LATE|QUARANTINED|INCOMPLETE/);
   }, 10_000);
 });

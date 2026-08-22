@@ -7,6 +7,7 @@ import { Context } from '@deepseek-ai/cordis';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import LlmRuntime from '@deepseek-ai/dsh-llm';
 import { SessionId } from '@deepseek-ai/dsh-session';
+import { CP03_FOUNDATION_SCHEMA_VERSION } from '@layered-redraw/pact-cp03-contracts';
 import { describe, expect, it } from 'vitest';
 
 import { createFoundationHarness } from '../src/create-foundation-harness.js';
@@ -17,6 +18,16 @@ import {
   textResponse,
   toolCallResponse,
 } from './scripted-adapter.js';
+
+const deferred = <T>() => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+};
 
 describe('provider-configurable DSH foundation harness', () => {
   it('runs the Conductor through the exact selected mounted provider and model', async () => {
@@ -278,6 +289,119 @@ describe('provider-configurable DSH foundation harness', () => {
       expect(() => (
         ledger as typeof ledger & { assertComplete(): void }
       ).assertComplete()).toThrow(/EXPECTED_PROVIDER_TOOL_MISSING/);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  it('marks a deadline-quarantined DSH tool receipt rejected and never promotes it', async () => {
+    const persistenceRoot = join(
+      tmpdir(),
+      `pact-provider-late-tool-${randomUUID()}`,
+    );
+    mkdirSync(persistenceRoot, { recursive: true });
+    const gate = deferred<void>();
+    let lateContribution: Record<string, unknown> | undefined;
+    const deepseek = new ScriptedAdapter([
+      {
+        gate: gate.promise,
+        chunks: () => {
+          if (lateContribution === undefined) {
+            throw new Error('late contribution was not runtime-bound');
+          }
+          return toolCallResponse(
+            'tool_provider_late01',
+            'pact_submit_contribution',
+            lateContribution,
+          );
+        },
+      },
+      textResponse('late contribution receipt consumed'),
+    ]);
+    const harness = await createFoundationHarness({
+      persistenceRoot,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['deepseek-official'], deepseek);
+      },
+      conductorSelection: {
+        provider: 'deepseek-official',
+        model: 'deepseek-v4-pro',
+      },
+    });
+
+    try {
+      const ledger = installProviderDispatchLedger(harness.ctx, {
+        runId: 'compat_stream_late01',
+        maximumDispatches: 14,
+        providerKind: 'real',
+      });
+      harness.ctx.subagents.registerContinuableSetup((childCtx) => {
+        const child = childCtx.agent;
+        if (child === undefined) throw new Error('late test child missing');
+        ledger.assignSession({
+          sessionId: child.id,
+          probeId: 'probe-late-tool',
+          provider: 'deepseek',
+          route: 'deepseek-official',
+          model: 'deepseek-v4-pro',
+          dispatches: [
+            {
+              purpose: 'submit a contribution after its deadline',
+              expectedOutcome: 'structured-tool',
+              expectedTools: ['pact_submit_contribution'],
+            },
+            {
+              purpose: 'consume the rejected late receipt',
+              expectedOutcome: 'terminal-after-tool-result',
+            },
+          ],
+        });
+        lateContribution = {
+          schemaVersion: CP03_FOUNDATION_SCHEMA_VERSION,
+          role: 'Rewriter',
+          childSessionId: String(child.id),
+          turnId: 'turn_provider_late01',
+          publicTrace: 'A fictional trace arrived after the gate closed.',
+          proposal: 'This late proposal must remain quarantined.',
+          uncertainties: ['The fictional timing is deliberately late.'],
+          evidenceAnchors: ['synthetic-checkerboard'],
+          assetRequests: [],
+          dissent: [],
+          toolReceiptRefs: [],
+        };
+        return () => {};
+      });
+      const parent = await harness.createConductor(
+        SessionId(`case_${randomUUID().replaceAll('-', '')}`),
+      );
+      const started = await harness.ctx.subagents.startContinuable({
+        provider: 'spawn',
+        label: 'PACT Rewriter',
+        request: {
+          parent: parent.agent,
+          prompt: [{ type: 'text', text: 'submit the late fictional contribution' }],
+          agentOptions: {
+            provider: 'deepseek-official',
+            model: 'deepseek-v4-pro',
+          },
+          persona: 'You are the PACT Rewriter. Use only the visible PACT tool.',
+          toolFilter: { allow: ['pact_submit_contribution'] },
+        },
+        signal: new AbortController().signal,
+      });
+      harness.registry.closeTurn('turn_provider_late01');
+      gate.resolve();
+      const child = harness.ctx.agents.get(started.childId);
+      if (child === undefined) throw new Error('late test child not active');
+      await child.whenIdle();
+
+      expect(harness.registry.currentProposal('turn_provider_late01')).toEqual([]);
+      const record = ledger.attemptRecords()[0];
+      expect(record?.contract.lateQuarantined).toBe(true);
+      expect(record?.contract.toolCalls[0]?.status).toBe('rejected');
+      expect(() => ledger.assertComplete()).toThrow(
+        /PROVIDER_RESULT_LATE_QUARANTINED/,
+      );
     } finally {
       await harness.dispose();
     }
