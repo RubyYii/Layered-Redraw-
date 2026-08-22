@@ -1,4 +1,5 @@
 .gemini-agent/
+.dsh-cp03-gate/
 __pycache__/
 *.py[cod]
 .pytest_cache/
