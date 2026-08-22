@@ -40,7 +40,7 @@ Read `references/reference-intelligence.md` whenever the user supplies multiple 
 4. Save `planning-request.json` before resolving regions. Keep raw depth immutable; in Art Direction mode, flattening and exaggeration affect only the planner's interpretation.
 5. Write valid `semantic-regions.json`, then run `plan-resolve` to produce 5–20 stable semantic layers. Never substitute depth bands for semantic layers, and never invent per-pixel masks when only labels exist.
 6. Carry the resolved `layer-plan.json` into vector or raster production. Preserve the registered source bundle and all depth-run hashes in recoverable snapshots.
-7. When the user wants a spatial view, open the editor's 3D canvas or export `spatial-bridge.json`. Treat its height field as 2.5D relative geometry: it can support orbiting, composition, and downstream adapter work, but cannot recover metric scale, hidden surfaces, or full scene topology.
+7. When the user wants a spatial view, open the editor's 3D canvas or export `spatial-bridge.json`. For Scene Builder staging, select a carrier and import the Layered Redraw project folder (or the bridge, RGB, and depth-preview files together); the importer verifies both artifact hashes. Treat the resulting height field as 2.5D relative geometry: it supports orbiting and composition, but cannot recover metric scale, hidden surfaces, collision geometry, or full scene topology.
 
 ## Create vector artwork
 

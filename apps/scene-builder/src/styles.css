@@ -2023,6 +2023,7 @@ button:disabled {
 }
 
 .preview-indicator[hidden],
+.simulation-indicator[hidden],
 .performance-indicator[hidden],
 .dialogue-overlay[hidden] {
   display: none;
@@ -2034,6 +2035,45 @@ button:disabled {
   border-radius: 50%;
   background: var(--danger);
   box-shadow: 0 0 8px rgb(239 125 113 / 80%);
+}
+
+.simulation-indicator {
+  position: absolute;
+  top: 52px;
+  left: 16px;
+  z-index: 10;
+  display: grid;
+  max-width: min(360px, calc(100% - 32px));
+  gap: 2px;
+  padding: 6px 9px;
+  border: 1px solid rgb(117 215 216 / 26%);
+  border-radius: 4px;
+  background: rgb(13 18 18 / 82%);
+  color: var(--text-muted);
+  font-size: 9px;
+  line-height: 1.35;
+  backdrop-filter: blur(8px);
+}
+
+.simulation-indicator strong {
+  color: #9ddfda;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.simulation-indicator[data-state="contact"] strong,
+.simulation-indicator[data-state="held"] strong,
+.simulation-indicator[data-state="placed"] strong {
+  color: var(--accent-strong);
+}
+
+.simulation-indicator[data-state="error"] {
+  border-color: rgb(239 125 113 / 45%);
+}
+
+.simulation-indicator[data-state="error"] strong {
+  color: var(--danger);
 }
 
 .performance-indicator {
@@ -2237,6 +2277,11 @@ canvas.is-director-preview {
   background: rgb(255 255 255 / 2%);
 }
 
+.asset-import-status[data-format="RGB-D"] {
+  border-color: rgb(111 159 219 / 34%);
+  background: linear-gradient(135deg, rgb(111 159 219 / 9%), rgb(127 189 118 / 5%));
+}
+
 .asset-import-status strong {
   overflow: hidden;
   color: var(--text);
@@ -2253,12 +2298,26 @@ canvas.is-director-preview {
 }
 
 .asset-import-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
 
 .asset-import-actions .text-button {
-  flex: 1;
+  min-width: 0;
+  padding-inline: 7px;
+  font-size: 11px;
+}
+
+#clear-asset-file {
+  grid-column: 1 / -1;
+}
+
+.asset-spatial-fallback {
+  grid-column: 1 / -1;
+  min-height: 27px;
+  color: var(--text-muted);
+  font-size: 9px !important;
 }
 
 .asset-runtime-controls[hidden],

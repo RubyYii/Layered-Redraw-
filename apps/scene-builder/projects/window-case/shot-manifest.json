@@ -1,7 +1,214 @@
 {
-  "version": 2,
+  "version": 3,
   "title": "不存在的窗 · 电影沙盒交互版",
   "duration": 166,
+  "renderContract": {
+    "fps": 30,
+    "resolution": [
+      1280,
+      720
+    ],
+    "screenLanguage": "en",
+    "sourceLine": "CASE 01 · CONSTRUCTED TEST CASE · NO REAL NARRATOR YET",
+    "roomContinuity": "one-continuous-world"
+  },
+  "screenText": [
+    {
+      "start": 0,
+      "end": 4,
+      "layout": "center",
+      "text": "I want to see that room one more time."
+    },
+    {
+      "start": 4,
+      "end": 12,
+      "layout": "center",
+      "text": "I want to see that room one more time.\n\nBut don't bring anyone back."
+    },
+    {
+      "start": 12,
+      "end": 19,
+      "eyebrow": "EVIDENCE 01",
+      "text": "THE ONLY SURVIVING PHOTOGRAPH"
+    },
+    {
+      "start": 19,
+      "end": 24,
+      "eyebrow": "EVIDENCE 01",
+      "text": "NO APERTURE VISIBLE"
+    },
+    {
+      "start": 24,
+      "end": 30,
+      "eyebrow": "EVIDENCE 01",
+      "text": "THIS IMAGE WILL NOT CHANGE AT ANY POINT IN THIS FILM"
+    },
+    {
+      "start": 30,
+      "end": 40,
+      "eyebrow": "BODY MEMORY",
+      "text": "The body remembers otherwise."
+    },
+    {
+      "start": 40,
+      "end": 44,
+      "eyebrow": "BODY MEMORY",
+      "text": "Sunlight reached the bed in the afternoon."
+    },
+    {
+      "start": 44,
+      "end": 48,
+      "eyebrow": "BODY MEMORY",
+      "text": "Sunlight reached the bed in the afternoon.",
+      "note": "THERE IS NO PHOTOGRAPH OF THIS"
+    },
+    {
+      "start": 48,
+      "end": 55,
+      "eyebrow": "WITHHELD PHRASE",
+      "text": "A re-enacted phrase belongs to this case: close the window."
+    },
+    {
+      "start": 55,
+      "end": 58,
+      "eyebrow": "WITHHELD PHRASE",
+      "text": "This version does not play it."
+    },
+    {
+      "start": 58,
+      "end": 60,
+      "eyebrow": "WITHHELD PHRASE",
+      "text": "The system has no narrator who could grant that voice."
+    },
+    {
+      "start": 60,
+      "end": 62,
+      "eyebrow": "WITHHELD PHRASE",
+      "text": "THE WITHHOLDING IS NOT A PLACEHOLDER.",
+      "note": "IT IS THE SAME RULE THE WORK RUNS ON."
+    },
+    {
+      "start": 62,
+      "end": 68,
+      "layout": "center",
+      "text": "Should there be a window in this wall?"
+    },
+    {
+      "start": 68,
+      "end": 72,
+      "layout": "center",
+      "text": "Should there be a window in this wall?",
+      "note": "NO CANONICAL ANSWER"
+    },
+    {
+      "start": 72,
+      "end": 78,
+      "eyebrow": "PERMISSION MAP",
+      "text": "REWRITABLE",
+      "note": "THE WALL · THE WINDOW · THE BED · THE LIGHT · THE NARRATOR'S OWN RE-ENACTMENT"
+    },
+    {
+      "start": 78,
+      "end": 84,
+      "eyebrow": "PERMISSION MAP",
+      "text": "FORBIDDEN",
+      "note": "RECOGNISABLE FACES · BODIES · CLONED VOICES · NEW DIALOGUE · NAMES · ADDRESSES"
+    },
+    {
+      "start": 84,
+      "end": 87.8,
+      "eyebrow": "PERMISSION MAP",
+      "text": "The room may come back.\nThe person inside may not."
+    },
+    {
+      "start": 87.8,
+      "end": 90,
+      "eyebrow": "PERMISSION MAP",
+      "text": "The narrator's position is held open, not filled."
+    },
+    {
+      "start": 90,
+      "end": 98,
+      "eyebrow": "ACTION 01 / TRANSLATE",
+      "text": "The window becomes light.",
+      "note": "No opening is added."
+    },
+    {
+      "start": 98,
+      "end": 106,
+      "eyebrow": "ACTION 02 / REFRAME",
+      "text": "The evidence is untouched.",
+      "note": "The world outside the frame is inferred."
+    },
+    {
+      "start": 106,
+      "end": 114,
+      "eyebrow": "ACTION 03 / MERGE",
+      "text": "Both rooms are kept.",
+      "note": "The contradiction is not smoothed."
+    },
+    {
+      "start": 114,
+      "end": 122,
+      "eyebrow": "ACTION 04 / CONTINUE",
+      "text": "No evidence exists.",
+      "note": "The window is allowed to grow."
+    },
+    {
+      "start": 122,
+      "end": 130,
+      "eyebrow": "ACTION 05 / KEEP OPAQUE",
+      "text": "Inference stops at the surface.",
+      "note": "WILL NEVER CREATE A CLOUD TASK"
+    },
+    {
+      "start": 130,
+      "end": 138,
+      "eyebrow": "ENDING 01 / AUTHORISED",
+      "text": "This is one interpretation of this round.",
+      "note": "NOT A FACTUAL RESTORATION"
+    },
+    {
+      "start": 138,
+      "end": 146,
+      "eyebrow": "ENDING 02 / MISREADING",
+      "text": "Two years, two beds, one confident room.",
+      "note": "NOTHING WAS VIOLATED"
+    },
+    {
+      "start": 146,
+      "end": 152,
+      "eyebrow": "ENDING 03 / OPACITY",
+      "text": "The wall kept the question.",
+      "note": "WITHHELD BY THE NARRATOR"
+    },
+    {
+      "start": 152,
+      "end": 154,
+      "layout": "center",
+      "text": "THREE ENDINGS. EQUAL DURATION.\nEQUAL INTENSITY. NO WINNER."
+    },
+    {
+      "start": 154,
+      "end": 161,
+      "layout": "center",
+      "text": "The audience does not decide whether the window existed.\nThey decide how much evidence a memory needs before it may be given a shape."
+    },
+    {
+      "start": 161,
+      "end": 164,
+      "layout": "center",
+      "eyebrow": "CONCEPT SAMPLE · CASE 01",
+      "text": "Who May Rewrite a Memory?"
+    },
+    {
+      "start": 164,
+      "end": 166,
+      "layout": "center",
+      "text": "NO GENERATED FACES. NO GENERATED BODIES.\nNO CLONED VOICES.",
+      "note": "NO REAL ABSENCE WAS USED TO TEST THIS SYSTEM."
+    }
+  ],
   "shots": [
     {
       "id": "B1-01",

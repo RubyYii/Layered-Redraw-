@@ -304,6 +304,7 @@ class LayeredRedrawTests(unittest.TestCase):
             self.assertTrue(bridge["invariants"]["raw_depth_immutable"])
             self.assertTrue(bridge["invariants"]["relative_depth_must_not_be_treated_as_metres"])
             self.assertEqual(bridge["handoff"]["contract"], "depth-heightfield-v1")
+            self.assertEqual(bridge["handoff"]["status"], "ready-for-import")
 
             replacement_run = TOOLS.REFERENCES.estimate_depth(
                 project,

@@ -74,6 +74,8 @@ const ROLE_DEFAULTS = Object.freeze({
 
 const TIMELINE_TYPES = new Set(["move", "rotate", "scale", "visibility", "dialogue", "camera", "attach", "interaction"]);
 const TIMELINE_TRACKS = new Set(["camera", "character", "prop", "environment", "dialogue"]);
+const OWNERSHIP_MODES = new Set(["none", "claim", "transfer", "release"]);
+const COLLISION_PROXY_SHAPES = new Set(["box", "sphere", "cylinder", "capsule"]);
 
 const clone = (value) => structuredClone(value);
 const cloneProjectValue = (value) => {
@@ -214,17 +216,40 @@ const normalizeAffordanceMap = (value, anchorNames, limit = 24) => {
         maxDistance: clamp(finite(raw.maxDistance, 1.25), 0.05, 100),
         resultingState: cleanText(raw.resultingState, 96) || null,
         requiresLineOfSight: raw.requiresLineOfSight !== false,
+        ownershipMode: OWNERSHIP_MODES.has(raw.ownershipMode) ? raw.ownershipMode : "none",
+        holderAnchor: cleanText(raw.holderAnchor, 48) || "carry",
+        recipientAnchor: cleanText(raw.recipientAnchor, 48) || "carry",
+        itemAnchor: cleanText(raw.itemAnchor, 48) || targetAnchor || "grip",
+        placementAnchor: cleanText(raw.placementAnchor, 48) || "surface",
+        actorContactAnchor: cleanText(raw.actorContactAnchor, 48) || targetAnchor || "grip",
       }];
     })
     .filter(Boolean));
+};
+
+const normalizeCollisionProxy = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if (value.enabled === false) return { enabled: false };
+  const shape = COLLISION_PROXY_SHAPES.has(value.shape) ? value.shape : "box";
+  return {
+    enabled: true,
+    shape,
+    dimensions: Array.isArray(value.dimensions)
+      ? normalizeVector(value.dimensions, [1, 1, 1], 0.01)
+      : null,
+    offset: normalizeVector(value.offset, [0, 0, 0]),
+    margin: clamp(finite(value.margin, 0.02), 0, 0.5),
+    support: value.support === true,
+  };
 };
 
 const normalizeInteractionSpec = (value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const anchors = normalizeAnchorMap(value.anchors);
   const affordances = normalizeAffordanceMap(value.affordances, new Set(Object.keys(anchors)));
-  if (!Object.keys(anchors).length && !Object.keys(affordances).length) return null;
-  return { anchors, affordances };
+  const collisionProxy = normalizeCollisionProxy(value.collisionProxy);
+  if (!Object.keys(anchors).length && !Object.keys(affordances).length && !collisionProxy) return null;
+  return { anchors, affordances, collisionProxy };
 };
 
 const normalizeVectorPath = (value, limit = 16) => (Array.isArray(value)
@@ -384,6 +409,20 @@ const normalizeClip = (value, objectIds) => {
     targetAnchor: cleanText(value.targetAnchor, 48) || null,
     actorNode: cleanText(value.actorNode, 48) || null,
     resultingState: cleanText(value.resultingState, 96) || null,
+    ownershipMode: OWNERSHIP_MODES.has(value.ownershipMode) ? value.ownershipMode : "none",
+    recipientId: value.recipientId && objectIds.has(String(value.recipientId))
+      ? String(value.recipientId)
+      : null,
+    placementTargetId: value.placementTargetId && objectIds.has(String(value.placementTargetId))
+      ? String(value.placementTargetId)
+      : null,
+    holderAnchor: cleanText(value.holderAnchor, 48) || "carry",
+    recipientAnchor: cleanText(value.recipientAnchor, 48) || "carry",
+    itemAnchor: cleanText(value.itemAnchor, 48) || cleanText(value.targetAnchor, 48) || "grip",
+    placementAnchor: cleanText(value.placementAnchor, 48) || "surface",
+    actorContactAnchor: cleanText(value.actorContactAnchor, 48)
+      || (value.ownershipMode === "release" ? "grip" : cleanText(value.targetAnchor, 48))
+      || "grip",
     preset,
     fromPreset,
     framing: clamp(finite(value.framing, 1), 0.25, 4),

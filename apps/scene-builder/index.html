@@ -78,6 +78,7 @@
           <div id="project-menu" class="project-menu" hidden>
             <button id="new-project" type="button">新建空场景</button>
             <button id="load-demo" type="button">恢复示例场景</button>
+            <button id="load-interaction-demo" type="button">载入十秒交互仿真</button>
           </div>
           <input id="project-file" type="file" accept="application/json,.json" hidden />
         </div>
@@ -201,6 +202,10 @@
             <img id="reference-backdrop" class="reference-backdrop" alt="场景概念图叠加参考" hidden />
             <div id="preview-indicator" class="preview-indicator" hidden>
               <span></span> 导演预览
+            </div>
+            <div id="simulation-indicator" class="simulation-indicator" data-state="idle" hidden aria-live="polite">
+              <strong id="simulation-phase">SIM 60Hz</strong>
+              <span id="simulation-detail">等待交互</span>
             </div>
             <div id="performance-indicator" class="performance-indicator" hidden aria-live="off">
               <strong id="performance-fps">-- FPS</strong>
@@ -482,10 +487,14 @@
                   <small id="asset-session-detail">OBJ 用于静态网格；GLB 可携带骨架、动作与表情 Morph。</small>
                 </div>
                 <div class="asset-import-actions">
-                  <button id="choose-asset-file" class="text-button is-primary" type="button">导入 OBJ / GLB</button>
+                  <button id="choose-asset-file" class="text-button is-primary" type="button">OBJ / GLB</button>
+                  <button id="choose-spatial-bridge" class="text-button" type="button">RGB-D 工程</button>
+                  <button id="choose-spatial-files" class="text-button asset-spatial-fallback" type="button">改选桥接 + RGB + 深度</button>
                   <button id="clear-asset-file" class="text-button" type="button" hidden>恢复灰模</button>
                 </div>
                 <input id="asset-file" type="file" accept="model/gltf-binary,model/obj,.glb,.obj" hidden />
+                <input id="spatial-bridge-folder" type="file" accept="application/json,image/png,.json,.png" webkitdirectory multiple hidden />
+                <input id="spatial-bridge-files" type="file" accept="application/json,image/png,.json,.png" multiple hidden />
                 <div id="asset-runtime-controls" class="asset-runtime-controls" hidden>
                   <label for="asset-action-preview"><span>动作预览</span><select id="asset-action-preview" class="field-control"></select></label>
                   <label for="asset-expression-preview"><span>表情／Morph</span><select id="asset-expression-preview" class="field-control"></select></label>
@@ -497,10 +506,10 @@
                   <button id="clear-asset-expression" class="text-button" type="button">清除表情</button>
                 </div>
                 <details id="asset-rig-details" class="asset-rig-details" hidden>
-                  <summary>骨架与控制接口</summary>
+                  <summary id="asset-detail-summary">骨架与控制接口</summary>
                   <p id="asset-rig-detail"></p>
                 </details>
-                <small>会话级预览：自动识别节点、骨骼、动作槽和常见表情。OBJ 不含骨骼／动画；模型二进制暂不写入项目 JSON。</small>
+                <small>模型导入会识别骨架与动作；RGB-D 优先选择 Layered Redraw 工程文件夹，目录选择不可用时可改选合同、RGB 和深度预览。两者都是会话级资产，不写入项目 JSON。</small>
               </fieldset>
 
               <fieldset class="interaction-fieldset">

@@ -7,6 +7,16 @@ import {
   yawForDirection,
 } from "./motion.js";
 import { attachmentPosition, interactionPhaseForProgress } from "./interaction-runtime.js";
+import {
+  FixedStepClock,
+  SIMULATION_HZ,
+  resolveInteractionSimulation,
+} from "./simulation-runtime.js";
+import {
+  mergeCollisionReports,
+  resolveCharacterCollisions,
+  resolvePropCollisions,
+} from "./collision-runtime.js";
 
 const NUMBER = "-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
 const VECTOR_PATTERN = new RegExp(`[（(]\\s*(${NUMBER})\\s*[,，、\\s]+\\s*(${NUMBER})\\s*[,，、\\s]+\\s*(${NUMBER})\\s*[)）]`);
@@ -100,6 +110,8 @@ export const SCREENPLAY_SYNTAX = Object.freeze([
   "物品 放大 1.5 倍，用时 1 秒",
   "物品 隐藏",
   "角色：这里是一句对白。",
+  "角色 将 物品 交给 另一角色，用时 1 秒",
+  "角色 将 物品 放到 接触面，用时 1 秒",
   "等待 0.5 秒",
 ]);
 
@@ -114,6 +126,7 @@ export function compileScreenplay(screenplay, project) {
   }]));
   const clips = [];
   const issues = [];
+  const owners = new Map();
   let cursor = 0;
   let cameraState = { preset: "perspective", targetId: null };
 
@@ -319,6 +332,87 @@ export function compileScreenplay(screenplay, project) {
       return;
     }
 
+    const transferMatch = action.match(/^(?:将|把)?\s*(.+?)\s*(?:交给|递给)\s*(.+)$/);
+    if (transferMatch) {
+      const item = resolveMention(transferMatch[1], objects, object.id);
+      const recipient = resolveMention(transferMatch[2], objects, object.id);
+      if (!item || !recipient || recipient.entity.role !== "character") {
+        issues.push(issue("error", lineNumber, "交接指令需要一个存在的物品和另一个角色。"));
+        return;
+      }
+      if (owners.get(item.id) !== object.id) {
+        issues.push(issue("error", lineNumber, `“${object.name}”当前没有持有“${item.name}”。`));
+        return;
+      }
+      const affordance = Object.values(item.interactionSpec?.affordances ?? {})
+        .find((candidate) => candidate.ownershipMode === "transfer");
+      if (!affordance) {
+        issues.push(issue("error", lineNumber, `“${item.name}”没有声明 transfer affordance。`));
+        return;
+      }
+      addClip(lineNumber, "interaction", {
+        track: "character",
+        label: `${object.name} → ${recipient.name} · 交接 ${item.name}`,
+        targetId: item.id,
+        secondaryTargetId: object.id,
+        recipientId: recipient.id,
+        action: affordance.action,
+        targetAnchor: affordance.targetAnchor,
+        actorNode: affordance.actorNode,
+        resultingState: affordance.resultingState,
+        ownershipMode: "transfer",
+        recipientAnchor: affordance.recipientAnchor,
+        itemAnchor: affordance.itemAnchor,
+        actorContactAnchor: affordance.actorContactAnchor,
+        duration,
+        motion: { easing: "minimumJerk" },
+      });
+      owners.set(item.id, recipient.id);
+      return;
+    }
+
+    const placementMatch = action.match(/^(?:将|把)?\s*(.+?)\s*(?:放到|放在)\s*(.+)$/);
+    if (placementMatch) {
+      const item = resolveMention(placementMatch[1], objects, object.id);
+      const placementTarget = resolveMention(placementMatch[2], objects, object.id);
+      if (!item || !placementTarget) {
+        issues.push(issue("error", lineNumber, "放置指令需要一个已持有物品和一个存在的接触面。"));
+        return;
+      }
+      if (owners.get(item.id) !== object.id) {
+        issues.push(issue("error", lineNumber, `“${object.name}”当前没有持有“${item.name}”。`));
+        return;
+      }
+      const affordance = Object.values(item.interactionSpec?.affordances ?? {})
+        .find((candidate) => candidate.ownershipMode === "release");
+      const placementAnchor = affordance?.placementAnchor || "surface";
+      if (!affordance || !placementTarget.interactionSpec?.anchors?.[placementAnchor]) {
+        issues.push(issue("error", lineNumber, `物品或接触面缺少 release / ${placementAnchor} 锚点。`));
+        return;
+      }
+      addClip(lineNumber, "interaction", {
+        track: "character",
+        label: `${object.name} · 放置 ${item.name}`,
+        targetId: item.id,
+        secondaryTargetId: object.id,
+        placementTargetId: placementTarget.id,
+        action: affordance.action,
+        targetAnchor: affordance.targetAnchor,
+        actorNode: affordance.actorNode,
+        resultingState: affordance.resultingState,
+        ownershipMode: "release",
+        placementAnchor,
+        itemAnchor: affordance.itemAnchor,
+        actorContactAnchor: affordance.actorContactAnchor,
+        duration,
+        motion: { easing: "minimumJerk" },
+      });
+      owners.delete(item.id);
+      const placementState = states.get(placementTarget.id);
+      if (placementState) states.get(item.id).position = cloneVector(placementState.position);
+      return;
+    }
+
     if (/^(?:拿起|拾取)/.test(action)) {
       const item = resolveMention(action, objects, object.id);
       if (!item) {
@@ -329,14 +423,36 @@ export function compileScreenplay(screenplay, project) {
         issues.push(issue("error", lineNumber, `“${item.name}”没有开启可拿取能力。`));
         return;
       }
-      addClip(lineNumber, "attach", {
-        track: "prop",
-        label: `${object.name} · 拿起 ${item.name}`,
-        targetId: item.id,
-        secondaryTargetId: object.id,
-        offset: [0.65, 0.8, 0],
-        duration: durationFrom(line, 0.6),
-      });
+      const affordance = Object.values(item.interactionSpec?.affordances ?? {})
+        .find((candidate) => candidate.ownershipMode === "claim");
+      if (affordance) {
+        addClip(lineNumber, "interaction", {
+          track: "character",
+          label: `${object.name} · 抓取 ${item.name}`,
+          targetId: item.id,
+          secondaryTargetId: object.id,
+          action: affordance.action,
+          targetAnchor: affordance.targetAnchor,
+          actorNode: affordance.actorNode,
+          resultingState: affordance.resultingState,
+          ownershipMode: "claim",
+          holderAnchor: affordance.holderAnchor,
+          itemAnchor: affordance.itemAnchor,
+          actorContactAnchor: affordance.actorContactAnchor,
+          duration: durationFrom(line, 0.6),
+          motion: { easing: "minimumJerk" },
+        });
+        owners.set(item.id, object.id);
+      } else {
+        addClip(lineNumber, "attach", {
+          track: "prop",
+          label: `${object.name} · 拿起 ${item.name}`,
+          targetId: item.id,
+          secondaryTargetId: object.id,
+          offset: [0.65, 0.8, 0],
+          duration: durationFrom(line, 0.6),
+        });
+      }
       const holderState = states.get(object.id);
       states.get(item.id).position = holderState.position.map((value, axis) => value + [0.65, 0.8, 0][axis]);
       return;
@@ -424,7 +540,12 @@ export function evaluateTimeline(project, rawTime) {
           targetAnchor: clip.targetAnchor,
           actorNode: clip.actorNode,
           progress: eased,
-          phase: interactionPhaseForProgress(eased),
+          phase: interactionPhaseForProgress(progress),
+          ownershipMode: clip.ownershipMode,
+          recipientId: clip.recipientId,
+          placementTargetId: clip.placementTargetId,
+          contactTargetId: clip.targetId,
+          contactAnchor: clip.actorContactAnchor || clip.targetAnchor,
         });
       } else if (clip.resultingState) {
         target.semanticState = clip.resultingState;
@@ -461,6 +582,36 @@ export function evaluateTimeline(project, rawTime) {
     else if (source.nodeRole === "probe") state.rotation[1] += Math.sin(secondaryCycle * 0.41) * 0.8;
   }
 
+  const characterCollisions = resolveCharacterCollisions(project, objects);
+  const simulation = resolveInteractionSimulation(project, objects, time);
+  const propCollisions = resolvePropCollisions(project, objects);
+  simulation.collision = mergeCollisionReports(characterCollisions, propCollisions);
+  const contactsByClip = new Map(simulation.contacts.map((contact) => [contact.clipId, contact]));
+  for (const interaction of interactions) {
+    const contact = contactsByClip.get(interaction.id);
+    if (contact) Object.assign(interaction, contact);
+  }
+  const activeInteractionItems = new Set(interactions.map((interaction) => interaction.targetId));
+  const persistentHolds = Object.entries(simulation.ownership)
+    .filter(([itemId, ownership]) => ownership.status === "held" && !activeInteractionItems.has(itemId))
+    .map(([itemId, ownership]) => {
+      const itemSource = sourceById.get(itemId);
+      const holdAffordance = Object.values(itemSource?.interactionSpec?.affordances ?? {})
+        .find((affordance) => affordance.ownershipMode === "claim" || affordance.ownershipMode === "transfer");
+      return {
+        id: `persistent-hold-${itemId}`,
+        actorId: ownership.holderId,
+        targetId: itemId,
+        action: "hold",
+        actorNode: holdAffordance?.actorNode ?? "effector",
+        ownershipMode: "hold",
+        contactTargetId: itemId,
+        contactAnchor: ownership.itemAnchor ?? holdAffordance?.actorContactAnchor ?? "grip",
+        phase: { name: "contact", progress: 1, contactWeight: 1 },
+        passive: true,
+      };
+    });
+
   return {
     time,
     duration: timeline.duration || 0,
@@ -468,6 +619,8 @@ export function evaluateTimeline(project, rawTime) {
     camera,
     dialogue,
     interactions,
+    interactionPoses: [...interactions, ...persistentHolds],
+    simulation,
     activeClipIds,
   };
 }
@@ -481,14 +634,15 @@ export function formatTimecode(time) {
 }
 
 export class DirectorRuntime {
-  constructor(project, onFrame, onState = () => {}) {
+  constructor(project, onFrame, onState = () => {}, { simulationHz = SIMULATION_HZ } = {}) {
     this.project = project;
     this.onFrame = onFrame;
     this.onState = onState;
     this.time = 0;
     this.playing = false;
     this.animationFrame = 0;
-    this.startedAt = 0;
+    this.fixedClock = new FixedStepClock({ hz: simulationHz });
+    this.lastSimulationStep = this.fixedClock.snapshot();
     this.emit();
   }
 
@@ -497,18 +651,25 @@ export class DirectorRuntime {
   }
 
   getState() {
-    return { time: this.time, duration: this.duration, playing: this.playing };
+    return {
+      time: this.time,
+      duration: this.duration,
+      playing: this.playing,
+      simulation: this.lastSimulationStep,
+    };
   }
 
   setProject(project) {
     this.project = project;
     this.time = clamp(this.time, 0, this.duration);
-    if (this.playing) this.startedAt = performance.now() - this.time * 1000;
+    this.lastSimulationStep = this.fixedClock.reset(this.time, this.playing ? performance.now() : null);
     this.emit();
   }
 
   emit() {
-    this.onFrame(evaluateTimeline(this.project, this.time));
+    const frame = evaluateTimeline(this.project, this.time);
+    frame.simulation = { ...frame.simulation, clock: this.lastSimulationStep };
+    this.onFrame(frame);
     this.onState(this.getState());
   }
 
@@ -517,7 +678,7 @@ export class DirectorRuntime {
     if (this.time >= this.duration) this.time = 0;
     if (this.playing) return true;
     this.playing = true;
-    this.startedAt = performance.now() - this.time * 1000;
+    this.lastSimulationStep = this.fixedClock.reset(this.time, performance.now());
     this.onState(this.getState());
     this.animationFrame = requestAnimationFrame(this.tick);
     return true;
@@ -525,8 +686,9 @@ export class DirectorRuntime {
 
   tick = (timestamp) => {
     if (!this.playing) return;
-    this.time = clamp((timestamp - this.startedAt) / 1000, 0, this.duration);
-    this.emit();
+    this.lastSimulationStep = this.fixedClock.advance(timestamp, this.duration);
+    this.time = this.lastSimulationStep.time;
+    if (this.lastSimulationStep.steps > 0 || this.time >= this.duration) this.emit();
     if (this.time >= this.duration) {
       this.playing = false;
       this.onState(this.getState());
@@ -546,12 +708,13 @@ export class DirectorRuntime {
     this.playing = false;
     cancelAnimationFrame(this.animationFrame);
     this.time = 0;
+    this.lastSimulationStep = this.fixedClock.reset(0);
     this.emit();
   }
 
   seek(time) {
     this.time = clamp(Number(time) || 0, 0, this.duration);
-    if (this.playing) this.startedAt = performance.now() - this.time * 1000;
+    this.lastSimulationStep = this.fixedClock.reset(this.time, this.playing ? performance.now() : null);
     this.emit();
   }
 

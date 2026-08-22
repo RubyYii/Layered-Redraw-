@@ -10,6 +10,7 @@ import {
   serializeProject,
 } from "./model.js";
 import { ThreeSceneAdapter } from "./editor.js";
+import { createInteractionDemoProject } from "./interaction-demo.js";
 import {
   DirectorRuntime,
   SCREENPLAY_SYNTAX,
@@ -179,6 +180,7 @@ const elements = {
   projectMenu: $("#project-menu"),
   newProject: $("#new-project"),
   loadDemo: $("#load-demo"),
+  loadInteractionDemo: $("#load-interaction-demo"),
   duplicate: $("#duplicate-object"),
   delete: $("#delete-object"),
   libraryToggle: $("#toggle-library"),
@@ -234,8 +236,12 @@ const elements = {
   entityFriction: $("#entity-friction"),
   entityRestitution: $("#entity-restitution"),
   chooseAssetFile: $("#choose-asset-file"),
+  chooseSpatialBridge: $("#choose-spatial-bridge"),
+  chooseSpatialFiles: $("#choose-spatial-files"),
   clearAssetFile: $("#clear-asset-file"),
   assetFile: $("#asset-file"),
+  spatialBridgeFolder: $("#spatial-bridge-folder"),
+  spatialBridgeFiles: $("#spatial-bridge-files"),
   assetSessionTitle: $("#asset-session-title"),
   assetSessionDetail: $("#asset-session-detail"),
   assetRuntimeControls: $("#asset-runtime-controls"),
@@ -246,6 +252,7 @@ const elements = {
   assetExpressionOutput: $("#asset-expression-output"),
   clearAssetExpression: $("#clear-asset-expression"),
   assetRigDetails: $("#asset-rig-details"),
+  assetDetailSummary: $("#asset-detail-summary"),
   assetRigDetail: $("#asset-rig-detail"),
   interactionTrigger: $("#interaction-trigger"),
   interactionAction: $("#interaction-action"),
@@ -263,6 +270,9 @@ const elements = {
   timelinePlayhead: $("#timeline-playhead"),
   timelineScrubber: $("#timeline-scrubber"),
   previewIndicator: $("#preview-indicator"),
+  simulationIndicator: $("#simulation-indicator"),
+  simulationPhase: $("#simulation-phase"),
+  simulationDetail: $("#simulation-detail"),
   performanceIndicator: $("#performance-indicator"),
   performanceFps: $("#performance-fps"),
   performanceQuality: $("#performance-quality"),
@@ -1073,15 +1083,22 @@ const renderInspector = (state) => {
   elements.entityFriction.disabled = directorMode === "preview";
   elements.entityRestitution.disabled = directorMode === "preview";
   const assetReport = editor.assetReport(object.id);
+  const spatialReport = assetReport?.spatialBridge ?? null;
   elements.chooseAssetFile.disabled = directorMode === "preview";
+  elements.chooseSpatialBridge.disabled = directorMode === "preview";
+  elements.chooseSpatialFiles.disabled = directorMode === "preview";
   elements.clearAssetFile.disabled = directorMode === "preview";
   elements.clearAssetFile.hidden = !assetReport;
+  elements.assetSessionTitle.closest(".asset-import-status").dataset.format = assetReport?.format ?? "placeholder";
   elements.assetSessionTitle.textContent = assetReport ? assetReport.sourceName : "使用灰模";
   elements.assetSessionDetail.textContent = assetReport
-    ? `${assetReport.format} · ${assetReport.meshCount} 网格 · ${assetReport.skinnedMeshCount} 蒙皮 · ${assetReport.boneCount} 骨骼 · ${assetReport.clipNames.length} 动作 · ${assetReport.morphTargetNames.length} Morph`
-    : "OBJ 用于静态网格；GLB 可携带骨架、动作与表情 Morph。";
-  elements.assetRuntimeControls.hidden = !assetReport;
+    ? spatialReport
+      ? `RGB-D · ${spatialReport.imageSize.join("×")} px · ${spatialReport.meshSize.join("×")} 顶点 · RGB／深度哈希已验证 · 相对 2.5D`
+      : `${assetReport.format} · ${assetReport.meshCount} 网格 · ${assetReport.skinnedMeshCount} 蒙皮 · ${assetReport.boneCount} 骨骼 · ${assetReport.clipNames.length} 动作 · ${assetReport.morphTargetNames.length} Morph`
+    : "选择 OBJ／GLB 模型，或导入含 spatial-bridge.json 的 RGB-D 工程。";
+  elements.assetRuntimeControls.hidden = !assetReport || Boolean(spatialReport);
   elements.assetRigDetails.hidden = !assetReport;
+  elements.assetDetailSummary.textContent = spatialReport ? "空间合同与边界" : "骨架与控制接口";
   if (assetReport) {
     const assetKey = `${object.id}:${assetReport.sourceName}`;
     const mappedActions = Object.entries(assetReport.animations).filter(([, name]) => name);
@@ -1126,9 +1143,11 @@ const renderInspector = (state) => {
     const boneBindings = Object.entries(assetReport.bones).filter(([, name]) => name)
       .map(([slot, name]) => `${slot}→${name}`).join("、") || "无";
     const expressionBindings = mappedExpressions.map(([slot, name]) => `${slot}→${name}`).join("、") || "无";
-    const rigSummary = assetReport.format === "OBJ"
-      ? "静态 OBJ：没有骨骼、蒙皮权重、动画或 Morph；如需角色控制请导出为 GLB。"
-      : `骨架映射：${boneBindings}。表情映射：${expressionBindings}。运行时接口：playAction、setExpression、setBonePose。`;
+    const rigSummary = spatialReport
+      ? `已校验 RGB 与深度预览 2 个工件；合同指纹 ${spatialReport.contractSha256.slice(0, 12)}…。近白值沿表面法线向前，但仍是相对深度，不是米制重建。载体负责位置、旋转和尺寸；表面不会自动变成碰撞体。`
+      : assetReport.format === "OBJ"
+        ? "静态 OBJ：没有骨骼、蒙皮权重、动画或 Morph；如需角色控制请导出为 GLB。"
+        : `骨架映射：${boneBindings}。表情映射：${expressionBindings}。运行时接口：playAction、setExpression、setBonePose。`;
     elements.assetRigDetail.textContent = `${rigSummary}${assetReport.warnings.length ? ` 提示：${assetReport.warnings.join("；")}` : ""}`;
   }
   elements.interactionTrigger.value = object.entity.interaction.trigger;
@@ -1208,6 +1227,72 @@ const timelineTrackFor = (track) => track === "camera"
       ? "dialogue"
       : "world";
 
+const SIMULATION_PHASE_LABELS = Object.freeze({
+  anticipation: "预备",
+  reach: "伸手",
+  contact: "接触约束",
+  recovery: "恢复",
+});
+
+const SIMULATION_MODE_LABELS = Object.freeze({
+  claim: "抓取",
+  transfer: "交接",
+  release: "放置",
+});
+
+const renderSimulationStatus = (frame) => {
+  const simulation = frame.simulation ?? {};
+  const clockHz = simulation.clock?.hz ?? simulation.hz ?? 60;
+  const violation = simulation.violations?.[0];
+  const collision = simulation.collision;
+  const collisionLabel = collision
+    ? ` · 防穿透 ${collision.resolvedCount ?? 0} 处 · 残余 ${Number(collision.residualPenetration ?? 0).toFixed(3)}m`
+    : "";
+  const interaction = frame.interactions?.find((item) => item.ownershipMode && item.ownershipMode !== "none")
+    ?? frame.interactions?.[0];
+  const names = new Map(currentState.project.objects.map((object) => [object.id, object.name]));
+  let state = "idle";
+  let phase = "等待交互";
+  let detail = "确定性运动学后端 · 尚未接入刚体动力学";
+
+  if (violation) {
+    state = "error";
+    phase = "转换被拒绝";
+    detail = violation.message;
+  } else if (collision && !collision.safe) {
+    state = "error";
+    phase = "碰撞约束失败";
+    detail = `仍有 ${Number(collision.residualPenetration ?? 0).toFixed(3)}m 穿透，请检查碰撞代理。`;
+  } else if (interaction) {
+    state = interaction.phase?.name ?? "active";
+    phase = SIMULATION_PHASE_LABELS[interaction.phase?.name] ?? "语义交互";
+    const mode = SIMULATION_MODE_LABELS[interaction.ownershipMode] ?? interaction.action ?? "交互";
+    const actorName = names.get(interaction.actorId) ?? interaction.actorId;
+    const targetName = names.get(interaction.targetId) ?? interaction.targetId;
+    const error = Number(interaction.constraintError);
+    const errorLabel = Number.isFinite(error) ? ` · 剩余行程 ${error.toFixed(3)}m` : "";
+    detail = `${mode} · ${actorName} → ${targetName}${errorLabel}${collisionLabel}`;
+  } else {
+    const heldEntry = Object.entries(simulation.ownership ?? {}).find(([, value]) => value.status === "held");
+    const placedEntry = Object.entries(simulation.ownership ?? {}).find(([, value]) => value.status === "placed");
+    if (heldEntry) {
+      state = "held";
+      phase = "持续持有";
+      detail = `${names.get(heldEntry[0]) ?? heldEntry[0]} · 持有者 ${names.get(heldEntry[1].holderId) ?? heldEntry[1].holderId}${collisionLabel}`;
+    } else if (placedEntry) {
+      state = "placed";
+      phase = "放置完成";
+      detail = `${names.get(placedEntry[0]) ?? placedEntry[0]} · 接触面 ${names.get(placedEntry[1].placementTargetId) ?? placedEntry[1].placementTargetId}${collisionLabel}`;
+    } else if (collision) {
+      detail = `确定性运动学后端${collisionLabel}`;
+    }
+  }
+
+  elements.simulationIndicator.dataset.state = state;
+  elements.simulationPhase.textContent = `SIM ${clockHz}Hz · ${phase}`;
+  elements.simulationDetail.textContent = detail;
+};
+
 const updateTimelineFrame = (frame) => {
   currentFrame = frame;
   if (directorMode === "preview") {
@@ -1222,6 +1307,7 @@ const updateTimelineFrame = (frame) => {
     elements.dialogueOverlay.hidden = true;
     lastDialogueClipId = null;
   }
+  if (directorMode === "preview") renderSimulationStatus(frame);
 
   const uiDelta = Math.abs(frame.time - lastTimelineUiTime);
   if (runtime?.playing && uiDelta < 1 / 30) return;
@@ -1379,6 +1465,7 @@ const setDirectorMode = (mode) => {
   });
   elements.app.classList.toggle("is-preview", directorMode === "preview");
   elements.previewIndicator.hidden = directorMode !== "preview";
+  elements.simulationIndicator.hidden = directorMode !== "preview";
   elements.performanceIndicator.hidden = directorMode !== "preview";
   editor.setDirectorMode(directorMode);
 
@@ -1715,6 +1802,8 @@ elements.assetFile.addEventListener("change", async () => {
   const file = elements.assetFile.files?.[0];
   if (!object || !file) return;
   elements.chooseAssetFile.disabled = true;
+  elements.chooseSpatialBridge.disabled = true;
+  elements.chooseSpatialFiles.disabled = true;
   elements.assetSessionTitle.textContent = "正在解析模型…";
   elements.assetSessionDetail.textContent = "检查网格、比例、骨架、动作与表情 Morph，请稍候。";
   try {
@@ -1727,6 +1816,31 @@ elements.assetFile.addEventListener("change", async () => {
     renderInspector(currentState);
   }
 });
+
+elements.chooseSpatialBridge.addEventListener("click", () => elements.spatialBridgeFolder.click());
+elements.chooseSpatialFiles.addEventListener("click", () => elements.spatialBridgeFiles.click());
+const importSpatialSelection = async (input) => {
+  const object = selectedObject();
+  const files = [...(input.files ?? [])];
+  if (!object || !files.length) return;
+  elements.chooseAssetFile.disabled = true;
+  elements.chooseSpatialBridge.disabled = true;
+  elements.chooseSpatialFiles.disabled = true;
+  elements.assetSessionTitle.textContent = "正在校验 RGB-D 工程…";
+  elements.assetSessionDetail.textContent = "匹配桥接合同、RGB 与深度预览，并逐一校验 SHA-256。";
+  try {
+    const report = await editor.loadSpatialBridgeFiles(object.id, files);
+    const spatial = report.spatialBridge;
+    showToast(`已导入“${object.name}”的 RGB-D 表面：${spatial.imageSize.join("×")} · ${spatial.vertexCount} 顶点 · 2 个哈希已验证`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    input.value = "";
+    renderInspector(currentState);
+  }
+};
+elements.spatialBridgeFolder.addEventListener("change", () => importSpatialSelection(elements.spatialBridgeFolder));
+elements.spatialBridgeFiles.addEventListener("change", () => importSpatialSelection(elements.spatialBridgeFiles));
 
 elements.clearAssetFile.addEventListener("click", () => {
   const object = selectedObject();
@@ -1997,6 +2111,19 @@ elements.loadDemo.addEventListener("click", () => {
   store.replaceProject(ensureInitialTimeline(createStarterProject()));
   editor.setCameraPreset("perspective");
   showToast("示例灰模已恢复");
+});
+
+elements.loadInteractionDemo.addEventListener("click", () => {
+  elements.projectMenu.hidden = true;
+  elements.moreMenuButton.setAttribute("aria-expanded", "false");
+  setDirectorMode("edit");
+  runtime?.stop();
+  store.replaceProject(createInteractionDemoProject());
+  editor.setCameraPreset("perspective");
+  setLibraryMode("screenplay");
+  setDirectorMode("preview");
+  runtime?.seek(0);
+  showToast("已载入十秒交互仿真：走近、抓取、交接、放置");
 });
 
 const closeDrawers = () => {

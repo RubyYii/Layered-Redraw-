@@ -1,0 +1,2185 @@
+{
+  "schemaVersion": 3,
+  "id": "interaction-simulation-lab",
+  "name": "十秒交互仿真实验室",
+  "stage": "behavior",
+  "units": "m",
+  "updatedAt": "2026-08-22T00:00:00.000Z",
+  "reference": null,
+  "breakdown": [],
+  "objects": [
+    {
+      "id": "interaction-floor",
+      "type": "plane",
+      "name": "仿真地面",
+      "parentId": null,
+      "nodeRole": null,
+      "position": [
+        0,
+        -0.1,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        13,
+        0.2,
+        7
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#303837",
+      "visible": true,
+      "locked": true,
+      "render": {
+        "roughness": 0.94,
+        "metalness": 0.02,
+        "opacity": 1,
+        "emissive": "#000000",
+        "emissiveIntensity": 0,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "environment",
+        "state": "固定碰撞边界",
+        "capabilities": {
+          "movable": false,
+          "rotatable": false,
+          "scalable": false,
+          "visibility": true,
+          "speakable": false,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "static",
+          "mass": 0,
+          "friction": 0.8,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-backdrop",
+      "type": "box",
+      "name": "仿真背景墙",
+      "parentId": null,
+      "nodeRole": null,
+      "position": [
+        0,
+        2.25,
+        -3.15
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        13,
+        4.5,
+        0.22
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#202728",
+      "visible": true,
+      "locked": true,
+      "render": {
+        "roughness": 0.88,
+        "metalness": 0.04,
+        "opacity": 1,
+        "emissive": "#000000",
+        "emissiveIntensity": 0,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "environment",
+        "state": "固定碰撞边界",
+        "capabilities": {
+          "movable": false,
+          "rotatable": false,
+          "scalable": false,
+          "visibility": true,
+          "speakable": false,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "static",
+          "mass": 0,
+          "friction": 0.8,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-source-table",
+      "type": "box",
+      "name": "起始台",
+      "parentId": null,
+      "nodeRole": null,
+      "position": [
+        -0.35,
+        0.45,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        1.2,
+        0.9,
+        1.2
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#6c6253",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.74,
+        "metalness": 0.12,
+        "opacity": 1,
+        "emissive": "#000000",
+        "emissiveIntensity": 0,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": {
+        "anchors": {
+          "surface": [
+            0,
+            0.45,
+            0
+          ]
+        },
+        "affordances": {},
+        "collisionProxy": {
+          "enabled": true,
+          "shape": "box",
+          "dimensions": null,
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "margin": 0.01,
+          "support": true
+        }
+      },
+      "entity": {
+        "role": "environment",
+        "state": "固定碰撞边界",
+        "capabilities": {
+          "movable": false,
+          "rotatable": false,
+          "scalable": false,
+          "visibility": true,
+          "speakable": false,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "static",
+          "mass": 0,
+          "friction": 0.8,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-destination-table",
+      "type": "box",
+      "name": "放置台",
+      "parentId": null,
+      "nodeRole": null,
+      "position": [
+        4.15,
+        0.55,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        1.35,
+        1.1,
+        1.35
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#5e6657",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.7,
+        "metalness": 0.16,
+        "opacity": 1,
+        "emissive": "#4f6c55",
+        "emissiveIntensity": 0.08,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": {
+        "anchors": {
+          "surface": [
+            0,
+            0.55,
+            0
+          ]
+        },
+        "affordances": {},
+        "collisionProxy": {
+          "enabled": true,
+          "shape": "box",
+          "dimensions": null,
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "margin": 0.01,
+          "support": true
+        }
+      },
+      "entity": {
+        "role": "environment",
+        "state": "固定碰撞边界",
+        "capabilities": {
+          "movable": false,
+          "rotatable": false,
+          "scalable": false,
+          "visibility": true,
+          "speakable": false,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "static",
+          "mass": 0,
+          "friction": 0.8,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-cup",
+      "type": "cylinder",
+      "name": "交互杯",
+      "parentId": null,
+      "nodeRole": null,
+      "position": [
+        -0.35,
+        1.18,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        0.42,
+        0.56,
+        0.42
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#d8d0bd",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.36,
+        "metalness": 0.22,
+        "opacity": 1,
+        "emissive": "#ecb454",
+        "emissiveIntensity": 0.09,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": {
+        "anchors": {
+          "grip": [
+            0,
+            0,
+            0
+          ],
+          "bottom": [
+            0,
+            -0.28,
+            0
+          ]
+        },
+        "affordances": {
+          "pickup": {
+            "action": "pick_up",
+            "targetAnchor": "grip",
+            "actorNode": "effector",
+            "maxDistance": 1.1,
+            "resultingState": "由角色 A 持有",
+            "requiresLineOfSight": true,
+            "ownershipMode": "claim",
+            "holderAnchor": "carry",
+            "recipientAnchor": "carry",
+            "itemAnchor": "grip",
+            "placementAnchor": "surface",
+            "actorContactAnchor": "grip"
+          },
+          "handoff": {
+            "action": "hand_over",
+            "targetAnchor": "grip",
+            "actorNode": "effector",
+            "maxDistance": 1.2,
+            "resultingState": "由角色 B 持有",
+            "requiresLineOfSight": true,
+            "ownershipMode": "transfer",
+            "holderAnchor": "carry",
+            "recipientAnchor": "carry",
+            "itemAnchor": "grip",
+            "placementAnchor": "surface",
+            "actorContactAnchor": "grip"
+          },
+          "place": {
+            "action": "place_on_surface",
+            "targetAnchor": "bottom",
+            "actorNode": "effector",
+            "maxDistance": 1.2,
+            "resultingState": "稳定放置",
+            "requiresLineOfSight": true,
+            "ownershipMode": "release",
+            "holderAnchor": "carry",
+            "recipientAnchor": "carry",
+            "itemAnchor": "bottom",
+            "placementAnchor": "surface",
+            "actorContactAnchor": "grip"
+          }
+        },
+        "collisionProxy": {
+          "enabled": true,
+          "shape": "cylinder",
+          "dimensions": null,
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "margin": 0,
+          "support": false
+        }
+      },
+      "entity": {
+        "role": "prop",
+        "state": "位于起始台",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": false,
+          "grabbable": true
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 0.45,
+          "friction": 0.56,
+          "restitution": 0.05
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-a",
+      "type": "group",
+      "name": "角色 A · 递交者",
+      "parentId": null,
+      "nodeRole": null,
+      "position": [
+        -4,
+        0,
+        0.8
+      ],
+      "rotation": [
+        0,
+        -65,
+        0
+      ],
+      "dimensions": [
+        1,
+        1,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#ffffff",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.7,
+        "metalness": 0.02,
+        "opacity": 1,
+        "emissive": "#000000",
+        "emissiveIntensity": 0,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": {
+        "url": null,
+        "scale": 1,
+        "forwardAxis": "-Z",
+        "nodes": {
+          "root": "interaction-actor-a",
+          "head": "interaction-actor-a-head",
+          "arm": "interaction-actor-a-arm",
+          "effector": "interaction-actor-a-hand",
+          "statusLight": "interaction-actor-a-status"
+        },
+        "animations": {
+          "idle": "idle",
+          "move": "move",
+          "interact": "interact",
+          "react": "react"
+        },
+        "bones": {},
+        "expressions": {}
+      },
+      "motion": {
+        "kind": "wheel",
+        "hoverAmplitude": 0,
+        "hoverFrequency": 0.72,
+        "leanDegrees": 3,
+        "bankDegrees": 2,
+        "phase": 0
+      },
+      "interactionSpec": {
+        "anchors": {
+          "gaze": [
+            0,
+            1.46,
+            -0.18
+          ],
+          "shoulder": [
+            0,
+            1.02,
+            -0.12
+          ],
+          "effector": [
+            0,
+            1.02,
+            -0.26
+          ],
+          "carry": [
+            0,
+            1.24,
+            -0.62
+          ]
+        },
+        "affordances": {},
+        "collisionProxy": {
+          "enabled": true,
+          "shape": "capsule",
+          "dimensions": [
+            0.78,
+            1.76,
+            0.66
+          ],
+          "offset": [
+            0,
+            0.88,
+            0
+          ],
+          "margin": 0.06,
+          "support": false
+        }
+      },
+      "entity": {
+        "role": "character",
+        "state": "等待指令",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-a-body",
+      "type": "box",
+      "name": "角色 A · 递交者 · 机身",
+      "parentId": "interaction-actor-a",
+      "nodeRole": "body",
+      "position": [
+        0,
+        0.84,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        0.72,
+        0.86,
+        0.52
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#3d7880",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.42,
+        "metalness": 0.46,
+        "opacity": 1,
+        "emissive": "#3d7880",
+        "emissiveIntensity": 0.06,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "character",
+        "state": "角色子节点",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-a-head",
+      "type": "sphere",
+      "name": "角色 A · 递交者 · 观察头",
+      "parentId": "interaction-actor-a",
+      "nodeRole": "head",
+      "position": [
+        0,
+        1.48,
+        -0.05
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        0.52,
+        0.38,
+        0.46
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#75d7d8",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.32,
+        "metalness": 0.58,
+        "opacity": 1,
+        "emissive": "#75d7d8",
+        "emissiveIntensity": 0.08,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "character",
+        "state": "角色子节点",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-a-arm",
+      "type": "box",
+      "name": "角色 A · 递交者 · 伸缩机械臂",
+      "parentId": "interaction-actor-a",
+      "nodeRole": "arm",
+      "position": [
+        0,
+        1.02,
+        -0.19
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        0.13,
+        0.13,
+        0.14
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#75d7d8",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.3,
+        "metalness": 0.62,
+        "opacity": 1,
+        "emissive": "#75d7d8",
+        "emissiveIntensity": 0.08,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "character",
+        "state": "角色子节点",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-a-hand",
+      "type": "sphere",
+      "name": "角色 A · 递交者 · 交互执行器",
+      "parentId": "interaction-actor-a",
+      "nodeRole": "effector",
+      "position": [
+        0,
+        1.02,
+        -0.26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        0.24,
+        0.24,
+        0.24
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#f2a33a",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.25,
+        "metalness": 0.65,
+        "opacity": 1,
+        "emissive": "#f2a33a",
+        "emissiveIntensity": 0.22,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "character",
+        "state": "接触执行器",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-a-wheel",
+      "type": "cylinder",
+      "name": "角色 A · 递交者 · 移动轮",
+      "parentId": "interaction-actor-a",
+      "nodeRole": "locomotion",
+      "position": [
+        0,
+        0.28,
+        0.08
+      ],
+      "rotation": [
+        90,
+        0,
+        0
+      ],
+      "dimensions": [
+        0.62,
+        0.28,
+        0.62
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#252b2c",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.72,
+        "metalness": 0.38,
+        "opacity": 1,
+        "emissive": "#000000",
+        "emissiveIntensity": 0,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "character",
+        "state": "角色子节点",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-a-status",
+      "type": "sphere",
+      "name": "角色 A · 递交者 · 状态灯",
+      "parentId": "interaction-actor-a",
+      "nodeRole": "statusLight",
+      "position": [
+        0,
+        1.52,
+        -0.28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        0.13,
+        0.13,
+        0.13
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#75d7d8",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.2,
+        "metalness": 0.1,
+        "opacity": 1,
+        "emissive": "#75d7d8",
+        "emissiveIntensity": 1.8,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": {
+          "color": "#75d7d8",
+          "intensity": 0.6,
+          "distance": 2.4,
+          "decay": 2
+        }
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "character",
+        "state": "角色子节点",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-b",
+      "type": "group",
+      "name": "角色 B · 接收者",
+      "parentId": null,
+      "nodeRole": null,
+      "position": [
+        2.2,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        90,
+        0
+      ],
+      "dimensions": [
+        1,
+        1,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#ffffff",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.7,
+        "metalness": 0.02,
+        "opacity": 1,
+        "emissive": "#000000",
+        "emissiveIntensity": 0,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": {
+        "url": null,
+        "scale": 1,
+        "forwardAxis": "-Z",
+        "nodes": {
+          "root": "interaction-actor-b",
+          "head": "interaction-actor-b-head",
+          "arm": "interaction-actor-b-arm",
+          "effector": "interaction-actor-b-hand",
+          "statusLight": "interaction-actor-b-status"
+        },
+        "animations": {
+          "idle": "idle",
+          "move": "move",
+          "interact": "interact",
+          "react": "react"
+        },
+        "bones": {},
+        "expressions": {}
+      },
+      "motion": {
+        "kind": "wheel",
+        "hoverAmplitude": 0,
+        "hoverFrequency": 0.72,
+        "leanDegrees": 3,
+        "bankDegrees": 2,
+        "phase": 0
+      },
+      "interactionSpec": {
+        "anchors": {
+          "gaze": [
+            0,
+            1.46,
+            -0.18
+          ],
+          "shoulder": [
+            0,
+            1.02,
+            -0.12
+          ],
+          "effector": [
+            0,
+            1.02,
+            -0.26
+          ],
+          "carry": [
+            0,
+            1.38,
+            -0.62
+          ]
+        },
+        "affordances": {},
+        "collisionProxy": {
+          "enabled": true,
+          "shape": "capsule",
+          "dimensions": [
+            0.78,
+            1.76,
+            0.66
+          ],
+          "offset": [
+            0,
+            0.88,
+            0
+          ],
+          "margin": 0.06,
+          "support": false
+        }
+      },
+      "entity": {
+        "role": "character",
+        "state": "等待指令",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-b-body",
+      "type": "box",
+      "name": "角色 B · 接收者 · 机身",
+      "parentId": "interaction-actor-b",
+      "nodeRole": "body",
+      "position": [
+        0,
+        0.84,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        0.72,
+        0.86,
+        0.52
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#8b6b38",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.42,
+        "metalness": 0.46,
+        "opacity": 1,
+        "emissive": "#8b6b38",
+        "emissiveIntensity": 0.06,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "character",
+        "state": "角色子节点",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-b-head",
+      "type": "sphere",
+      "name": "角色 B · 接收者 · 观察头",
+      "parentId": "interaction-actor-b",
+      "nodeRole": "head",
+      "position": [
+        0,
+        1.48,
+        -0.05
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        0.52,
+        0.38,
+        0.46
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#f0bc58",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.32,
+        "metalness": 0.58,
+        "opacity": 1,
+        "emissive": "#f0bc58",
+        "emissiveIntensity": 0.08,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "character",
+        "state": "角色子节点",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-b-arm",
+      "type": "box",
+      "name": "角色 B · 接收者 · 伸缩机械臂",
+      "parentId": "interaction-actor-b",
+      "nodeRole": "arm",
+      "position": [
+        0,
+        1.02,
+        -0.19
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        0.13,
+        0.13,
+        0.14
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#f0bc58",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.3,
+        "metalness": 0.62,
+        "opacity": 1,
+        "emissive": "#f0bc58",
+        "emissiveIntensity": 0.08,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "character",
+        "state": "角色子节点",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-b-hand",
+      "type": "sphere",
+      "name": "角色 B · 接收者 · 交互执行器",
+      "parentId": "interaction-actor-b",
+      "nodeRole": "effector",
+      "position": [
+        0,
+        1.02,
+        -0.26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        0.24,
+        0.24,
+        0.24
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#f2a33a",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.25,
+        "metalness": 0.65,
+        "opacity": 1,
+        "emissive": "#f2a33a",
+        "emissiveIntensity": 0.22,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "character",
+        "state": "接触执行器",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-b-wheel",
+      "type": "cylinder",
+      "name": "角色 B · 接收者 · 移动轮",
+      "parentId": "interaction-actor-b",
+      "nodeRole": "locomotion",
+      "position": [
+        0,
+        0.28,
+        0.08
+      ],
+      "rotation": [
+        90,
+        0,
+        0
+      ],
+      "dimensions": [
+        0.62,
+        0.28,
+        0.62
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#252b2c",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.72,
+        "metalness": 0.38,
+        "opacity": 1,
+        "emissive": "#000000",
+        "emissiveIntensity": 0,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": null
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "character",
+        "state": "角色子节点",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    },
+    {
+      "id": "interaction-actor-b-status",
+      "type": "sphere",
+      "name": "角色 B · 接收者 · 状态灯",
+      "parentId": "interaction-actor-b",
+      "nodeRole": "statusLight",
+      "position": [
+        0,
+        1.52,
+        -0.28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "dimensions": [
+        0.13,
+        0.13,
+        0.13
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "color": "#f0bc58",
+      "visible": true,
+      "locked": false,
+      "render": {
+        "roughness": 0.2,
+        "metalness": 0.1,
+        "opacity": 1,
+        "emissive": "#f0bc58",
+        "emissiveIntensity": 1.8,
+        "edge": true,
+        "textureDataUrl": null,
+        "light": {
+          "color": "#f0bc58",
+          "intensity": 0.6,
+          "distance": 2.4,
+          "decay": 2
+        }
+      },
+      "asset": null,
+      "motion": null,
+      "interactionSpec": null,
+      "entity": {
+        "role": "character",
+        "state": "角色子节点",
+        "capabilities": {
+          "movable": true,
+          "rotatable": true,
+          "scalable": true,
+          "visibility": true,
+          "speakable": true,
+          "grabbable": false
+        },
+        "physics": {
+          "bodyType": "kinematic",
+          "mass": 68,
+          "friction": 0.72,
+          "restitution": 0
+        },
+        "interaction": {
+          "trigger": "script",
+          "action": "none",
+          "amount": 1.35
+        }
+      }
+    }
+  ],
+  "director": {
+    "screenplay": "# 固定 60Hz 的十秒交互验收\n镜头聚焦 交互杯，用时 0.2 秒\n角色 A · 递交者 移动到 (-1.25, 0, 0)，用时 2.2 秒\n角色 A · 递交者 拿起 交互杯，用时 1.2 秒\n角色 A · 递交者 移动到 (1, 0, 0)，用时 1.85 秒\n角色 A · 递交者 将 交互杯 交给 角色 B · 接收者，用时 1.3 秒\n角色 B · 接收者 移动到 (2.7, 0, 0)，用时 1.55 秒\n角色 B · 接收者 将 交互杯 放到 放置台，用时 1.25 秒\n等待 0.2 秒",
+    "timeline": {
+      "duration": 10,
+      "clips": [
+        {
+          "id": "interaction-camera",
+          "type": "camera",
+          "track": "camera",
+          "label": "镜头 · 连续跟随交接",
+          "line": 0,
+          "start": 0,
+          "duration": 10,
+          "targetId": null,
+          "secondaryTargetId": null,
+          "offset": [
+            0.65,
+            0.8,
+            0
+          ],
+          "text": "",
+          "action": "",
+          "targetAnchor": null,
+          "actorNode": null,
+          "resultingState": null,
+          "ownershipMode": "none",
+          "recipientId": null,
+          "placementTargetId": null,
+          "holderAnchor": "carry",
+          "recipientAnchor": "carry",
+          "itemAnchor": "grip",
+          "placementAnchor": "surface",
+          "actorContactAnchor": "grip",
+          "preset": "perspective",
+          "fromPreset": "perspective",
+          "framing": 1,
+          "fromFraming": 1,
+          "fromPosition": [
+            -0.6,
+            4.4,
+            8.4
+          ],
+          "toPosition": [
+            2.3,
+            3.9,
+            7.8
+          ],
+          "fromLookAt": [
+            -1.2,
+            1,
+            0
+          ],
+          "toLookAt": [
+            2.6,
+            1,
+            0
+          ],
+          "path": [],
+          "positionPath": [
+            [
+              -0.6,
+              4.4,
+              8.4
+            ],
+            [
+              -1.4,
+              4,
+              7.5
+            ],
+            [
+              0.8,
+              3.7,
+              7.1
+            ],
+            [
+              2.3,
+              3.9,
+              7.8
+            ]
+          ],
+          "lookAtPath": [
+            [
+              -1.2,
+              1,
+              0
+            ],
+            [
+              -0.35,
+              1.05,
+              0
+            ],
+            [
+              1.35,
+              1,
+              0
+            ],
+            [
+              2.6,
+              1,
+              0
+            ]
+          ],
+          "motion": {
+            "easing": "minimumJerk",
+            "orientToPath": false,
+            "leanDegrees": 0,
+            "bankDegrees": 0,
+            "turnPortion": 0.24
+          },
+          "fromYaw": null,
+          "toYaw": null,
+          "fromFov": 43,
+          "toFov": 40,
+          "fromTargetId": null
+        },
+        {
+          "id": "interaction-a-approach",
+          "type": "move",
+          "track": "character",
+          "label": "角色 A · 接近",
+          "line": 0,
+          "start": 0.2,
+          "duration": 2.2,
+          "targetId": "interaction-actor-a",
+          "secondaryTargetId": null,
+          "from": [
+            -4,
+            0,
+            0.8
+          ],
+          "to": [
+            -1.25,
+            0,
+            0
+          ],
+          "offset": [
+            0.65,
+            0.8,
+            0
+          ],
+          "text": "",
+          "action": "",
+          "targetAnchor": null,
+          "actorNode": null,
+          "resultingState": null,
+          "ownershipMode": "none",
+          "recipientId": null,
+          "placementTargetId": null,
+          "holderAnchor": "carry",
+          "recipientAnchor": "carry",
+          "itemAnchor": "grip",
+          "placementAnchor": "surface",
+          "actorContactAnchor": "grip",
+          "preset": "perspective",
+          "fromPreset": "perspective",
+          "framing": 1,
+          "fromFraming": 1,
+          "fromPosition": null,
+          "toPosition": null,
+          "fromLookAt": null,
+          "toLookAt": null,
+          "path": [
+            [
+              -4,
+              0,
+              0.8
+            ],
+            [
+              -2.8,
+              0,
+              1.15
+            ],
+            [
+              -1.9,
+              0,
+              0.65
+            ],
+            [
+              -1.25,
+              0,
+              0
+            ]
+          ],
+          "positionPath": [],
+          "lookAtPath": [],
+          "motion": {
+            "easing": "minimumJerk",
+            "orientToPath": true,
+            "leanDegrees": 2.2,
+            "bankDegrees": 1.8,
+            "turnPortion": 0.28
+          },
+          "fromYaw": -65,
+          "toYaw": -90,
+          "fromFov": 42,
+          "toFov": 42,
+          "fromTargetId": null
+        },
+        {
+          "id": "interaction-pickup",
+          "type": "interaction",
+          "track": "character",
+          "label": "角色 A · 对齐并抓取",
+          "line": 0,
+          "start": 2.35,
+          "duration": 1.2,
+          "targetId": "interaction-cup",
+          "secondaryTargetId": "interaction-actor-a",
+          "offset": [
+            0.65,
+            0.8,
+            0
+          ],
+          "text": "",
+          "action": "pick_up",
+          "targetAnchor": "grip",
+          "actorNode": "effector",
+          "resultingState": "由角色 A 持有",
+          "ownershipMode": "claim",
+          "recipientId": null,
+          "placementTargetId": null,
+          "holderAnchor": "carry",
+          "recipientAnchor": "carry",
+          "itemAnchor": "grip",
+          "placementAnchor": "surface",
+          "actorContactAnchor": "grip",
+          "preset": "perspective",
+          "fromPreset": "perspective",
+          "framing": 1,
+          "fromFraming": 1,
+          "fromPosition": null,
+          "toPosition": null,
+          "fromLookAt": null,
+          "toLookAt": null,
+          "path": [],
+          "positionPath": [],
+          "lookAtPath": [],
+          "motion": {
+            "easing": "minimumJerk",
+            "orientToPath": false,
+            "leanDegrees": 0,
+            "bankDegrees": 0,
+            "turnPortion": 0.24
+          },
+          "fromYaw": null,
+          "toYaw": null,
+          "fromFov": 42,
+          "toFov": 42,
+          "fromTargetId": null
+        },
+        {
+          "id": "interaction-a-carry",
+          "type": "move",
+          "track": "character",
+          "label": "角色 A · 连续携带",
+          "line": 0,
+          "start": 3.5,
+          "duration": 1.85,
+          "targetId": "interaction-actor-a",
+          "secondaryTargetId": null,
+          "from": [
+            -1.25,
+            0,
+            0
+          ],
+          "to": [
+            1,
+            0,
+            0
+          ],
+          "offset": [
+            0.65,
+            0.8,
+            0
+          ],
+          "text": "",
+          "action": "",
+          "targetAnchor": null,
+          "actorNode": null,
+          "resultingState": null,
+          "ownershipMode": "none",
+          "recipientId": null,
+          "placementTargetId": null,
+          "holderAnchor": "carry",
+          "recipientAnchor": "carry",
+          "itemAnchor": "grip",
+          "placementAnchor": "surface",
+          "actorContactAnchor": "grip",
+          "preset": "perspective",
+          "fromPreset": "perspective",
+          "framing": 1,
+          "fromFraming": 1,
+          "fromPosition": null,
+          "toPosition": null,
+          "fromLookAt": null,
+          "toLookAt": null,
+          "path": [
+            [
+              -1.25,
+              0,
+              0
+            ],
+            [
+              -0.45,
+              0,
+              0.42
+            ],
+            [
+              0.35,
+              0,
+              0.35
+            ],
+            [
+              1,
+              0,
+              0
+            ]
+          ],
+          "positionPath": [],
+          "lookAtPath": [],
+          "motion": {
+            "easing": "minimumJerk",
+            "orientToPath": true,
+            "leanDegrees": 1.8,
+            "bankDegrees": 1.2,
+            "turnPortion": 0.2
+          },
+          "fromYaw": -90,
+          "toYaw": -90,
+          "fromFov": 42,
+          "toFov": 42,
+          "fromTargetId": null
+        },
+        {
+          "id": "interaction-handoff",
+          "type": "interaction",
+          "track": "character",
+          "label": "角色 A → 角色 B · 接触交接",
+          "line": 0,
+          "start": 5.25,
+          "duration": 1.3,
+          "targetId": "interaction-cup",
+          "secondaryTargetId": "interaction-actor-a",
+          "offset": [
+            0.65,
+            0.8,
+            0
+          ],
+          "text": "",
+          "action": "hand_over",
+          "targetAnchor": "grip",
+          "actorNode": "effector",
+          "resultingState": "由角色 B 持有",
+          "ownershipMode": "transfer",
+          "recipientId": "interaction-actor-b",
+          "placementTargetId": null,
+          "holderAnchor": "carry",
+          "recipientAnchor": "carry",
+          "itemAnchor": "grip",
+          "placementAnchor": "surface",
+          "actorContactAnchor": "grip",
+          "preset": "perspective",
+          "fromPreset": "perspective",
+          "framing": 1,
+          "fromFraming": 1,
+          "fromPosition": null,
+          "toPosition": null,
+          "fromLookAt": null,
+          "toLookAt": null,
+          "path": [],
+          "positionPath": [],
+          "lookAtPath": [],
+          "motion": {
+            "easing": "minimumJerk",
+            "orientToPath": false,
+            "leanDegrees": 0,
+            "bankDegrees": 0,
+            "turnPortion": 0.24
+          },
+          "fromYaw": null,
+          "toYaw": null,
+          "fromFov": 42,
+          "toFov": 42,
+          "fromTargetId": null
+        },
+        {
+          "id": "interaction-a-clear",
+          "type": "move",
+          "track": "character",
+          "label": "角色 A · 让出路径",
+          "line": 0,
+          "start": 6.5,
+          "duration": 1.25,
+          "targetId": "interaction-actor-a",
+          "secondaryTargetId": null,
+          "from": [
+            1,
+            0,
+            0
+          ],
+          "to": [
+            0.35,
+            0,
+            1
+          ],
+          "offset": [
+            0.65,
+            0.8,
+            0
+          ],
+          "text": "",
+          "action": "",
+          "targetAnchor": null,
+          "actorNode": null,
+          "resultingState": null,
+          "ownershipMode": "none",
+          "recipientId": null,
+          "placementTargetId": null,
+          "holderAnchor": "carry",
+          "recipientAnchor": "carry",
+          "itemAnchor": "grip",
+          "placementAnchor": "surface",
+          "actorContactAnchor": "grip",
+          "preset": "perspective",
+          "fromPreset": "perspective",
+          "framing": 1,
+          "fromFraming": 1,
+          "fromPosition": null,
+          "toPosition": null,
+          "fromLookAt": null,
+          "toLookAt": null,
+          "path": [
+            [
+              1,
+              0,
+              0
+            ],
+            [
+              0.85,
+              0,
+              0.5
+            ],
+            [
+              0.35,
+              0,
+              1
+            ]
+          ],
+          "positionPath": [],
+          "lookAtPath": [],
+          "motion": {
+            "easing": "minimumJerk",
+            "orientToPath": true,
+            "leanDegrees": 1.4,
+            "bankDegrees": 1,
+            "turnPortion": 0.35
+          },
+          "fromYaw": -90,
+          "toYaw": 145,
+          "fromFov": 42,
+          "toFov": 42,
+          "fromTargetId": null
+        },
+        {
+          "id": "interaction-b-carry",
+          "type": "move",
+          "track": "character",
+          "label": "角色 B · 携带至放置台",
+          "line": 0,
+          "start": 6.5,
+          "duration": 1.55,
+          "targetId": "interaction-actor-b",
+          "secondaryTargetId": null,
+          "from": [
+            2.2,
+            0,
+            0
+          ],
+          "to": [
+            2.7,
+            0,
+            0
+          ],
+          "offset": [
+            0.65,
+            0.8,
+            0
+          ],
+          "text": "",
+          "action": "",
+          "targetAnchor": null,
+          "actorNode": null,
+          "resultingState": null,
+          "ownershipMode": "none",
+          "recipientId": null,
+          "placementTargetId": null,
+          "holderAnchor": "carry",
+          "recipientAnchor": "carry",
+          "itemAnchor": "grip",
+          "placementAnchor": "surface",
+          "actorContactAnchor": "grip",
+          "preset": "perspective",
+          "fromPreset": "perspective",
+          "framing": 1,
+          "fromFraming": 1,
+          "fromPosition": null,
+          "toPosition": null,
+          "fromLookAt": null,
+          "toLookAt": null,
+          "path": [
+            [
+              2.2,
+              0,
+              0
+            ],
+            [
+              2.38,
+              0,
+              0.3
+            ],
+            [
+              2.58,
+              0,
+              0.22
+            ],
+            [
+              2.7,
+              0,
+              0
+            ]
+          ],
+          "positionPath": [],
+          "lookAtPath": [],
+          "motion": {
+            "easing": "minimumJerk",
+            "orientToPath": true,
+            "leanDegrees": 1.5,
+            "bankDegrees": 1,
+            "turnPortion": 0.42
+          },
+          "fromYaw": 90,
+          "toYaw": -90,
+          "fromFov": 42,
+          "toFov": 42,
+          "fromTargetId": null
+        },
+        {
+          "id": "interaction-place",
+          "type": "interaction",
+          "track": "character",
+          "label": "角色 B · 接触并稳定放置",
+          "line": 0,
+          "start": 8,
+          "duration": 1.25,
+          "targetId": "interaction-cup",
+          "secondaryTargetId": "interaction-actor-b",
+          "offset": [
+            0.65,
+            0.8,
+            0
+          ],
+          "text": "",
+          "action": "place_on_surface",
+          "targetAnchor": "bottom",
+          "actorNode": "effector",
+          "resultingState": "稳定放置",
+          "ownershipMode": "release",
+          "recipientId": null,
+          "placementTargetId": "interaction-destination-table",
+          "holderAnchor": "carry",
+          "recipientAnchor": "carry",
+          "itemAnchor": "bottom",
+          "placementAnchor": "surface",
+          "actorContactAnchor": "grip",
+          "preset": "perspective",
+          "fromPreset": "perspective",
+          "framing": 1,
+          "fromFraming": 1,
+          "fromPosition": null,
+          "toPosition": null,
+          "fromLookAt": null,
+          "toLookAt": null,
+          "path": [],
+          "positionPath": [],
+          "lookAtPath": [],
+          "motion": {
+            "easing": "minimumJerk",
+            "orientToPath": false,
+            "leanDegrees": 0,
+            "bankDegrees": 0,
+            "turnPortion": 0.24
+          },
+          "fromYaw": null,
+          "toYaw": null,
+          "fromFov": 42,
+          "toFov": 42,
+          "fromTargetId": null
+        },
+        {
+          "id": "interaction-b-recover",
+          "type": "rotate",
+          "track": "character",
+          "label": "角色 B · 恢复朝向",
+          "line": 0,
+          "start": 9.2,
+          "duration": 0.55,
+          "targetId": "interaction-actor-b",
+          "secondaryTargetId": null,
+          "from": [
+            0,
+            -90,
+            0
+          ],
+          "to": [
+            0,
+            -70,
+            0
+          ],
+          "offset": [
+            0.65,
+            0.8,
+            0
+          ],
+          "text": "",
+          "action": "",
+          "targetAnchor": null,
+          "actorNode": null,
+          "resultingState": null,
+          "ownershipMode": "none",
+          "recipientId": null,
+          "placementTargetId": null,
+          "holderAnchor": "carry",
+          "recipientAnchor": "carry",
+          "itemAnchor": "grip",
+          "placementAnchor": "surface",
+          "actorContactAnchor": "grip",
+          "preset": "perspective",
+          "fromPreset": "perspective",
+          "framing": 1,
+          "fromFraming": 1,
+          "fromPosition": null,
+          "toPosition": null,
+          "fromLookAt": null,
+          "toLookAt": null,
+          "path": [],
+          "positionPath": [],
+          "lookAtPath": [],
+          "motion": {
+            "easing": "minimumJerk",
+            "orientToPath": false,
+            "leanDegrees": 0,
+            "bankDegrees": 0,
+            "turnPortion": 0.24
+          },
+          "fromYaw": null,
+          "toYaw": null,
+          "fromFov": 42,
+          "toFov": 42,
+          "fromTargetId": null
+        }
+      ],
+      "issues": [],
+      "compiledScript": "# 固定 60Hz 的十秒交互验收\n镜头聚焦 交互杯，用时 0.2 秒\n角色 A · 递交者 移动到 (-1.25, 0, 0)，用时 2.2 秒\n角色 A · 递交者 拿起 交互杯，用时 1.2 秒\n角色 A · 递交者 移动到 (1, 0, 0)，用时 1.85 秒\n角色 A · 递交者 将 交互杯 交给 角色 B · 接收者，用时 1.3 秒\n角色 B · 接收者 移动到 (2.7, 0, 0)，用时 1.55 秒\n角色 B · 接收者 将 交互杯 放到 放置台，用时 1.25 秒\n等待 0.2 秒",
+      "compiledAt": "deterministic-interaction-fixture-v2"
+    }
+  }
+}

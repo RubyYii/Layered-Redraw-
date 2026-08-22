@@ -206,6 +206,12 @@ describe("scene schema", () => {
       motion: { kind: "hover", hoverAmplitude: 0.04, bankDegrees: 8 },
       interactionSpec: {
         anchors: { effector: [0.5, 1.1, -0.2] },
+        collisionProxy: {
+          shape: "capsule",
+          dimensions: [0.8, 1.8, 0.7],
+          offset: [0, 0.9, 0],
+          margin: 0.06,
+        },
         affordances: {
           inspect: {
             action: "inspect",
@@ -233,6 +239,13 @@ describe("scene schema", () => {
       actorNode: "hand",
       maxDistance: 1.4,
       resultingState: "inspected",
+    });
+    expect(object.interactionSpec.collisionProxy).toMatchObject({
+      shape: "capsule",
+      dimensions: [0.8, 1.8, 0.7],
+      offset: [0, 0.9, 0],
+      margin: 0.06,
+      support: false,
     });
   });
 });

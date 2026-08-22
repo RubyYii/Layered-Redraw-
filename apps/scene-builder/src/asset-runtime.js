@@ -232,6 +232,10 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
   root.updateMatrixWorld(true);
   const unitSize = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3());
   const assetScale = Math.max(0.001, Number(config.scale) || 1);
+  const fitAxes = Array.isArray(options.fitAxes)
+    ? [...new Set(options.fitAxes.filter((axis) => Number.isInteger(axis) && axis >= 0 && axis <= 2))]
+    : [0, 1, 2];
+  if (!fitAxes.length) fitAxes.push(0, 1, 2);
   let lastCarrierScale = null;
 
   const clips = Array.isArray(asset.animations) ? asset.animations : [];
@@ -330,14 +334,16 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       warnings: [...(options.warnings ?? [])],
       ...semanticBindings,
       ...rigBindings,
+      ...(options.report ?? {}),
     },
     fitToCarrier(carrierScale) {
       const available = (carrierScale?.toArray?.() ?? carrierScale ?? [1, 1, 1])
         .slice(0, 3)
         .map((value) => Math.max(0.0001, Math.abs(Number(value) || 1)));
       if (lastCarrierScale?.every((value, axis) => value === available[axis])) return false;
-      const candidates = [unitSize.x, unitSize.y, unitSize.z]
-        .map((value, axis) => value > 0.0001 ? available[axis] / value : Infinity);
+      const unitDimensions = [unitSize.x, unitSize.y, unitSize.z];
+      const candidates = fitAxes
+        .map((axis) => unitDimensions[axis] > 0.0001 ? available[axis] / unitDimensions[axis] : Infinity);
       const uniformWorldScale = Math.min(...candidates) * assetScale;
       root.scale.set(
         uniformWorldScale / available[0],

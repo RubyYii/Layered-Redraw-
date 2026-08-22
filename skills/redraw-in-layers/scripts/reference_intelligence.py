@@ -809,7 +809,7 @@ def build_spatial_bridge(
         "handoff": {
             "target": "apps/scene-builder",
             "contract": "depth-heightfield-v1",
-            "status": "ready-for-import-adapter",
+            "status": "ready-for-import",
         },
     }
     stable = json.dumps(bridge, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")

@@ -45,6 +45,52 @@ export function attachmentPosition(holderPosition, holderRotation, localOffset) 
   return holderPosition.map((value, axis) => value + rotated[axis]);
 }
 
+export function surfaceContactPosition(
+  actorPosition,
+  anchorPosition,
+  targetHalfExtents,
+  effectorRadius,
+  clearance = 0.015,
+) {
+  const dx = (Number(actorPosition?.[0]) || 0) - (Number(anchorPosition?.[0]) || 0);
+  const dz = (Number(actorPosition?.[2]) || 0) - (Number(anchorPosition?.[2]) || 0);
+  const distance = Math.hypot(dx, dz);
+  const direction = distance > 0.0001 ? [dx / distance, dz / distance] : [0, 1];
+  const halfX = Math.max(0, Number(targetHalfExtents?.[0]) || 0);
+  const halfZ = Math.max(0, Number(targetHalfExtents?.[2]) || 0);
+  const surfaceDistance = Math.abs(direction[0]) * halfX + Math.abs(direction[1]) * halfZ;
+  const offset = surfaceDistance + Math.max(0, Number(effectorRadius) || 0) + Math.max(0, Number(clearance) || 0);
+  return [
+    (Number(anchorPosition?.[0]) || 0) + direction[0] * offset,
+    Number(anchorPosition?.[1]) || 0,
+    (Number(anchorPosition?.[2]) || 0) + direction[1] * offset,
+  ];
+}
+
+export function effectorWeightsForInteraction(mode, phase) {
+  const phaseName = phase?.name ?? "anticipation";
+  const contactWeight = clamp01(phase?.contactWeight);
+  const recoveryWeight = phaseName === "recovery" ? 1 - clamp01(phase?.progress) : 1;
+
+  if (mode === "hold") return { actor: 1, recipient: 0 };
+  if (mode === "claim") {
+    return {
+      actor: phaseName === "contact" || phaseName === "recovery" ? 1 : contactWeight,
+      recipient: 0,
+    };
+  }
+  if (mode === "transfer") {
+    return {
+      actor: phaseName === "recovery" ? recoveryWeight : 1,
+      recipient: phaseName === "contact" || phaseName === "recovery" ? 1 : contactWeight,
+    };
+  }
+  if (mode === "release") {
+    return { actor: phaseName === "recovery" ? recoveryWeight : 1, recipient: 0 };
+  }
+  return { actor: contactWeight * 0.92, recipient: contactWeight * 0.92 };
+}
+
 export function proceduralInteractionPose(actorPosition, targetPosition, phase) {
   const dx = (Number(targetPosition?.[0]) || 0) - (Number(actorPosition?.[0]) || 0);
   const dz = (Number(targetPosition?.[2]) || 0) - (Number(actorPosition?.[2]) || 0);
