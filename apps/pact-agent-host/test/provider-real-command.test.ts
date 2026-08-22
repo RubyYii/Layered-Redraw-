@@ -9,6 +9,7 @@ import {
   finalizeProviderAttemptRecord,
 } from '../src/provider-envelope.js';
 import { executeProviderRealCommand } from '../src/provider-real-command.js';
+import { ProviderCompatibilityRuntimeError } from '../src/provider-real-runner.js';
 import { ProviderRunEvidenceError } from '../src/provider-run-evidence.js';
 import type { ProviderRealRunApproval } from '../src/provider-real-run-gate.js';
 import {
@@ -165,6 +166,66 @@ describe('authorised real-provider command boundary', () => {
       schemaVersion: 'cp03-provider-evidence-report/0.1',
       status: 'PASS',
       checks: { secretScan: 'PASS', probeCoverage: 'PASS' },
+    });
+  });
+
+  it('persists redacted partial evidence before rethrowing a failed provider runtime', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'pact-real-command-partial-'));
+    const firstRecord = completedResult().attemptRecords[0];
+    if (firstRecord === undefined) throw new Error('fixture record missing');
+    const partialResult = {
+      status: 'FAILED' as const,
+      reachedProbes: 1,
+      sentDispatches: 1,
+      attemptRecords: [firstRecord],
+      failure: {
+        code: 'PROVIDER_RESULT_LATE_QUARANTINED',
+        message: 'PROVIDER_RESULT_LATE_QUARANTINED: probe-01 dispatch 1',
+      },
+    };
+    const runtimeError = new ProviderCompatibilityRuntimeError(
+      partialResult.failure.code,
+      partialResult,
+      undefined,
+    );
+
+    await expect(executeProviderRealCommand({
+      cwd,
+      env: completeEnv(),
+      preflight: eligiblePreflight(),
+      approval: approval(),
+      executeReal: async () => {
+        throw runtimeError;
+      },
+    })).rejects.toBe(runtimeError);
+
+    const runRoot = join(
+      cwd,
+      'artifacts/provider-compatibility/compat_command_20260822_a1b2c3',
+    );
+    const rawPath = join(runRoot, 'raw-run.json');
+    expect(existsSync(rawPath)).toBe(true);
+    const raw = readFileSync(rawPath, 'utf8');
+    expect(JSON.parse(raw)).toMatchObject({
+      schemaVersion: 'cp03-provider-raw-run/0.1',
+      result: {
+        status: 'FAILED',
+        reachedProbes: 1,
+        sentDispatches: 1,
+        failure: { code: 'PROVIDER_RESULT_LATE_QUARANTINED' },
+      },
+    });
+    expect(raw).not.toContain('test-only-not-forwarded-by-command');
+    expect(JSON.parse(readFileSync(
+      join(runRoot, 'evidence-report.json'),
+      'utf8',
+    ))).toMatchObject({
+      status: 'FAIL',
+      checks: {
+        completion: 'FAIL',
+        probeCoverage: 'FAIL',
+        secretScan: 'PASS',
+      },
     });
   });
 

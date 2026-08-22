@@ -22,6 +22,7 @@ import {
   type FoundationHarness,
 } from './create-foundation-harness.js';
 import { waitForTurnEnd } from './durable-turn.js';
+import { CompatibilityDispatchError } from './dispatch-budget.js';
 import type { ProviderAttemptRecord } from './provider-envelope.js';
 import {
   installProviderDispatchLedger,
@@ -54,6 +55,29 @@ export interface ProviderCompatibilityRuntimeResult {
   readonly attemptRecords: readonly ProviderAttemptRecord[];
 }
 
+export interface ProviderCompatibilityRuntimePartialResult {
+  readonly status: 'FAILED';
+  readonly reachedProbes: number;
+  readonly sentDispatches: number;
+  readonly attemptRecords: readonly ProviderAttemptRecord[];
+  readonly failure: {
+    readonly code: string;
+    readonly message: string;
+  };
+}
+
+export class ProviderCompatibilityRuntimeError extends Error {
+  override readonly name = 'ProviderCompatibilityRuntimeError';
+
+  constructor(
+    readonly code: string,
+    readonly partialResult: ProviderCompatibilityRuntimePartialResult,
+    cause: unknown,
+  ) {
+    super(partialResult.failure.message, { cause });
+  }
+}
+
 type PendingAssignment = Omit<ProviderStreamAssignment, 'sessionId'>;
 
 interface StartedProbeChild {
@@ -75,6 +99,9 @@ const requireProbe = (probeId: ProbeId) => {
 const caseSessionId = (): SessionId => SessionId(
   `case_${randomUUID().replaceAll('-', '')}`,
 );
+
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 const selectionFor = (
   config: ConfiguredCompatibility,
@@ -206,6 +233,8 @@ export const runProviderCompatibilityRuntime = async (
     },
   });
   const openedTurns = new Set<string>();
+  const completed = new Set<ProbeId>();
+  let partialLedger: ProviderDispatchLedger | undefined;
   const openTurn = (turnId: string, deadlineAt: number): void => {
     harness.registry.openTurn(turnId, deadlineAt);
     openedTurns.add(turnId);
@@ -224,10 +253,10 @@ export const runProviderCompatibilityRuntime = async (
       deadlineAt: now() + COMPATIBILITY_LIMITS.deadlineMs * 4,
       now,
     });
+    partialLedger = ledger;
     const pendingByLabel = new Map<string, PendingAssignment[]>();
     const cancelAfterAcceptedToolResult = new Set<string>();
     const cancelAfterFirstChunk = new Set<string>();
-    const completed = new Set<ProbeId>();
 
     const queueChildAssignment = (
       label: string,
@@ -514,6 +543,18 @@ export const runProviderCompatibilityRuntime = async (
       sentDispatches: summary.sentDispatches,
       attemptRecords: ledger.attemptRecords(),
     };
+  } catch (error) {
+    const code = error instanceof CompatibilityDispatchError
+      ? error.code
+      : 'PROVIDER_COMPATIBILITY_RUNTIME_FAILED';
+    const message = messageOf(error);
+    throw new ProviderCompatibilityRuntimeError(code, {
+      status: 'FAILED',
+      reachedProbes: completed.size,
+      sentDispatches: partialLedger?.sentDispatches ?? 0,
+      attemptRecords: partialLedger?.attemptRecords() ?? [],
+      failure: { code, message },
+    }, error);
   } finally {
     for (const turnId of openedTurns) harness.registry.closeTurn(turnId);
     await harness.dispose();

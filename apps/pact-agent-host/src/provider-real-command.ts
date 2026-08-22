@@ -7,7 +7,9 @@ import {
   inspectCompatibilityConfig,
 } from './compatibility-config.js';
 import {
+  ProviderCompatibilityRuntimeError,
   runRealProviderCompatibility,
+  type ProviderCompatibilityRuntimePartialResult,
   type ProviderCompatibilityRuntimeResult,
   type RealProviderCompatibilityOptions,
 } from './provider-real-runner.js';
@@ -47,51 +49,70 @@ export const executeProviderRealCommand = async (
       const runRoot = resolve(artifactParent, options.approval.runId);
       await mkdir(artifactParent, { recursive: true });
       await mkdir(runRoot);
-      const result = await executeReal({
-        runId: options.approval.runId,
-        config: inspectCompatibilityConfig(options.env),
-        persistenceRoot: resolve(runRoot, 'sessions'),
-        dshHome: resolve(runRoot, 'dsh'),
-        cancellationDelayMs: COMPATIBILITY_LIMITS.deadlineMs - 250,
-      });
-      const rawPath = resolve(runRoot, 'raw-run.json');
-      const pendingPath = resolve(runRoot, '.raw-run.json.pending');
-      const archive: ProviderRunArchive = {
-        schemaVersion: 'cp03-provider-raw-run/0.1',
-        approval: options.approval,
-        preflight: options.preflight,
-        result,
-      };
-      const serialized = `${JSON.stringify(archive, null, 2)}\n`;
       const credentialValues = Object.values(COMPATIBILITY_CREDENTIAL_REFS)
         .flatMap((reference) => {
           const value = options.env[reference];
           return value === undefined ? [] : [value];
         });
-      const evidence = verifyProviderRunEvidence(
-        serialized,
-        credentialValues,
-      );
-      const evidencePath = resolve(runRoot, 'evidence-report.json');
-      const evidencePendingPath = resolve(
-        runRoot,
-        '.evidence-report.json.pending',
-      );
-      await writeFile(
-        evidencePendingPath,
-        `${JSON.stringify(evidence, null, 2)}\n`,
-        { encoding: 'utf8', flag: 'wx' },
-      );
-      if (evidence.checks.secretScan === 'FAIL') {
-        await rename(evidencePendingPath, evidencePath);
-        throw new ProviderRunEvidenceError(
-          'PROVIDER_RUN_SECRET_LEAK_BLOCKED',
-          evidence,
+      const persistArchive = async (
+        result:
+          | ProviderCompatibilityRuntimeResult
+          | ProviderCompatibilityRuntimePartialResult,
+      ) => {
+        const rawPath = resolve(runRoot, 'raw-run.json');
+        const pendingPath = resolve(runRoot, '.raw-run.json.pending');
+        const archive: ProviderRunArchive = {
+          schemaVersion: 'cp03-provider-raw-run/0.1',
+          approval: options.approval,
+          preflight: options.preflight,
+          result,
+        };
+        const serialized = `${JSON.stringify(archive, null, 2)}\n`;
+        const evidence = verifyProviderRunEvidence(
+          serialized,
+          credentialValues,
         );
+        const evidencePath = resolve(runRoot, 'evidence-report.json');
+        const evidencePendingPath = resolve(
+          runRoot,
+          '.evidence-report.json.pending',
+        );
+        await writeFile(
+          evidencePendingPath,
+          `${JSON.stringify(evidence, null, 2)}\n`,
+          { encoding: 'utf8', flag: 'wx' },
+        );
+        if (evidence.checks.secretScan === 'FAIL') {
+          await rename(evidencePendingPath, evidencePath);
+          throw new ProviderRunEvidenceError(
+            'PROVIDER_RUN_SECRET_LEAK_BLOCKED',
+            evidence,
+          );
+        }
+        await writeFile(pendingPath, serialized, {
+          encoding: 'utf8',
+          flag: 'wx',
+        });
+        await rename(pendingPath, rawPath);
+        await rename(evidencePendingPath, evidencePath);
+        return evidence;
+      };
+
+      let result: ProviderCompatibilityRuntimeResult;
+      try {
+        result = await executeReal({
+          runId: options.approval.runId,
+          config: inspectCompatibilityConfig(options.env),
+          persistenceRoot: resolve(runRoot, 'sessions'),
+          dshHome: resolve(runRoot, 'dsh'),
+          cancellationDelayMs: COMPATIBILITY_LIMITS.deadlineMs - 250,
+        });
+      } catch (error) {
+        if (!(error instanceof ProviderCompatibilityRuntimeError)) throw error;
+        await persistArchive(error.partialResult);
+        throw error;
       }
-      await writeFile(pendingPath, serialized, { encoding: 'utf8', flag: 'wx' });
-      await rename(pendingPath, rawPath);
-      await rename(evidencePendingPath, evidencePath);
+      const evidence = await persistArchive(result);
       if (evidence.status === 'FAIL') {
         throw new ProviderRunEvidenceError(
           'PROVIDER_RUN_EVIDENCE_INVALID',

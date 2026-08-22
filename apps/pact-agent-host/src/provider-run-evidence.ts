@@ -3,7 +3,10 @@ import {
 } from '@layered-redraw/pact-cp03-contracts';
 
 import type { ProviderAttemptRecord } from './provider-envelope.js';
-import type { ProviderCompatibilityRuntimeResult } from './provider-real-runner.js';
+import type {
+  ProviderCompatibilityRuntimePartialResult,
+  ProviderCompatibilityRuntimeResult,
+} from './provider-real-runner.js';
 import type {
   ProviderRealRunApproval,
   ProviderRealRunPreflightFacts,
@@ -17,7 +20,9 @@ export interface ProviderRunArchive {
   readonly schemaVersion: 'cp03-provider-raw-run/0.1';
   readonly approval: ProviderRealRunApproval;
   readonly preflight: ProviderRealRunPreflightFacts;
-  readonly result: ProviderCompatibilityRuntimeResult;
+  readonly result:
+    | ProviderCompatibilityRuntimeResult
+    | ProviderCompatibilityRuntimePartialResult;
 }
 
 type EvidenceCheck =

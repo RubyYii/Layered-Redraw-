@@ -439,7 +439,7 @@ describe('fixed real-provider DSH runner with local routing adapters', () => {
     })).rejects.toThrow(/probe-02/);
   }, 10_000);
 
-  it('quarantines a representative-chain tool that finishes after the shared deadline', async () => {
+  it('exposes partial ledger evidence when the representative chain exceeds its shared deadline', async () => {
     let now = Date.parse('2026-08-22T18:00:00.000Z');
     await expect(runScriptedCompatibility({
       now: () => now,
@@ -450,6 +450,25 @@ describe('fixed real-provider DSH runner with local routing adapters', () => {
           now += 12_001;
         },
       ]]),
-    })).rejects.toThrow(/DEADLINE|LATE|QUARANTINED|INCOMPLETE/);
+    })).rejects.toMatchObject({
+      name: 'ProviderCompatibilityRuntimeError',
+      code: 'PROVIDER_SESSION_DISPATCH_PLAN_INCOMPLETE',
+      partialResult: {
+        status: 'FAILED',
+        reachedProbes: 8,
+        sentDispatches: 11,
+        attemptRecords: expect.arrayContaining([
+          expect.objectContaining({
+            probeId: 'probe-06',
+            contract: expect.objectContaining({ lateQuarantined: true }),
+          }),
+        ]),
+        failure: {
+          code: 'PROVIDER_SESSION_DISPATCH_PLAN_INCOMPLETE',
+          message:
+            'PROVIDER_SESSION_DISPATCH_PLAN_INCOMPLETE: probe-06 completed 1/2 dispatches',
+        },
+      },
+    });
   }, 10_000);
 });
