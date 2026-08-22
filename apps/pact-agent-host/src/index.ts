@@ -49,3 +49,18 @@ export {
   probePlanSummary,
 } from './probe-plan.js';
 export { buildProviderPreflightReport } from './preflight-report.js';
+export {
+  CaseSessionLedger,
+  type ApprovedExecutionInput,
+  type CaseAction,
+  type CaseSessionInitialState,
+  type CaseSessionMode,
+  type CaseSessionSnapshot,
+  type CaseSessionStateSummary,
+  type CaseSessionStatus,
+  type CaseSessionTransition,
+  type CaseSessionTransitionRecord,
+  type CheckpointResetInput,
+  type FailureNoMutationInput,
+  type LocalKeepOpaqueInput,
+} from './case-session.js';
