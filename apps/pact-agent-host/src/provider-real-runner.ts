@@ -426,7 +426,8 @@ export const runProviderCompatibilityRuntime = async (
     if (
       completed.size !== plan.intendedProbes ||
       summary.completedAssignments !== plan.intendedProbes ||
-      summary.sentDispatches !== plan.plannedDispatches
+      summary.sentDispatches < plan.plannedDispatches ||
+      summary.sentDispatches > plan.maximumDispatches
     ) {
       throw new Error(
         `COMPATIBILITY_RUN_INCOMPLETE: probes=${completed.size}, assignments=${summary.completedAssignments}, dispatches=${summary.sentDispatches}`,

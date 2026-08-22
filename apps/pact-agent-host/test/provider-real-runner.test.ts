@@ -180,6 +180,11 @@ const waitForAbort = async (signal: AbortSignal | undefined): Promise<never> =>
 class ProbeRoutingAdapter extends LlmAdapter {
   readonly requests: GenerateOptions[] = [];
   private readonly steps = new Map<string, number>();
+  private readonly failed = new Set<string>();
+
+  constructor(private readonly failOnceAt: ReadonlySet<string> = new Set()) {
+    super();
+  }
 
   async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     this.requests.push(options);
@@ -187,6 +192,11 @@ class ProbeRoutingAdapter extends LlmAdapter {
     const sessionId = String(options.sessionId);
     const stepKey = `${sessionId}:probe-${probe}`;
     const step = this.steps.get(stepKey) ?? 0;
+    const failureKey = `probe-${probe}:step-${step}`;
+    if (this.failOnceAt.has(failureKey) && !this.failed.has(failureKey)) {
+      this.failed.add(failureKey);
+      throw new LlmError('scripted transport reset before completion', 'TRANSPORT');
+    }
     this.steps.set(stepKey, step + 1);
 
     let chunks: readonly StreamChunk[];
@@ -254,27 +264,34 @@ class ProbeRoutingAdapter extends LlmAdapter {
   }
 }
 
+const runScriptedCompatibility = async (
+  deepseekFailures: ReadonlySet<string> = new Set(),
+  geminiFailures: ReadonlySet<string> = new Set(),
+) => {
+  const root = join(tmpdir(), `pact-real-runner-${randomUUID()}`);
+  const persistenceRoot = join(root, 'sessions');
+  const dshHome = join(root, 'dsh');
+  mkdirSync(root, { recursive: true });
+  const deepseek = new ProbeRoutingAdapter(deepseekFailures);
+  const gemini = new ProbeRoutingAdapter(geminiFailures);
+  const result = await runProviderCompatibilityRuntime({
+    runId: 'compat_scripted_eight_probe01',
+    config: inspectCompatibilityConfig(completeEnv()),
+    persistenceRoot,
+    dshHome,
+    providerKind: 'scripted',
+    cancellationDelayMs: 10,
+    mountAdapters(ctx) {
+      ctx.llm.registerAdapter(['deepseek-official'], deepseek);
+      ctx.llm.registerAdapter(['google'], gemini);
+    },
+  });
+  return { result, deepseek, gemini };
+};
+
 describe('fixed real-provider DSH runner with local routing adapters', () => {
   it('completes eight logical probes through exactly twelve actual DSH streams', async () => {
-    const root = join(tmpdir(), `pact-real-runner-${randomUUID()}`);
-    const persistenceRoot = join(root, 'sessions');
-    const dshHome = join(root, 'dsh');
-    mkdirSync(root, { recursive: true });
-    const deepseek = new ProbeRoutingAdapter();
-    const gemini = new ProbeRoutingAdapter();
-
-    const result = await runProviderCompatibilityRuntime({
-      runId: 'compat_scripted_eight_probe01',
-      config: inspectCompatibilityConfig(completeEnv()),
-      persistenceRoot,
-      dshHome,
-      providerKind: 'scripted',
-      cancellationDelayMs: 10,
-      mountAdapters(ctx) {
-        ctx.llm.registerAdapter(['deepseek-official'], deepseek);
-        ctx.llm.registerAdapter(['google'], gemini);
-      },
-    });
+    const { result, deepseek, gemini } = await runScriptedCompatibility();
 
     expect(result).toMatchObject({
       status: 'COMPLETED',
@@ -304,5 +321,47 @@ describe('fixed real-provider DSH runner with local routing adapters', () => {
       'aborted',
       'aborted',
     ]);
+  }, 10_000);
+
+  it('uses one DeepSeek pre-side-effect transport retry and records thirteen dispatches', async () => {
+    const { result, deepseek, gemini } = await runScriptedCompatibility(
+      new Set(['probe-1:step-0']),
+    );
+
+    expect(result.sentDispatches).toBe(13);
+    expect(deepseek.requests).toHaveLength(9);
+    expect(gemini.requests).toHaveLength(4);
+    const retries = result.attemptRecords.filter((record) =>
+      record.contract.retryOf !== null
+    );
+    expect(retries).toHaveLength(1);
+    expect(retries[0]).toMatchObject({
+      probeId: 'probe-01',
+      provider: 'deepseek',
+      attempt: 2,
+    });
+  }, 10_000);
+
+  it('uses at most one pre-side-effect retry per provider and records fourteen dispatches', async () => {
+    const { result, deepseek, gemini } = await runScriptedCompatibility(
+      new Set(['probe-1:step-0']),
+      new Set(['probe-3:step-0']),
+    );
+
+    expect(result.sentDispatches).toBe(14);
+    expect(deepseek.requests).toHaveLength(9);
+    expect(gemini.requests).toHaveLength(5);
+    expect(result.attemptRecords.filter((record) =>
+      record.contract.retryOf !== null
+    ).map((record) => record.provider).sort()).toEqual([
+      'deepseek',
+      'gemini',
+    ]);
+  }, 10_000);
+
+  it('does not retry a continuation after that probe accepted a PACT tool', async () => {
+    await expect(runScriptedCompatibility(
+      new Set(['probe-2:step-1']),
+    )).rejects.toThrow(/probe-02/);
   }, 10_000);
 });

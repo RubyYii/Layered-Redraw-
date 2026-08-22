@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { Context } from '@deepseek-ai/cordis';
 import type {
   GenerateOptions,
+  LlmFailure,
   StreamChunk,
   TokenUsage,
 } from '@deepseek-ai/dsh-llm';
@@ -56,7 +57,13 @@ export interface ProviderDispatchLedgerSummary {
 interface AssignmentState {
   readonly assignment: ProviderStreamAssignment;
   readonly recordIndexes: number[];
+  readonly allRecordIndexes: number[];
   nextDispatch: number;
+}
+
+interface PendingRetry {
+  readonly dispatchIndex: number;
+  readonly previousRecordIndex: number;
 }
 
 const messageOf = (error: unknown): string =>
@@ -132,6 +139,8 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
   private readonly recordByRawToolCallId = new Map<string, number>();
   private readonly pendingAcceptedDomainTools =
     new Map<string, (readonly string[])[]>();
+  private readonly pendingRetryBySession = new Map<string, PendingRetry>();
+  private readonly retriedProviders = new Set<CompatibilityProvider>();
   private readonly now: () => number;
   private readonly deadlineAt: number;
 
@@ -145,6 +154,16 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     ctx.on('llm/stream', (request, next) =>
       this.intercept(request, next)
     );
+    ctx.on('agent/request-error', async (payload, next) => {
+      if (this.authorizeRetry(
+        String(payload.agent.id),
+        payload.provider,
+        payload.failure,
+      )) {
+        return { kind: 'retry' };
+      }
+      return next();
+    });
     ctx.on('session/event', (session, event) => {
       const sessionId = String(session.id);
       if (event.type === 'tool/call') {
@@ -203,6 +222,7 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     const state = {
       assignment,
       recordIndexes: [],
+      allRecordIndexes: [],
       nextDispatch: 0,
     };
     this.currentAssignmentBySession.set(sessionId, state);
@@ -308,7 +328,9 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
         'refused an unassigned DSH provider stream',
       );
     }
-    const dispatch = state.assignment.dispatches[state.nextDispatch];
+    const retry = this.pendingRetryBySession.get(sessionId);
+    const dispatchIndex = retry?.dispatchIndex ?? state.nextDispatch;
+    const dispatch = state.assignment.dispatches[dispatchIndex];
     if (dispatch === undefined) {
       throw new CompatibilityDispatchError(
         'PROVIDER_SESSION_DISPATCH_PLAN_EXHAUSTED',
@@ -339,6 +361,15 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
 
     const nextOrdinal = this.sent + 1;
     const startedAt = new Date(this.now()).toISOString();
+    const previousRecord = retry === undefined
+      ? undefined
+      : this.records[retry.previousRecordIndex];
+    if (retry !== undefined && previousRecord === undefined) {
+      throw new CompatibilityDispatchError(
+        'PROVIDER_RETRY_RECORD_MISSING',
+        `${state.assignment.probeId} retry has no previous attempt record`,
+      );
+    }
     const record = createProviderAttemptRecord({
       probeId: state.assignment.probeId,
       provider: state.assignment.provider,
@@ -354,13 +385,61 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
           state.assignment.attachmentId !== undefined
         ? { attachmentId: state.assignment.attachmentId }
         : {}),
-    }, this.options.runId, 1, nextOrdinal, this.deadlineAt, startedAt, null);
+    }, this.options.runId, previousRecord === undefined
+      ? 1
+      : previousRecord.attempt + 1, nextOrdinal, this.deadlineAt,
+    startedAt, previousRecord?.contract.callId ?? null);
     this.sent = nextOrdinal;
-    state.nextDispatch += 1;
+    if (retry === undefined) {
+      state.nextDispatch += 1;
+    } else {
+      this.pendingRetryBySession.delete(sessionId);
+    }
     const recordIndex = this.records.push(record) - 1;
-    state.recordIndexes.push(recordIndex);
+    state.recordIndexes[dispatchIndex] = recordIndex;
+    state.allRecordIndexes.push(recordIndex);
     this.latestRecordBySession.set(sessionId, recordIndex);
     return this.observeStream(recordIndex, next());
+  }
+
+  private authorizeRetry(
+    sessionId: string,
+    providerRoute: string,
+    failure: LlmFailure,
+  ): boolean {
+    if (failure.code !== 'TRANSPORT') return false;
+    const state = this.currentAssignmentBySession.get(sessionId);
+    if (
+      state === undefined ||
+      state.assignment.route !== providerRoute ||
+      this.pendingRetryBySession.has(sessionId) ||
+      this.retriedProviders.has(state.assignment.provider) ||
+      this.now() >= this.deadlineAt ||
+      this.sent >= this.options.maximumDispatches
+    ) return false;
+    const dispatchIndex = state.nextDispatch - 1;
+    const previousRecordIndex = state.recordIndexes[dispatchIndex];
+    const previousRecord = previousRecordIndex === undefined
+      ? undefined
+      : this.records[previousRecordIndex];
+    if (
+      previousRecordIndex === undefined ||
+      previousRecord === undefined ||
+      previousRecord.contract.finish.kind !== 'error' ||
+      previousRecord.contract.finish.detailCode !== 'TRANSPORT'
+    ) return false;
+    const sideEffectAccepted = state.allRecordIndexes.some((recordIndex) =>
+      this.records[recordIndex]?.contract.toolCalls.some((receipt) =>
+        receipt.status === 'accepted'
+      ) === true
+    );
+    if (sideEffectAccepted) return false;
+    this.retriedProviders.add(state.assignment.provider);
+    this.pendingRetryBySession.set(sessionId, {
+      dispatchIndex,
+      previousRecordIndex,
+    });
+    return true;
   }
 
   private async *observeStream(
