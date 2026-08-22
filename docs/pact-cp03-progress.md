@@ -38,7 +38,7 @@ The viewer does not directly drive a character with keyboard/game controls in th
 | CP00 Reference Grammar | visual/theoretical grammar and checkpoint media | `ARCHIVED`; human visual direction recorded | preserve as source, not final 3D proof |
 | CP01 Asset Bake-off | compare public and generated 3D candidates | `PARTIAL`; preflight and fixed public candidates exist, formal model bake-off incomplete | decide whether a generated challenger is still needed |
 | CP02 Mutable Room / One Reframe | source-locked room, governed add/move/undo/reject, real local assets | `CHECKPOINT_ARCHIVED`, runtime tested, artistic `R2 KEEP`, public release false | frozen; do not rewrite its evidence |
-| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `FOUNDATION_TESTED + LOCAL_EXECUTABLE_SLICE_TESTED + LOCAL_8_DISPATCH_GRAPH_VERIFIED + FRESH_PREFLIGHT_ELIGIBLE + TWO_FAILED_LIVE_RUNS`; Ruby merge, contracts, CaseSession mechanics/durability, approval-gated provider runner/evidence verifier and one approved role-interaction seam exist; the replacement 8/10 provider graph is scripted and locally verified, and its fresh Keychain/catalog/pricing preflight is 8/8 eligible with 0 sent, while Keychain-forced Live Run 02 remains a measured failure of the old 12/14 graph | separate exact approval before Live Run 03; then audience UI, five visually distinct effects, formal encounters and archive |
+| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `FOUNDATION_TESTED + LOCAL_EXECUTABLE_SLICE_TESTED + LOCAL_8_DISPATCH_GRAPH_VERIFIED + THREE_FAILED_LIVE_RUNS`; Ruby merge, contracts, CaseSession mechanics/durability, approval-gated provider runner/evidence verifier and one approved role-interaction seam exist; Live Run 03 tested the replacement 8/10 graph and failed when the draft returned 2.215 seconds beyond the 12-second cutoff | critical-path redesign decision and local verification before any new preflight/run; then audience UI, five visually distinct effects, formal encounters and archive |
 | CP04 Rights-aware Retrieval | local semantic search over cleared asset registry | `NOT_STARTED`; three fixed Case Pack assets are not a vector database | source records, embeddings, retrieval/Guardian UI |
 | CP05 Generated Gap Asset | one approved offline generated asset | `NOT_STARTED` | separately authorised model/API or local generation bake-off |
 | CP06 Four Positions | 0/1/4-person role and takeover behaviour | `NOT_STARTED` | participant protocol and role runtime |
@@ -113,7 +113,7 @@ This is roughly the first third of the full CP00-CP08 production route. It is no
 | A. Ruby + CP02 governed runtime | `COMPLETE` | history-preserving merge and combined tests |
 | B1. Shared compatibility contracts | `COMPLETE` | schemas and unit tests |
 | B2. DSH root/continuable + CaseSession durability | `COMPLETE` | scripted adapter, bounded case transition, flush and cold JSONL read |
-| B3. Real provider compatibility | `LOCAL GRAPH VERIFIED / FRESH PREFLIGHT ELIGIBLE / TWO FAILED LIVE RUNS / LIVE NOT PASSED` | Run 01 sent 3 and exposed stale DeepSeek auth plus lifecycle masking; Keychain-forced Run 02 sent 10 on the old 12/14 graph, authenticated both providers, accepted DeepSeek/Gemini schema tools and a synthetic multimodal contribution, but Guardian dispatch 2 was late and the draft probe was never sent; the replacement graph is 8 planned / 10 maximum, passes scripted concurrency, settlement-isolation, timing and failure-archive tests, and has a fresh 8/8 eligible, 0-sent Keychain/catalog/pricing preflight |
+| B3. Real provider compatibility | `LOCAL GRAPH VERIFIED / THREE FAILED LIVE RUNS / LIVE NOT PASSED` | Run 01 sent 3 and exposed stale DeepSeek auth plus lifecycle masking; Run 02 sent 10 on the old graph and failed before draft; Live Run 03 sent 6 on the replacement 8/10 graph, preserved exact selection and settlement isolation, accepted the first five probes, then quarantined the draft 2.215 seconds beyond the shared 12-second cutoff; probes 07/08 were not sent |
 | C1. Draft/approval/Gate to Ruby role interaction | `LOCAL_SLICE_TESTED` | real DSH root with scripted provider → hash approval → Gate → Ruby navigation/ownership → receipt → durable CaseSession transition |
 | C2. Five-action effect runtime | `STATE_RULES_TESTED / EFFECTS NOT_STARTED` | cumulative and terminal mechanics are unit-tested; five visually distinct runtime effects are not implemented |
 | C3. Loopback host, privacy and evidence API | `NOT_STARTED` | follows provider contract validation |
@@ -135,9 +135,9 @@ The architecture is technically feasible with current components:
 
 Current successful tests prove local contracts, cumulative/terminal CaseSession mechanics, real DSH session/tool/event plumbing with a scripted provider, an eight-dispatch compatibility graph, deterministic Gate checks, Ruby navigation/ownership execution, and local scripted DSH → approval → Ruby execution → CaseSession durability. They do not yet prove:
 
-- complete mixed-provider reliability: Live Run 02 produced accepted DeepSeek and Gemini tools on the superseded graph, but the full representative chain failed; the new graph is 8/8 preflight eligible but has not made a provider request;
+- complete mixed-provider reliability: Live Run 03 reached both providers on the replacement graph and accepted the first five probes, but its draft was late/quarantined and the final two probes were not sent;
 - real multimodal interpretation quality beyond one generated checkerboard schema probe;
-- real-provider satisfaction of the 2.5-second public-trace target, 8-second draft target, or 12-second hard deadline: Live Run 02 measured all three as unmet for the old route, while the new timing facts have only controlled-clock scripted evidence;
+- real-provider satisfaction of the 2.5-second public-trace target, 8-second draft target, or 12-second hard deadline: Live Run 03 measured a 5.762-second first trace, no accepted draft, and draft completion 2.215 seconds after the hard cutoff on the replacement graph;
 - an audience-facing proposal/approval UI;
 - six real free-text turns covering all five actions;
 - five visually distinct runtime effects;
@@ -169,16 +169,15 @@ session directory.
 | Browser engineering smoke | `PASS` | CP02 59.88 median FPS; CP03 source-lock/RGB-D; 19-shot camera editor; 300-frame simulation package and replay |
 | Provider graph local | `8/8 SCRIPTED PASS`, `8 SENT TO LOCAL ADAPTERS` | one stream per probe; 02/04/05 overlap at a barrier; active Conductor 2 turns; five settlement sinks blocked; controlled 2.0-second trace and 7.5-second draft; 12.001-second draft quarantined before later waves |
 | Provider preflight | `FRESH 8/8 ELIGIBLE`, `0 EXCLUDED`, `0 SENT` | both named Keychain entries were present; DeepSeek `deepseek-v4-pro` is 5 planned / 6 maximum, Gemini official `gemini-3.5-flash` is 3/4; both catalog entries are eligible; conservative ten-dispatch estimate `0.36655104 USD` is within the `0.50 USD` cap; this does not authorize or prove a live run |
-| Provider network | `FAILED_RECONSTRUCTED`, `10 SENT` | Keychain-forced Live Run 02: both providers authenticated; four probes met their functional tool/terminal plans before Guardian dispatch 2 finished about 0.66 s late; draft probe 0 sent; two cancellation behaviours observed |
-| Provider run archive | `TWO FAILURE REPORTS + ONE ZERO-CALL PREFLIGHT TRACKED / RAW LOCAL ONLY` | Run 01, Run 02 and the fresh Live Run 03 preflight report are tracked under `checkpoints/cp03/provider-compatibility/`; ignored DSH logs remain local; `a15db83` adds automatic secret-scanned partial archives for future live failures only |
+| Provider network | `FAILED_ARCHIVED`, `6 SENT`, `0 RETRIES` | Keychain-forced Live Run 03: DeepSeek 4 and Gemini 2; the first five probes produced accepted expected tools, the draft tool was rejected as late, and probes 07/08 were not sent; recorded-usage estimate `0.013314525 USD`, not a bill |
+| Provider run archive | `THREE FAILURE REPORTS + ONE ZERO-CALL PREFLIGHT TRACKED / RAW LOCAL ONLY` | Run 03 automatically retained a raw partial archive and failing evidence report; archive/selection/provider-kind/timing/orchestration/secret checks passed while completion/ledger/coverage/contracts failed; independent exact-value scan passed all 12 local files including 9 decompressed sessions |
 | CP03 visual/archive gate | `FOUNDATION SMOKE ONLY / FORMAL NOT RUN` | ignored engineering video/stills exist; no formal checkpoint copy package or human CP03 decision |
 
-Remote truth was fetched immediately before the zero-call preflight; the local
-branch and its remote were exact at
-`2a2ae926da1504f050be7d288433a8c0a9dc9239`, which is recorded as the
-preflight's source commit. The four named collaborator tips remained `2136710`,
-`722b699`, `eacab0c`, and `1691e8e`; none moved during this readiness slice, so
-no fetch integration was required. Ruby's newer Case Pack repair,
+Remote truth was fetched immediately before Live Run 03; the local branch and
+its remote were exact at `8cc4733cacc827e1f35cc5fb168a65010eff8fcb`,
+which is recorded as the run's source commit. The four named collaborator tips
+remained `2136710`, `722b699`, `eacab0c`, and `1691e8e`; none moved during this
+live-run slice, so no fetch integration was required. Ruby's newer Case Pack repair,
 delivery-package and camera-editor work remains retained. Haorui/Codex did not
 introduce a parallel Ruby execution, navigation, collision, ownership, camera
 or rendering backend; the CaseSession ledger records existing Gate/Ruby receipt
@@ -187,12 +186,12 @@ facts only.
 ## Immediate Sequence
 
 1. Keep Ruby's merged 3D/camera/delivery work and the DSH → approval → Gate → Ruby seam frozen as the integration baseline.
-2. Preserve Live Run 01 as `FAILED_PARTIAL` and Live Run 02 as `FAILED_RECONSTRUCTED`; neither is a compatibility pass or CP03 acceptance.
-3. Keep option A as implemented: 2.5-second trace target, 8-second draft target, 12-second hard cutoff, 8 planned / 10 maximum dispatches, and isolated settlement sinks.
-4. Preserve the fresh 8/8 eligible, 0-sent Keychain/catalog/pricing preflight as a readiness record only; it does not replace provider evidence.
-5. Request a fresh exact Live Run 03 approval naming the new counts, provider/model selections, input classes and `0.50 USD` ceiling; do not infer approval from the preflight or local repair.
-6. If explicitly approved, run one bounded Live Run 03 and inspect its raw/evidence reports before any compatibility claim.
-7. On a real-provider `GO`, implement five-action effects, then the loopback API/privacy boundary and audience UI.
+2. Preserve Live Run 01 as `FAILED_PARTIAL`, Live Run 02 as `FAILED_RECONSTRUCTED`, and Live Run 03 as `FAILED_ARCHIVED`; none is a compatibility pass or CP03 acceptance.
+3. Do not repeat Live Run 03: the 8/10 graph fixed undisclosed settlement dispatches but its sequential trace-then-draft critical path did not fit the approved 12-second hard cutoff.
+4. Grill and select a new critical-path design: speculative parallel draft plus reconciliation, different approved model/routing or smaller draft contract, or an explicit change to the 12-second artwork requirement.
+5. Write and approve the changed design boundary, then verify it with scripted timing/failure tests before creating a fresh zero-call preflight.
+6. Any Live Run 04 requires a new exact provider/input/budget approval; no previous approval carries forward.
+7. Only after a real-provider `GO`, implement five-action effects, then the loopback API/privacy boundary and audience UI.
 8. Add cleared image/audio ingestion paths, run formal encounters, archive videos/stills/copy/receipts, and request separate human technical and artistic decisions.
 
 ## Evidence Vocabulary
