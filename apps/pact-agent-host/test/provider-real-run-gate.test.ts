@@ -28,8 +28,8 @@ const approval = (): ProviderRealRunApproval => ({
   approvedAt: '2026-08-22T15:00:00.000Z',
   runId: 'compat_20260822T150000Z_a1b2c3',
   probeIds: fixedProbeIds,
-  plannedDispatches: 12,
-  maximumDispatches: 14,
+  plannedDispatches: 8,
+  maximumDispatches: 10,
   maxUsd: 0.5,
   selection: {
     deepseek: { route: 'deepseek-official', model: 'deepseek-v4-pro' },
@@ -44,9 +44,9 @@ const eligiblePreflight = () => ({
     intended: 8,
     eligible: 8,
     excluded: 0,
-    plannedDispatches: 12,
+    plannedDispatches: 8,
     sentDispatches: 0,
-    maximumDispatches: 14,
+    maximumDispatches: 10,
   },
   selection: {
     deepseek: {
@@ -70,9 +70,9 @@ describe('real provider authorization gate', () => {
           intended: 8,
           eligible: 0,
           excluded: 8,
-          plannedDispatches: 12,
+          plannedDispatches: 8,
           sentDispatches: 0,
-          maximumDispatches: 14,
+          maximumDispatches: 10,
         },
         selection: {
           deepseek: { route: 'deepseek-official', model: null },
@@ -84,7 +84,7 @@ describe('real provider authorization gate', () => {
       approval: approval(),
       execute: async () => {
         transportInvocations += 1;
-        return { completedProbes: 8, sentDispatches: 12 };
+        return { completedProbes: 8, sentDispatches: 8 };
       },
     });
 
@@ -96,9 +96,9 @@ describe('real provider authorization gate', () => {
         intended: 8,
         eligible: 0,
         excluded: 8,
-        plannedDispatches: 12,
+        plannedDispatches: 8,
         sentDispatches: 0,
-        maximumDispatches: 14,
+        maximumDispatches: 10,
       },
     });
     expect(transportInvocations).toBe(0);
@@ -116,7 +116,7 @@ describe('real provider authorization gate', () => {
       approval: narrowedApproval,
       execute: async () => {
         transportInvocations += 1;
-        return { completedProbes: 8, sentDispatches: 12 };
+        return { completedProbes: 8, sentDispatches: 8 };
       },
     });
 
@@ -135,7 +135,7 @@ describe('real provider authorization gate', () => {
       mismatch: 'plannedDispatches',
       mutate: (base: ProviderRealRunApproval): ProviderRealRunApproval => ({
         ...base,
-        plannedDispatches: 11,
+        plannedDispatches: 7,
       }),
     },
     {
@@ -143,7 +143,7 @@ describe('real provider authorization gate', () => {
       mismatch: 'maximumDispatches',
       mutate: (base: ProviderRealRunApproval): ProviderRealRunApproval => ({
         ...base,
-        maximumDispatches: 15,
+        maximumDispatches: 11,
       }),
     },
     {
@@ -189,7 +189,7 @@ describe('real provider authorization gate', () => {
       approval: mutate(approval()),
       execute: async () => {
         transportInvocations += 1;
-        return { completedProbes: 8, sentDispatches: 12 };
+        return { completedProbes: 8, sentDispatches: 8 };
       },
     });
 
@@ -221,7 +221,7 @@ describe('real provider authorization gate', () => {
       approval: approval(),
       execute: async () => {
         transportInvocations += 1;
-        return { completedProbes: 8, sentDispatches: 12 };
+        return { completedProbes: 8, sentDispatches: 8 };
       },
     });
 
@@ -266,7 +266,7 @@ describe('real provider authorization gate', () => {
       approval: mutate(approval()),
       execute: async () => {
         transportInvocations += 1;
-        return { completedProbes: 8, sentDispatches: 12 };
+        return { completedProbes: 8, sentDispatches: 8 };
       },
     });
 
@@ -319,9 +319,9 @@ describe('real provider authorization gate', () => {
         intended: 8,
         eligible: 0,
         excluded: 8,
-        plannedDispatches: 12,
+        plannedDispatches: 8,
         sentDispatches: 0,
-        maximumDispatches: 14,
+        maximumDispatches: 10,
       },
     });
   });

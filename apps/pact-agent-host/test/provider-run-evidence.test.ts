@@ -106,9 +106,9 @@ describe('provider run evidence verifier', () => {
       counts: {
         expectedProbes: 8,
         coveredProbes: 8,
-        plannedDispatches: 12,
-        sentDispatches: 12,
-        attemptRecords: 12,
+        plannedDispatches: 8,
+        sentDispatches: 8,
+        attemptRecords: 8,
       },
       checks: {
         archive: 'PASS',

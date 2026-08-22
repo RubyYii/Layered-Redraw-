@@ -34,8 +34,8 @@ const approval = (): ProviderRealRunApproval => ({
   approvedAt: '2026-08-22T18:00:00.000Z',
   runId: 'compat_command_20260822_a1b2c3',
   probeIds: fixedProbeIds,
-  plannedDispatches: 12,
-  maximumDispatches: 14,
+  plannedDispatches: 8,
+  maximumDispatches: 10,
   maxUsd: 0.5,
   selection: {
     deepseek: { route: 'deepseek-official', model: 'deepseek-v4-pro' },
@@ -51,9 +51,9 @@ const eligiblePreflight = () => ({
     eligible: 8,
     excluded: 0,
     completed: 0,
-    plannedDispatches: 12,
+    plannedDispatches: 8,
     sentDispatches: 0,
-    maximumDispatches: 14,
+    maximumDispatches: 10,
   },
   selection: {
     deepseek: { route: 'deepseek-official', model: 'deepseek-v4-pro' },
@@ -131,7 +131,7 @@ describe('authorised real-provider command boundary', () => {
     expect(result).toMatchObject({
       status: 'COMPLETED',
       completedProbes: 8,
-      sentDispatches: 12,
+      sentDispatches: 8,
       evidence: { status: 'PASS', runId: approval().runId },
     });
     expect(calls).toHaveLength(1);
@@ -155,7 +155,7 @@ describe('authorised real-provider command boundary', () => {
     expect(JSON.parse(raw)).toMatchObject({
       schemaVersion: 'cp03-provider-raw-run/0.1',
       approval: { approvalId: 'approval_cp03_command_20260822' },
-      result: { status: 'COMPLETED', sentDispatches: 12 },
+      result: { status: 'COMPLETED', sentDispatches: 8 },
     });
     expect(raw).not.toContain('test-only-not-forwarded-by-command');
     const evidencePath = join(

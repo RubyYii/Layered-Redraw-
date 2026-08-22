@@ -11,7 +11,7 @@ export interface CompatibilityTokenRates {
 }
 
 export interface WorstCaseCostEstimate {
-  readonly dispatches: { readonly deepseek: 9; readonly gemini: 5 };
+  readonly dispatches: { readonly deepseek: 6; readonly gemini: 4 };
   readonly inputTokensPerDispatch: number;
   readonly maxOutputTokensPerDispatch: number;
   readonly worstCaseUsd: number;
@@ -35,7 +35,7 @@ export const estimateWorstCaseCost = (
   ) {
     throw new TypeError('COMPATIBILITY_PRICING_INVALID');
   }
-  const dispatches = { deepseek: 9 as const, gemini: 5 as const };
+  const dispatches = { deepseek: 6 as const, gemini: 4 as const };
   const providerCost = (
     count: number,
     rate: ProviderTokenRates,

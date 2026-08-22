@@ -34,11 +34,11 @@
 - Modify: `apps/pact-agent-host/test/provider-real-command.test.ts`
 - Modify: `apps/pact-agent-host/test/provider-run-evidence.test.ts`
 
-- [ ] **Step 1: Write red assertions for the 8/10 contract**
+- [x] **Step 1: Write red assertions for the 8/10 contract**
 
 Require eight probes, eight planned dispatches, ten maximum, DeepSeek `5/6`, Gemini `3/4`, and waves `[01,03]`, `[02,04,05]`, `[06]`, `[07,08]`.
 
-- [ ] **Step 2: Run the focused red tests**
+- [x] **Step 2: Run the focused red tests**
 
 ```bash
 cd apps/pact-agent-host
@@ -47,11 +47,11 @@ npx vitest run test/provider-compatibility.test.ts test/provider-real-run-gate.t
 
 Expected: FAIL against the old 12/14 plan.
 
-- [ ] **Step 3: Remove receipt-consumption dispatches and update dependencies/waves**
+- [x] **Step 3: Remove receipt-consumption dispatches and update dependencies/waves**
 
 Each probe declares one provider dispatch. Probe 04 and Probe 05 are independent at dispatch time; Probe 06 depends on 02, 04, and 05.
 
-- [ ] **Step 4: Re-run focused tests**
+- [x] **Step 4: Re-run focused tests**
 
 Expected: plan/gate/evidence fixtures agree on `8 planned / 10 maximum`.
 

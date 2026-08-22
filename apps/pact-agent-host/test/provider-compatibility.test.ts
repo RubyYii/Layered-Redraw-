@@ -34,6 +34,7 @@ import {
 import { resolveOfficialPricing } from '../src/official-pricing.js';
 import { buildProviderPreflightReport } from '../src/preflight-report.js';
 import {
+  COMPATIBILITY_EXECUTION_WAVES,
   COMPATIBILITY_PROBES,
   probePlanSummary,
 } from '../src/probe-plan.js';
@@ -96,16 +97,16 @@ describe('provider compatibility configuration', () => {
 });
 
 describe('fixed eight-probe plan', () => {
-  it('fixes the intended probes, 12 planned dispatches, and 14 hard maximum', () => {
+  it('fixes the intended probes, 8 planned dispatches, and 10 hard maximum', () => {
     const summary = probePlanSummary(COMPATIBILITY_PROBES);
 
     expect(summary).toEqual({
       intendedProbes: 8,
-      plannedDispatches: 12,
-      maximumDispatches: 14,
+      plannedDispatches: 8,
+      maximumDispatches: 10,
       byProvider: {
-        deepseek: { probes: 5, plannedDispatches: 8, maximumDispatches: 9 },
-        gemini: { probes: 3, plannedDispatches: 4, maximumDispatches: 5 },
+        deepseek: { probes: 5, plannedDispatches: 5, maximumDispatches: 6 },
+        gemini: { probes: 3, plannedDispatches: 3, maximumDispatches: 4 },
       },
     });
     expect(COMPATIBILITY_PROBES.map((probe) => probe.label)).toEqual([
@@ -118,22 +119,29 @@ describe('fixed eight-probe plan', () => {
       'DeepSeek hard-timeout cancel',
       'Gemini cancel after first chunk',
     ]);
-    expect(COMPATIBILITY_PROBES[3]?.dependsOn).toEqual(['probe-02']);
-    expect(COMPATIBILITY_PROBES[4]?.dependsOn).toEqual(['probe-02']);
+    expect(COMPATIBILITY_PROBES[3]?.dependsOn).toEqual([]);
+    expect(COMPATIBILITY_PROBES[4]?.dependsOn).toEqual([]);
     expect(COMPATIBILITY_PROBES[5]?.dependsOn).toEqual([
+      'probe-02',
       'probe-04',
       'probe-05',
     ]);
-    for (const probeNumber of [1, 3, 4, 5] as const) {
+    expect(COMPATIBILITY_EXECUTION_WAVES).toEqual([
+      ['probe-01', 'probe-03'],
+      ['probe-02', 'probe-04', 'probe-05'],
+      ['probe-06'],
+      ['probe-07', 'probe-08'],
+    ]);
+    for (const probeNumber of [0, 1, 2, 3, 4, 5] as const) {
       expect(COMPATIBILITY_PROBES[probeNumber]?.dispatches.map(
         (dispatch) => dispatch.expectedOutcome,
-      )).toEqual(['structured-tool', 'terminal-after-tool-result']);
+      )).toEqual(['structured-tool']);
     }
   });
 });
 
 describe('bounded fake dispatcher', () => {
-  it('completes eight probes with the planned 12 dispatches', async () => {
+  it('completes eight probes with the planned 8 dispatches', async () => {
     const transport = createFakeCompatibilityTransport();
     const result = await runCompatibilityPlan({
       config: inspectCompatibilityConfig(completeEnv()),
@@ -142,9 +150,9 @@ describe('bounded fake dispatcher', () => {
       syntheticAttachmentId: SYNTHETIC_ATTACHMENT_ID,
     });
 
-    expect(result).toMatchObject({ completedProbes: 8, sentDispatches: 12 });
-    expect(transport.attempts).toHaveLength(12);
-    expect(result.attemptRecords).toHaveLength(12);
+    expect(result).toMatchObject({ completedProbes: 8, sentDispatches: 8 });
+    expect(transport.attempts).toHaveLength(8);
+    expect(result.attemptRecords).toHaveLength(8);
     expect(
       result.attemptRecords.every((record) =>
         validateProviderCallEnvelope(record.contract) === record.contract
@@ -153,14 +161,13 @@ describe('bounded fake dispatcher', () => {
     const multimodal = result.attemptRecords.filter(
       (record) => record.probeId === 'probe-04',
     );
-    expect(multimodal).toHaveLength(2);
+    expect(multimodal).toHaveLength(1);
     expect(multimodal.every((record) =>
       record.attachmentId === SYNTHETIC_ATTACHMENT_ID &&
       record.contract.inputClasses.includes('synthetic_image')
     )).toBe(true);
     expect(multimodal.map((record) => record.contract.finish.kind)).toEqual([
       'tool_calls',
-      'stop',
     ]);
   });
 
@@ -174,7 +181,7 @@ describe('bounded fake dispatcher', () => {
       runId: 'compat_fake_deepseek_retry',
       syntheticAttachmentId: SYNTHETIC_ATTACHMENT_ID,
     });
-    expect(oneRetry).toMatchObject({ completedProbes: 8, sentDispatches: 13 });
+    expect(oneRetry).toMatchObject({ completedProbes: 8, sentDispatches: 9 });
     const retriedDeepSeek = oneRetry.attemptRecords.filter(
       (record) => record.contract.retryOf !== null,
     );
@@ -194,17 +201,17 @@ describe('bounded fake dispatcher', () => {
       runId: 'compat_fake_both_retry',
       syntheticAttachmentId: SYNTHETIC_ATTACHMENT_ID,
     });
-    expect(twoRetries).toMatchObject({ completedProbes: 8, sentDispatches: 14 });
+    expect(twoRetries).toMatchObject({ completedProbes: 8, sentDispatches: 10 });
     expect(twoRetries.attemptRecords.filter(
       (record) => record.contract.retryOf !== null,
     )).toHaveLength(2);
   });
 
-  it('refuses a fifteenth dispatch before invoking transport', async () => {
+  it('refuses an eleventh dispatch before invoking transport', async () => {
     let calls = 0;
     const dispatcher = new ProviderDispatcher({
       deadlineAt: Date.now() + COMPATIBILITY_LIMITS.deadlineMs,
-      maximumDispatches: 14,
+      maximumDispatches: 10,
       transport: async () => {
         calls += 1;
         return {
@@ -224,20 +231,20 @@ describe('bounded fake dispatcher', () => {
       expectedTools: ['pact_submit_contribution'] as const,
     };
 
-    for (let index = 0; index < 14; index += 1) {
+    for (let index = 0; index < 10; index += 1) {
       await dispatcher.dispatch(request, `compat_budget_${index}`);
     }
     await expect(
       dispatcher.dispatch(request, 'compat_budget_refused'),
     ).rejects.toMatchObject({ code: 'DISPATCH_BUDGET_EXHAUSTED' });
-    expect(calls).toBe(14);
+    expect(calls).toBe(10);
   });
 
   it('rejects a path or URL in place of a durable attachment id before transport', async () => {
     let calls = 0;
     const dispatcher = new ProviderDispatcher({
       deadlineAt: Date.now() + COMPATIBILITY_LIMITS.deadlineMs,
-      maximumDispatches: 14,
+      maximumDispatches: 10,
       transport: async () => {
         calls += 1;
         return {
@@ -268,7 +275,7 @@ describe('bounded fake dispatcher', () => {
     let calls = 0;
     const dispatcher = new ProviderDispatcher({
       deadlineAt: Date.now() + COMPATIBILITY_LIMITS.deadlineMs,
-      maximumDispatches: 14,
+      maximumDispatches: 10,
       transport: async (record) => {
         calls += 1;
         if (record.expectedOutcome === 'structured-tool') {
@@ -441,7 +448,7 @@ describe('keyless catalog and cost eligibility', () => {
     });
   });
 
-  it('computes a conservative 9 DeepSeek plus 5 Gemini dispatch cap', () => {
+  it('computes a conservative 6 DeepSeek plus 4 Gemini dispatch cap', () => {
     const estimate = estimateWorstCaseCost({
       deepseek: {
         inputUsdPerMillionTokens: 1,
@@ -453,11 +460,11 @@ describe('keyless catalog and cost eligibility', () => {
       },
     }, 2.50);
 
-    expect(estimate.dispatches).toEqual({ deepseek: 9, gemini: 5 });
+    expect(estimate.dispatches).toEqual({ deepseek: 6, gemini: 4 });
     expect(estimate.inputTokensPerDispatch).toBe(32_768);
     expect(estimate.maxOutputTokensPerDispatch).toBe(2_048);
     expect(estimate.withinUserCap).toBe(true);
-    expect(estimate.worstCaseUsd).toBeCloseTo(0.864256, 6);
+    expect(estimate.worstCaseUsd).toBeCloseTo(0.647168, 6);
   });
 
   it('binds the exact selected models to the verified official pricing snapshot', () => {
@@ -514,9 +521,9 @@ describe('keyless catalog and cost eligibility', () => {
         eligible: 8,
         excluded: 0,
         completed: 0,
-        plannedDispatches: 12,
+        plannedDispatches: 8,
         sentDispatches: 0,
-        maximumDispatches: 14,
+        maximumDispatches: 10,
       },
       disclosure: {
         providerRequestsMade: 0,
@@ -524,7 +531,7 @@ describe('keyless catalog and cost eligibility', () => {
         catalogEligibilityIsCompatibilityPass: false,
       },
     });
-    expect(report.pricing.estimate?.worstCaseUsd).toBeCloseTo(0.48224256, 8);
+    expect(report.pricing.estimate?.worstCaseUsd).toBeCloseTo(0.36655104, 8);
     expect(JSON.stringify(report)).not.toContain('do-not-retain');
   });
 });
