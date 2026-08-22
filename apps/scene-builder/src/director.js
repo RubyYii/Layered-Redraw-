@@ -640,6 +640,7 @@ export class DirectorRuntime {
     this.onState = onState;
     this.time = 0;
     this.playing = false;
+    this.playbackEnd = null;
     this.animationFrame = 0;
     this.fixedClock = new FixedStepClock({ hz: simulationHz });
     this.lastSimulationStep = this.fixedClock.snapshot();
@@ -655,6 +656,7 @@ export class DirectorRuntime {
       time: this.time,
       duration: this.duration,
       playing: this.playing,
+      playbackEnd: this.playbackEnd,
       simulation: this.lastSimulationStep,
     };
   }
@@ -684,13 +686,31 @@ export class DirectorRuntime {
     return true;
   }
 
+  playRange(rawStart, rawEnd) {
+    if (!this.duration) return false;
+    const start = clamp(Number(rawStart) || 0, 0, this.duration);
+    const end = clamp(Number(rawEnd) || 0, start, this.duration);
+    if (end <= start) return false;
+    cancelAnimationFrame(this.animationFrame);
+    this.time = start;
+    this.playbackEnd = end;
+    this.playing = true;
+    this.lastSimulationStep = this.fixedClock.reset(this.time, performance.now());
+    this.emit();
+    this.animationFrame = requestAnimationFrame(this.tick);
+    return true;
+  }
+
   tick = (timestamp) => {
     if (!this.playing) return;
-    this.lastSimulationStep = this.fixedClock.advance(timestamp, this.duration);
-    this.time = this.lastSimulationStep.time;
-    if (this.lastSimulationStep.steps > 0 || this.time >= this.duration) this.emit();
-    if (this.time >= this.duration) {
+    const playbackLimit = this.playbackEnd ?? this.duration;
+    const step = this.fixedClock.advance(timestamp, this.duration);
+    this.time = Math.min(step.time, playbackLimit);
+    this.lastSimulationStep = { ...step, time: this.time };
+    if (this.lastSimulationStep.steps > 0 || this.time >= playbackLimit) this.emit();
+    if (this.time >= playbackLimit) {
       this.playing = false;
+      this.playbackEnd = null;
       this.onState(this.getState());
       return;
     }
@@ -706,6 +726,7 @@ export class DirectorRuntime {
 
   stop() {
     this.playing = false;
+    this.playbackEnd = null;
     cancelAnimationFrame(this.animationFrame);
     this.time = 0;
     this.lastSimulationStep = this.fixedClock.reset(0);
@@ -713,6 +734,7 @@ export class DirectorRuntime {
   }
 
   seek(time) {
+    this.playbackEnd = null;
     this.time = clamp(Number(time) || 0, 0, this.duration);
     this.lastSimulationStep = this.fixedClock.reset(this.time, this.playing ? performance.now() : null);
     this.emit();
@@ -720,6 +742,7 @@ export class DirectorRuntime {
 
   dispose() {
     this.playing = false;
+    this.playbackEnd = null;
     cancelAnimationFrame(this.animationFrame);
   }
 }

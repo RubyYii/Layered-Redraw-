@@ -10,6 +10,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "test:ui": "node scripts/smoke-test.mjs",
+    "test:camera-editor": "node scripts/smoke-test-camera-editor.mjs",
     "test:cp02": "node scripts/smoke-test-cp02.mjs",
     "test:simulation-replay": "node scripts/smoke-test-delivery-replay.mjs --package artifacts/interaction-simulation/interaction-simulation-30fps.simulation-package --screenshot artifacts/interaction-simulation/replay-smoke.png --seek 6",
     "build:interaction-demo": "node scripts/build-interaction-demo-project.mjs",

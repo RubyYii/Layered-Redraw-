@@ -766,6 +766,110 @@ export class SceneStore {
     }, options);
   }
 
+  addCameraClip(overrides = {}, options = {}) {
+    const timeline = this.project.director.timeline;
+    const cameraClips = timeline.clips.filter((clip) => clip.type === "camera");
+    const id = String(overrides.id || makeId("camera"));
+    const fallbackPosition = [8, 5, 8];
+    const fallbackLookAt = [0, 1, 0];
+    const fromPosition = normalizeVector(overrides.fromPosition, fallbackPosition);
+    const toPosition = normalizeVector(overrides.toPosition, fromPosition);
+    const fromLookAt = normalizeVector(overrides.fromLookAt, fallbackLookAt);
+    const toLookAt = normalizeVector(overrides.toLookAt, fromLookAt);
+    const line = cameraClips.reduce((maximum, clip) => Math.max(maximum, clip.line), 0) + 1;
+    const clip = {
+      id,
+      type: "camera",
+      track: "camera",
+      label: overrides.label || `镜头 ${cameraClips.length + 1}`,
+      line,
+      start: finite(overrides.start, timeline.duration),
+      duration: finite(overrides.duration, 2.5),
+      preset: "perspective",
+      fromPreset: "perspective",
+      framing: 1,
+      fromFraming: 1,
+      fromPosition,
+      toPosition,
+      fromLookAt,
+      toLookAt,
+      positionPath: Array.isArray(overrides.positionPath) ? overrides.positionPath : [],
+      lookAtPath: Array.isArray(overrides.lookAtPath) ? overrides.lookAtPath : [],
+      fromFov: finite(overrides.fromFov, 42),
+      toFov: finite(overrides.toFov, finite(overrides.fromFov, 42)),
+      motion: overrides.motion ?? { easing: "minimumJerk" },
+    };
+    this.mutate((project) => {
+      project.director.timeline.clips.push(clip);
+    }, options);
+    return id;
+  }
+
+  updateCameraClip(id, patch, options = {}) {
+    const source = this.project.director.timeline.clips.find((clip) => clip.id === id && clip.type === "camera");
+    if (!source) return false;
+    this.mutate((project) => {
+      const previousExtent = project.director.timeline.clips.reduce(
+        (maximum, clip) => Math.max(maximum, clip.start + clip.duration),
+        0,
+      );
+      const trailingPadding = Math.max(0, project.director.timeline.duration - previousExtent);
+      const index = project.director.timeline.clips.findIndex((clip) => clip.id === id);
+      const current = project.director.timeline.clips[index];
+      project.director.timeline.clips[index] = {
+        ...current,
+        ...clone(patch),
+        id: current.id,
+        type: "camera",
+        track: "camera",
+        line: current.line,
+      };
+      if (Object.hasOwn(patch, "start") || Object.hasOwn(patch, "duration")) {
+        const nextExtent = project.director.timeline.clips.reduce(
+          (maximum, clip) => Math.max(maximum, clip.start + clip.duration),
+          0,
+        );
+        project.director.timeline.duration = nextExtent + trailingPadding;
+      }
+    }, options);
+    return true;
+  }
+
+  duplicateCameraClip(id, options = {}) {
+    const source = this.project.director.timeline.clips.find((clip) => clip.id === id && clip.type === "camera");
+    if (!source) return null;
+    const cameraClips = this.project.director.timeline.clips.filter((clip) => clip.type === "camera");
+    const duplicate = {
+      ...clone(source),
+      id: makeId("camera"),
+      label: `${source.label} · 副本`,
+      start: this.project.director.timeline.duration,
+      line: cameraClips.reduce((maximum, clip) => Math.max(maximum, clip.line), 0) + 1,
+    };
+    this.mutate((project) => {
+      project.director.timeline.clips.push(duplicate);
+    }, options);
+    return duplicate.id;
+  }
+
+  deleteCameraClip(id, options = {}) {
+    if (!this.project.director.timeline.clips.some((clip) => clip.id === id && clip.type === "camera")) return false;
+    this.mutate((project) => {
+      const previousExtent = project.director.timeline.clips.reduce(
+        (maximum, clip) => Math.max(maximum, clip.start + clip.duration),
+        0,
+      );
+      const trailingPadding = Math.max(0, project.director.timeline.duration - previousExtent);
+      project.director.timeline.clips = project.director.timeline.clips.filter((clip) => clip.id !== id);
+      const nextExtent = project.director.timeline.clips.reduce(
+        (maximum, clip) => Math.max(maximum, clip.start + clip.duration),
+        0,
+      );
+      project.director.timeline.duration = nextExtent + trailingPadding;
+    }, options);
+    return true;
+  }
+
   duplicateObject(id = this.selectionId) {
     const source = this.project.objects.find((object) => object.id === id);
     if (!source) return null;

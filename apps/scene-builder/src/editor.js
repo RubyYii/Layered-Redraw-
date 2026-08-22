@@ -589,6 +589,35 @@ export class ThreeSceneAdapter {
     this.resize();
   }
 
+  getViewportCameraPose() {
+    if (this.mode !== "edit" || this.activeCamera !== this.perspectiveCamera) return null;
+    return {
+      position: this.perspectiveCamera.position.toArray().map((value) => round(value)),
+      lookAt: this.orbitControls.target.toArray().map((value) => round(value)),
+      fov: round(this.perspectiveCamera.fov, 2),
+    };
+  }
+
+  setViewportCameraPose(pose) {
+    if (this.mode !== "edit" || !Array.isArray(pose?.position) || !Array.isArray(pose?.lookAt)) return false;
+    const position = new THREE.Vector3().fromArray(pose.position);
+    const target = new THREE.Vector3().fromArray(pose.lookAt);
+    if (![...position.toArray(), ...target.toArray()].every(Number.isFinite)) return false;
+    this.activePreset = "perspective";
+    this.activeCamera = this.perspectiveCamera;
+    this.perspectiveCamera.position.copy(position);
+    this.perspectiveCamera.fov = Math.min(85, Math.max(18, Number(pose.fov) || 42));
+    this.perspectiveCamera.up.set(0, 1, 0);
+    this.perspectiveCamera.lookAt(target);
+    this.perspectiveCamera.updateProjectionMatrix();
+    this.orbitControls.object = this.activeCamera;
+    this.orbitControls.target.copy(target);
+    this.orbitControls.update();
+    this.transformControls.camera = this.activeCamera;
+    this.resize();
+    return true;
+  }
+
   setPreviewInteractionHandler(handler) {
     this.previewInteractionHandler = typeof handler === "function" ? handler : null;
   }

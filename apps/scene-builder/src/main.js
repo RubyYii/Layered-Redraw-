@@ -18,6 +18,15 @@ import {
   formatTimecode,
 } from "./director.js";
 import {
+  cameraClipsFor,
+  cameraPoseForEndpoint,
+  createThreePointPath,
+  formatCameraPath,
+  nearestCameraClip,
+  parseCameraPath,
+  synchronizePathEndpoints,
+} from "./camera-editor.js";
+import {
   decideCp02ReframeIntent,
   runSceneCompositionTurn,
 } from "./agent-runtime.js";
@@ -269,6 +278,29 @@ const elements = {
   timelineTrackArea: $("#timeline-track-area"),
   timelinePlayhead: $("#timeline-playhead"),
   timelineScrubber: $("#timeline-scrubber"),
+  cameraEditorToggle: $("#camera-editor-toggle"),
+  cameraEditorPanel: $("#camera-editor-panel"),
+  cameraEditorClose: $("#camera-editor-close"),
+  cameraShotList: $("#camera-shot-list"),
+  cameraShotCount: $("#camera-shot-count"),
+  cameraShotEmpty: $("#camera-shot-empty"),
+  cameraShotForm: $("#camera-shot-form"),
+  cameraShotLabel: $("#camera-shot-label"),
+  cameraShotId: $("#camera-shot-id"),
+  cameraShotStart: $("#camera-shot-start"),
+  cameraShotDuration: $("#camera-shot-duration"),
+  cameraShotEasing: $("#camera-shot-easing"),
+  cameraShotFromFov: $("#camera-shot-from-fov"),
+  cameraShotToFov: $("#camera-shot-to-fov"),
+  cameraPositionPath: $("#camera-position-path"),
+  cameraLookAtPath: $("#camera-look-at-path"),
+  cameraShotAdd: $("#camera-shot-add"),
+  cameraShotDuplicate: $("#camera-shot-duplicate"),
+  cameraShotDelete: $("#camera-shot-delete"),
+  cameraShotPlay: $("#camera-shot-play"),
+  cameraPathBuild: $("#camera-path-build"),
+  cameraPathClear: $("#camera-path-clear"),
+  cameraShotStatus: $("#camera-shot-status"),
   previewIndicator: $("#preview-indicator"),
   simulationIndicator: $("#simulation-indicator"),
   simulationPhase: $("#simulation-phase"),
@@ -318,6 +350,7 @@ let runtime = null;
 let renderedTimelineKey = "";
 let timelineClipNodes = new Map();
 let activeTimelineClipIds = new Set();
+let selectedCameraClipId = null;
 let lastTimelineUiTime = -Infinity;
 let lastDialogueClipId = null;
 let cp02LastHashedProject = null;
@@ -1227,6 +1260,228 @@ const timelineTrackFor = (track) => track === "camera"
       ? "dialogue"
       : "world";
 
+const cameraVectorInputs = [...document.querySelectorAll("[data-camera-vector][data-axis]")];
+
+const selectedCameraClip = (state = currentState) => state.project.director.timeline.clips
+  .find((clip) => clip.id === selectedCameraClipId && clip.type === "camera") ?? null;
+
+const setCameraEditorStatus = (message, error = false) => {
+  elements.cameraShotStatus.textContent = message;
+  elements.cameraShotStatus.classList.toggle("is-error", error);
+};
+
+const setCameraPresetButtonState = (preset) => {
+  document.querySelectorAll("[data-camera]").forEach((button) => {
+    const active = button.dataset.camera === preset;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+};
+
+const updateTimelineCameraSelection = () => {
+  timelineClipNodes.forEach((node, id) => {
+    node.classList.toggle("is-camera-selected", id === selectedCameraClipId);
+  });
+};
+
+const setCameraVectorControls = (key, vector) => {
+  cameraVectorInputs.filter((input) => input.dataset.cameraVector === key).forEach((input) => {
+    setControlValue(input, Number(vector[Number(input.dataset.axis)]).toFixed(3));
+  });
+};
+
+const readCameraNumber = (control, label, minimum, maximum) => {
+  const value = control.valueAsNumber;
+  if (!Number.isFinite(value) || value < minimum || value > maximum) {
+    throw new Error(`${label}必须在 ${minimum}–${maximum} 之间`);
+  }
+  return value;
+};
+
+const readCameraVector = (key) => {
+  const inputs = cameraVectorInputs
+    .filter((input) => input.dataset.cameraVector === key)
+    .sort((left, right) => Number(left.dataset.axis) - Number(right.dataset.axis));
+  const vector = inputs.map((input) => input.valueAsNumber);
+  if (vector.length !== 3 || vector.some((value) => !Number.isFinite(value))) {
+    throw new Error("位置与注视点的 X / Y / Z 都必须是数字");
+  }
+  return vector;
+};
+
+const renderCameraEditor = (state) => {
+  const timeline = state.project.director.timeline;
+  const clips = cameraClipsFor(timeline);
+  if (selectedCameraClipId && !clips.some((clip) => clip.id === selectedCameraClipId)) selectedCameraClipId = null;
+  if (!elements.cameraEditorPanel.hidden && !selectedCameraClipId) {
+    selectedCameraClipId = nearestCameraClip(timeline, runtime?.time ?? 0)?.id ?? clips[0]?.id ?? null;
+  }
+
+  elements.cameraShotCount.textContent = `${clips.length} SHOT${clips.length === 1 ? "" : "S"}`;
+  elements.cameraShotList.replaceChildren();
+  clips.forEach((clip, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "camera-shot-row";
+    button.classList.toggle("is-selected", clip.id === selectedCameraClipId);
+    button.dataset.cameraShotId = clip.id;
+    const number = document.createElement("b");
+    number.textContent = String(index + 1).padStart(2, "0");
+    const label = document.createElement("span");
+    label.textContent = clip.label;
+    const time = document.createElement("time");
+    time.textContent = `${clip.start.toFixed(2)}s`;
+    button.append(number, label, time);
+    button.addEventListener("click", () => {
+      selectedCameraClipId = clip.id;
+      renderCameraEditor(currentState);
+      updateTimelineCameraSelection();
+    });
+    elements.cameraShotList.appendChild(button);
+  });
+
+  const clip = selectedCameraClip(state);
+  elements.cameraShotEmpty.hidden = clips.length > 0;
+  elements.cameraShotForm.hidden = !clip;
+  elements.cameraShotAdd.disabled = directorMode === "preview";
+  updateTimelineCameraSelection();
+  if (!clip) return;
+
+  const from = cameraPoseForEndpoint(clip, "from");
+  const to = cameraPoseForEndpoint(clip, "to");
+  setControlValue(elements.cameraShotLabel, clip.label);
+  elements.cameraShotId.textContent = clip.id;
+  elements.cameraShotId.title = clip.id;
+  setControlValue(elements.cameraShotStart, clip.start.toFixed(2));
+  setControlValue(elements.cameraShotDuration, clip.duration.toFixed(2));
+  setControlValue(elements.cameraShotEasing, clip.motion?.easing ?? "minimumJerk");
+  setCameraVectorControls("fromPosition", from.position);
+  setCameraVectorControls("fromLookAt", from.lookAt);
+  setCameraVectorControls("toPosition", to.position);
+  setCameraVectorControls("toLookAt", to.lookAt);
+  setControlValue(elements.cameraShotFromFov, from.fov.toFixed(1));
+  setControlValue(elements.cameraShotToFov, to.fov.toFixed(1));
+  setControlValue(elements.cameraPositionPath, formatCameraPath(clip.positionPath));
+  setControlValue(elements.cameraLookAtPath, formatCameraPath(clip.lookAtPath));
+
+  elements.cameraShotForm.querySelectorAll("input, select, textarea, button").forEach((control) => {
+    control.disabled = directorMode === "preview";
+  });
+  setCameraEditorStatus("改动会自动保存，并进入撤销历史。");
+};
+
+const openCameraEditor = (preferredId = null) => {
+  if (isCp02Case) return;
+  closeDrawers();
+  if (directorMode === "preview") setDirectorMode("edit");
+  const timeline = currentState.project.director.timeline;
+  const preferred = timeline.clips.find((clip) => clip.id === preferredId && clip.type === "camera");
+  selectedCameraClipId = preferred?.id
+    ?? selectedCameraClipId
+    ?? nearestCameraClip(timeline, runtime?.time ?? 0)?.id
+    ?? null;
+  elements.cameraEditorPanel.hidden = false;
+  elements.cameraEditorToggle.classList.add("is-active");
+  elements.cameraEditorToggle.setAttribute("aria-expanded", "true");
+  renderCameraEditor(currentState);
+};
+
+const closeCameraEditor = () => {
+  elements.cameraEditorPanel.hidden = true;
+  elements.cameraEditorToggle.classList.remove("is-active");
+  elements.cameraEditorToggle.setAttribute("aria-expanded", "false");
+  updateTimelineCameraSelection();
+};
+
+const updateCameraPathForVector = (clip, key, vector) => {
+  if (key === "fromPosition" || key === "toPosition") {
+    const from = key === "fromPosition" ? vector : readCameraVector("fromPosition");
+    const to = key === "toPosition" ? vector : readCameraVector("toPosition");
+    return { positionPath: synchronizePathEndpoints(clip.positionPath, from, to) };
+  }
+  if (key === "fromLookAt" || key === "toLookAt") {
+    const from = key === "fromLookAt" ? vector : readCameraVector("fromLookAt");
+    const to = key === "toLookAt" ? vector : readCameraVector("toLookAt");
+    return { lookAtPath: synchronizePathEndpoints(clip.lookAtPath, from, to) };
+  }
+  return {};
+};
+
+const commitCameraField = (target) => {
+  const clip = selectedCameraClip();
+  if (!clip || directorMode !== "edit") return;
+  let patch = null;
+  if (target === elements.cameraShotLabel) {
+    patch = { label: target.value.trim() || clip.label };
+  } else if (target === elements.cameraShotStart) {
+    patch = { start: readCameraNumber(target, "开始时间", 0, 86_400) };
+  } else if (target === elements.cameraShotDuration) {
+    patch = { duration: readCameraNumber(target, "镜头时长", 0.05, 86_400) };
+  } else if (target === elements.cameraShotEasing) {
+    patch = { motion: { ...(clip.motion ?? {}), easing: target.value } };
+  } else if (target === elements.cameraShotFromFov) {
+    patch = { fromFov: readCameraNumber(target, "起点 FOV", 18, 85) };
+  } else if (target === elements.cameraShotToFov) {
+    patch = { toFov: readCameraNumber(target, "终点 FOV", 18, 85) };
+  } else if (target === elements.cameraPositionPath) {
+    const path = parseCameraPath(target.value, "相机轨道");
+    patch = { positionPath: synchronizePathEndpoints(path, readCameraVector("fromPosition"), readCameraVector("toPosition")) };
+  } else if (target === elements.cameraLookAtPath) {
+    const path = parseCameraPath(target.value, "注视轨道");
+    patch = { lookAtPath: synchronizePathEndpoints(path, readCameraVector("fromLookAt"), readCameraVector("toLookAt")) };
+  } else if (target.matches("[data-camera-vector]")) {
+    const key = target.dataset.cameraVector;
+    const vector = readCameraVector(key);
+    patch = { [key]: vector, ...updateCameraPathForVector(clip, key, vector) };
+  }
+  if (!patch) return;
+  store.updateCameraClip(clip.id, patch);
+};
+
+const previewCameraEndpoint = (endpoint) => {
+  const clip = selectedCameraClip();
+  if (!clip) return;
+  if (directorMode === "preview") setDirectorMode("edit");
+  if (!editor.setViewportCameraPose(cameraPoseForEndpoint(clip, endpoint))) {
+    showToast("当前无法切换镜头机位，请返回编辑模式");
+    return;
+  }
+  setCameraPresetButtonState("perspective");
+  setCameraEditorStatus(`正在查看镜头${endpoint === "from" ? "起点 A" : "终点 B"}；可继续拖动视口后重新记录。`);
+};
+
+const captureCameraEndpoint = (endpoint) => {
+  const clip = selectedCameraClip();
+  if (!clip || directorMode !== "edit") return;
+  const pose = editor.getViewportCameraPose();
+  if (!pose) {
+    showToast("电影镜头使用透视相机，请先点击视口右上角的“透视”");
+    return;
+  }
+  const isStart = endpoint !== "to";
+  const positionKey = isStart ? "fromPosition" : "toPosition";
+  const lookAtKey = isStart ? "fromLookAt" : "toLookAt";
+  const fovKey = isStart ? "fromFov" : "toFov";
+  const otherPosition = cameraPoseForEndpoint(clip, isStart ? "to" : "from").position;
+  const otherLookAt = cameraPoseForEndpoint(clip, isStart ? "to" : "from").lookAt;
+  store.updateCameraClip(clip.id, {
+    [positionKey]: pose.position,
+    [lookAtKey]: pose.lookAt,
+    [fovKey]: pose.fov,
+    positionPath: synchronizePathEndpoints(
+      clip.positionPath,
+      isStart ? pose.position : otherPosition,
+      isStart ? otherPosition : pose.position,
+    ),
+    lookAtPath: synchronizePathEndpoints(
+      clip.lookAtPath,
+      isStart ? pose.lookAt : otherLookAt,
+      isStart ? otherLookAt : pose.lookAt,
+    ),
+  });
+  showToast(`已记录“${clip.label}”的${isStart ? "起点 A" : "终点 B"}`);
+};
+
 const SIMULATION_PHASE_LABELS = Object.freeze({
   anticipation: "预备",
   reach: "伸手",
@@ -1374,6 +1629,7 @@ const renderTimeline = (timeline) => {
     button.className = "timeline-clip";
     button.dataset.clipId = clip.id;
     button.dataset.track = clip.track;
+    button.classList.toggle("is-camera-selected", clip.type === "camera" && clip.id === selectedCameraClipId);
     button.style.left = `${(clip.start / visualDuration) * 100}%`;
     button.style.width = `${Math.max((clip.duration / visualDuration) * 100, 0.8)}%`;
     button.textContent = clip.label;
@@ -1381,7 +1637,8 @@ const renderTimeline = (timeline) => {
     button.setAttribute("aria-label", `跳转到 ${clip.label}`);
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      seekDirector(clip.start);
+      if (clip.type === "camera" && directorMode === "edit") openCameraEditor(clip.id);
+      else seekDirector(clip.start);
     });
     track.appendChild(button);
     timelineClipNodes.set(clip.id, button);
@@ -1424,6 +1681,7 @@ const renderDirector = (state) => {
     elements.compileIssues.appendChild(row);
   });
   renderTimeline(timeline);
+  renderCameraEditor(state);
 };
 
 const compileDirector = ({ announce = true } = {}) => {
@@ -1476,6 +1734,7 @@ const setDirectorMode = (mode) => {
   }
   renderInspector(currentState);
   renderStatus(currentState);
+  renderCameraEditor(currentState);
   return true;
 };
 
@@ -1769,6 +2028,104 @@ elements.timelineCollapse.addEventListener("click", () => {
   elements.timelineCollapse.setAttribute("aria-expanded", String(!collapsed));
   elements.timelineCollapse.setAttribute("aria-label", collapsed ? "展开时间线" : "收起时间线");
   editor.resize();
+});
+
+elements.cameraEditorToggle.addEventListener("click", () => {
+  if (elements.cameraEditorPanel.hidden) openCameraEditor();
+  else closeCameraEditor();
+});
+elements.cameraEditorClose.addEventListener("click", closeCameraEditor);
+elements.cameraShotForm.addEventListener("submit", (event) => event.preventDefault());
+elements.cameraShotForm.addEventListener("change", (event) => {
+  try {
+    commitCameraField(event.target);
+  } catch (error) {
+    setCameraEditorStatus(error.message, true);
+    event.target.setAttribute("aria-invalid", "true");
+    return;
+  }
+  event.target.removeAttribute("aria-invalid");
+});
+
+document.querySelectorAll("[data-camera-preview]").forEach((button) => {
+  button.addEventListener("click", () => previewCameraEndpoint(button.dataset.cameraPreview));
+});
+document.querySelectorAll("[data-camera-capture]").forEach((button) => {
+  button.addEventListener("click", () => captureCameraEndpoint(button.dataset.cameraCapture));
+});
+
+elements.cameraShotAdd.addEventListener("click", () => {
+  if (directorMode !== "edit") setDirectorMode("edit");
+  const pose = editor.getViewportCameraPose();
+  if (!pose) {
+    showToast("先切换到透视视角，再新建电影镜头");
+    return;
+  }
+  const timeline = currentState.project.director.timeline;
+  const playhead = runtime?.time ?? 0;
+  const start = playhead > 0.001 ? playhead : timeline.duration;
+  const id = store.addCameraClip({
+    start,
+    duration: 2.5,
+    fromPosition: pose.position,
+    toPosition: pose.position,
+    fromLookAt: pose.lookAt,
+    toLookAt: pose.lookAt,
+    fromFov: pose.fov,
+    toFov: pose.fov,
+  });
+  selectedCameraClipId = id;
+  openCameraEditor(id);
+  showToast(`已在 ${start.toFixed(2)} 秒新建镜头`);
+});
+
+elements.cameraShotDuplicate.addEventListener("click", () => {
+  const clip = selectedCameraClip();
+  if (!clip) return;
+  const id = store.duplicateCameraClip(clip.id);
+  if (!id) return;
+  selectedCameraClipId = id;
+  renderCameraEditor(currentState);
+  showToast(`已复制“${clip.label}”，并放到时间线末尾`);
+});
+
+elements.cameraShotDelete.addEventListener("click", () => {
+  const clip = selectedCameraClip();
+  if (!clip || !store.deleteCameraClip(clip.id)) return;
+  showToast(`已删除“${clip.label}”，可用撤销恢复`);
+});
+
+elements.cameraPathBuild.addEventListener("click", () => {
+  const clip = selectedCameraClip();
+  if (!clip) return;
+  try {
+    store.updateCameraClip(clip.id, {
+      positionPath: createThreePointPath(readCameraVector("fromPosition"), readCameraVector("toPosition")),
+      lookAtPath: createThreePointPath(readCameraVector("fromLookAt"), readCameraVector("toLookAt")),
+    });
+    setCameraEditorStatus("已创建三点曲线；可在文本框中继续增加或调整控制点。");
+  } catch (error) {
+    setCameraEditorStatus(error.message, true);
+  }
+});
+
+elements.cameraPathClear.addEventListener("click", () => {
+  const clip = selectedCameraClip();
+  if (!clip) return;
+  store.updateCameraClip(clip.id, { positionPath: [], lookAtPath: [] });
+  setCameraEditorStatus("已改为 A 到 B 的直线运镜。");
+});
+
+elements.cameraShotPlay.addEventListener("click", () => {
+  const clip = selectedCameraClip();
+  if (!clip || !setDirectorMode("preview")) return;
+  closeCameraEditor();
+  if (!runtime?.playRange(clip.start, clip.start + clip.duration)) {
+    showToast("这个镜头没有可播放的有效时段");
+    setDirectorMode("edit");
+    return;
+  }
+  showToast(`正在播放“${clip.label}” · ${clip.duration.toFixed(2)} 秒`);
 });
 
 const chooseReferenceImage = () => elements.referenceFile.click();
@@ -2148,7 +2505,7 @@ elements.libraryToggle.addEventListener("click", () => toggleDrawer("library"));
 elements.inspectorToggle.addEventListener("click", () => toggleDrawer("inspector"));
 elements.scrim.addEventListener("click", closeDrawers);
 window.addEventListener("resize", () => {
-  if (window.innerWidth > 980) closeDrawers();
+  closeDrawers();
 });
 
 document.addEventListener("keydown", (event) => {
@@ -2177,6 +2534,16 @@ document.addEventListener("keydown", (event) => {
     saveProject();
     return;
   }
+  if (event.key === "Escape" && directorMode === "preview") {
+    event.preventDefault();
+    setDirectorMode("edit");
+    return;
+  }
+  if (event.key === "Escape" && !elements.cameraEditorPanel.hidden) {
+    event.preventDefault();
+    closeCameraEditor();
+    return;
+  }
   if (modifier && event.key.toLowerCase() === "d" && !isEditing && directorMode === "edit") {
     event.preventDefault();
     store.duplicateObject();
@@ -2187,12 +2554,6 @@ document.addEventListener("keydown", (event) => {
   if (event.code === "Space") {
     event.preventDefault();
     togglePlayback();
-    return;
-  }
-
-  if (event.key === "Escape" && directorMode === "preview") {
-    event.preventDefault();
-    setDirectorMode("edit");
     return;
   }
 

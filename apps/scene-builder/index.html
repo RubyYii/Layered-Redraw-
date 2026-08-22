@@ -315,6 +315,119 @@
             <p id="cp02-phase" class="cp02-phase" aria-live="polite">本地确定性运行时已就绪。</p>
           </aside>
 
+          <aside id="camera-editor-panel" class="camera-editor-panel" aria-label="电影镜头编辑器" hidden>
+            <header class="camera-editor-heading">
+              <div>
+                <span class="camera-editor-kicker">CINEMATIC CAMERA</span>
+                <h2>电影镜头编辑器</h2>
+                <p>移动视口，再把当前机位记录为镜头起点或终点。</p>
+              </div>
+              <button id="camera-editor-close" class="icon-button" type="button" aria-label="关闭电影镜头编辑器" title="关闭">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+              </button>
+            </header>
+
+            <div class="camera-editor-workflow" aria-label="镜头编辑步骤">
+              <span><b>01</b> 选镜头</span>
+              <span><b>02</b> 调视口</span>
+              <span><b>03</b> 记录 A / B</span>
+            </div>
+
+            <section class="camera-shot-browser" aria-labelledby="camera-shot-browser-title">
+              <header>
+                <div>
+                  <span id="camera-shot-browser-title">镜头列表</span>
+                  <output id="camera-shot-count">0 SHOTS</output>
+                </div>
+                <button id="camera-shot-add" class="camera-mini-button is-accent" type="button">+ 新建</button>
+              </header>
+              <div id="camera-shot-list" class="camera-shot-list"></div>
+              <p id="camera-shot-empty" class="camera-shot-empty">时间线上还没有镜头。先把视口调到想要的机位，再新建镜头。</p>
+            </section>
+
+            <form id="camera-shot-form" class="camera-shot-form" hidden>
+              <div class="camera-shot-identity">
+                <label for="camera-shot-label">
+                  <span>镜头名称</span>
+                  <input id="camera-shot-label" class="camera-field" maxlength="80" autocomplete="off" />
+                </label>
+                <code id="camera-shot-id"></code>
+              </div>
+
+              <div class="camera-timing-grid">
+                <label for="camera-shot-start"><span>开始 / 秒</span><input id="camera-shot-start" class="camera-field" type="number" min="0" max="86400" step="0.01" /></label>
+                <label for="camera-shot-duration"><span>时长 / 秒</span><input id="camera-shot-duration" class="camera-field" type="number" min="0.05" max="86400" step="0.01" /></label>
+                <label for="camera-shot-easing"><span>速度曲线</span><select id="camera-shot-easing" class="camera-field"><option value="minimumJerk">电影缓入缓出</option><option value="smooth">柔和</option><option value="linear">匀速</option></select></label>
+              </div>
+
+              <section class="camera-pose-card" data-endpoint="from">
+                <header>
+                  <div><span class="camera-pose-mark">A</span><div><strong>镜头起点</strong><small>画面进入时的机位</small></div></div>
+                  <div class="camera-pose-actions">
+                    <button type="button" class="camera-mini-button" data-camera-preview="from">查看</button>
+                    <button type="button" class="camera-mini-button is-accent" data-camera-capture="from">记录当前视口</button>
+                  </div>
+                </header>
+                <div class="camera-vector-row">
+                  <span>位置</span>
+                  <label>X<input class="camera-field" type="number" step="0.01" data-camera-vector="fromPosition" data-axis="0" /></label>
+                  <label>Y<input class="camera-field" type="number" step="0.01" data-camera-vector="fromPosition" data-axis="1" /></label>
+                  <label>Z<input class="camera-field" type="number" step="0.01" data-camera-vector="fromPosition" data-axis="2" /></label>
+                </div>
+                <div class="camera-vector-row">
+                  <span>注视</span>
+                  <label>X<input class="camera-field" type="number" step="0.01" data-camera-vector="fromLookAt" data-axis="0" /></label>
+                  <label>Y<input class="camera-field" type="number" step="0.01" data-camera-vector="fromLookAt" data-axis="1" /></label>
+                  <label>Z<input class="camera-field" type="number" step="0.01" data-camera-vector="fromLookAt" data-axis="2" /></label>
+                </div>
+                <label class="camera-fov-field" for="camera-shot-from-fov"><span>镜头 FOV</span><input id="camera-shot-from-fov" class="camera-field" type="number" min="18" max="85" step="0.1" /><output>°</output></label>
+              </section>
+
+              <section class="camera-pose-card" data-endpoint="to">
+                <header>
+                  <div><span class="camera-pose-mark">B</span><div><strong>镜头终点</strong><small>画面离开时的机位</small></div></div>
+                  <div class="camera-pose-actions">
+                    <button type="button" class="camera-mini-button" data-camera-preview="to">查看</button>
+                    <button type="button" class="camera-mini-button is-accent" data-camera-capture="to">记录当前视口</button>
+                  </div>
+                </header>
+                <div class="camera-vector-row">
+                  <span>位置</span>
+                  <label>X<input class="camera-field" type="number" step="0.01" data-camera-vector="toPosition" data-axis="0" /></label>
+                  <label>Y<input class="camera-field" type="number" step="0.01" data-camera-vector="toPosition" data-axis="1" /></label>
+                  <label>Z<input class="camera-field" type="number" step="0.01" data-camera-vector="toPosition" data-axis="2" /></label>
+                </div>
+                <div class="camera-vector-row">
+                  <span>注视</span>
+                  <label>X<input class="camera-field" type="number" step="0.01" data-camera-vector="toLookAt" data-axis="0" /></label>
+                  <label>Y<input class="camera-field" type="number" step="0.01" data-camera-vector="toLookAt" data-axis="1" /></label>
+                  <label>Z<input class="camera-field" type="number" step="0.01" data-camera-vector="toLookAt" data-axis="2" /></label>
+                </div>
+                <label class="camera-fov-field" for="camera-shot-to-fov"><span>镜头 FOV</span><input id="camera-shot-to-fov" class="camera-field" type="number" min="18" max="85" step="0.1" /><output>°</output></label>
+              </section>
+
+              <details class="camera-path-editor">
+                <summary><span>高级 · 运镜路径</span><small>留空为 A 到 B 的直线运镜</small></summary>
+                <p>每行一个 <code>x, y, z</code> 控制点，至少 3 点、最多 16 点并包含首尾。</p>
+                <label for="camera-position-path"><span>相机轨道</span><textarea id="camera-position-path" class="camera-field" rows="4" spellcheck="false" placeholder="0, 2, 8&#10;1, 2.4, 6&#10;2, 2, 4"></textarea></label>
+                <label for="camera-look-at-path"><span>注视轨道</span><textarea id="camera-look-at-path" class="camera-field" rows="4" spellcheck="false" placeholder="0, 1, 0&#10;0.5, 1, 0&#10;1, 1, 0"></textarea></label>
+                <div class="camera-path-actions">
+                  <button id="camera-path-build" class="camera-mini-button" type="button">用 A / B 创建三点路径</button>
+                  <button id="camera-path-clear" class="camera-mini-button" type="button">改为直线</button>
+                </div>
+              </details>
+
+              <footer class="camera-shot-actions">
+                <div>
+                  <button id="camera-shot-duplicate" class="camera-mini-button" type="button">复制镜头</button>
+                  <button id="camera-shot-delete" class="camera-mini-button is-danger" type="button">删除</button>
+                </div>
+                <button id="camera-shot-play" class="camera-play-button" type="button"><span>▶</span> 播放本镜头</button>
+              </footer>
+              <p id="camera-shot-status" class="camera-shot-status" aria-live="polite">改动会自动保存，并进入撤销历史。</p>
+            </form>
+          </aside>
+
           <div class="viewport-tools" aria-label="变换工具">
             <button type="button" data-tool="translate" class="tool-button is-active" aria-pressed="true" title="移动 W">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M9 6l3-3 3 3M3 12h18M6 9l-3 3 3 3M18 9l3 3-3 3M9 18l3 3 3-3" /></svg>
@@ -538,6 +651,10 @@
             <strong>时间线</strong>
             <span id="timeline-compile-badge" class="timeline-compile-badge">未编译</span>
           </div>
+          <button id="camera-editor-toggle" class="timeline-camera-button" type="button" aria-label="打开电影镜头编辑器" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h11a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H4V7.5Zm13 3 3-2v7l-3-2" /></svg>
+            <span>电影镜头</span>
+          </button>
           <div class="playback-controls" role="group" aria-label="时间线播放控制">
             <button id="timeline-stop" class="timeline-control" type="button" aria-label="停止并回到开头" title="停止">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1" /></svg>

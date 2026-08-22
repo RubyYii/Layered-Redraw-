@@ -33,6 +33,8 @@ v1.2 completes a deterministic full-screenplay render of *The Window That Wasn't
 
 v1.3 upgrades video output into a reproducible simulation delivery package. Both deterministic 30fps renderers now freeze the scene, asset lock, delta-encoded frame trace, interaction/ownership ledger, collision audit, and render report alongside an independent video copy, offline WebGL replay, and SHA-256 verifier. `simulationIdentity` depends only on deterministic simulation inputs and results—not machine paths, hardware, or wall-clock time. Illegal ownership or residual penetration preserves an inspectable `FAIL` package instead of emitting an unqualified video.
 
+v1.4 adds a visual Cinematic Camera Editor. Camera clips can be selected directly from the timeline; the current perspective viewport can be captured as shot A/B poses; timing, FOV, position, look-at, easing, and 3–16 point camera/look-at rails remain editable. A selected shot can play as a bounded range, and every add, duplicate, edit, or delete participates in the existing undo history without recompiling or rewriting unrelated character, prop, dialogue, or camera clips.
+
 Before production, the project can generate parameterized A/B/C proofs. The built-in output is a parameter contract, deltas, a low-detail schematic, and an external render request. It becomes image-effect evidence only after scene-specific renders are registered. Selection and promotion can guide the final 8–12 layers, but do not establish artistic quality on their own.
 
 The goal is not another brush picker. A style now changes crop, scale, negative space, depth, shape grammar, and value grouping before colour and surface treatment.
@@ -100,6 +102,7 @@ Open the local editor, select layers or frame a region, export `edit-request.jso
 - `$redraw-in-layers`, a Codex skill for guided vector drawing, layered image generation, and localized revision.
 - `$stage-in-3d`, a Codex skill that compiles screenplays, storyboards, or scene notes into editable continuous 3D blockouts, cinematic timelines, and deterministic previews.
 - An experimental 3D director with continuous scenes, fixed-60Hz preview, deterministic 30fps rendering, hierarchical characters, curved motion, object interaction anchors, legal ownership transitions, opt-in collision proxies, and an auditable agent-intent contract; it includes the complete 166-second *Window That Wasn't There* fixture.
+- A Cinematic Camera Editor that captures viewport poses as shot endpoints, edits timing/FOV/look-at/spline rails, previews only the selected range, and preserves every unselected authored timeline clip.
 - Reference intelligence for role-aware multi-RGB input, RGB-D pairing, optional monocular relative-depth estimation, immutable 16-bit depth evidence, 3–8 diagnostic bands, and prompt-directed 5–20-layer planning.
 - A 3D depth canvas that combines source texture and near-white relative depth as a WebGL height field with orbit controls, GPU displacement, mesh/perspective controls, and an auditable spatial-bridge export.
 - A painting-to-3D bridge that lets Scene Builder import `spatial-bridge.json` from a project folder, verify the RGB/depth-preview hashes and relative-scale contract, and mount a session-only textured height field through an editable carrier.
