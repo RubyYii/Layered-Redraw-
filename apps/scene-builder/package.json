@@ -22,6 +22,7 @@
     "render:window-case:video30": "npm run build:window-case && node scripts/render-window-case-video-30fps.mjs"
   },
   "dependencies": {
+    "@layered-redraw/pact-cp03-contracts": "file:../../packages/pact-cp03-contracts",
     "three": "^0.185.1"
   },
   "devDependencies": {

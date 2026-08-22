@@ -13,6 +13,16 @@ const FORBIDDEN_INTENT_FIELDS = Object.freeze([
   "code",
   "script",
 ]);
+const AGENT_INTENT_FIELDS = new Set([
+  "kind",
+  "actorId",
+  "targetId",
+  "affordance",
+  "recipientId",
+  "placementTargetId",
+  "action",
+  "reason",
+]);
 
 const round = (value, precision = 3) => Number(value.toFixed(precision));
 const normalizeWhitespace = (value) => String(value ?? "").trim().replace(/\s+/g, " ");
@@ -111,13 +121,16 @@ export function validateAgentIntent(project, frame, rawIntent) {
   if (!rawIntent || typeof rawIntent !== "object" || Array.isArray(rawIntent)) {
     return { ok: false, code: "invalid_payload", message: "意图必须是对象。" };
   }
-  const forbiddenField = FORBIDDEN_INTENT_FIELDS.find((field) => Object.hasOwn(rawIntent, field));
+  const forbiddenField = findForbiddenIntentField(rawIntent);
   if (forbiddenField) {
     return {
       ok: false,
       code: "direct_transform_forbidden",
       message: `大模型不能直接写入 ${forbiddenField}；请只返回语义意图。`,
     };
+  }
+  if (Object.keys(rawIntent).some((key) => !AGENT_INTENT_FIELDS.has(key))) {
+    return { ok: false, code: "undeclared_field", message: "语义意图包含未声明字段。" };
   }
   if (rawIntent.kind !== "interact") {
     return { ok: false, code: "unsupported_kind", message: "当前只允许 interact 语义意图。" };
@@ -139,6 +152,53 @@ export function validateAgentIntent(project, frame, rawIntent) {
   }
   if (rawIntent.action && rawIntent.action !== affordance.action) {
     return { ok: false, code: "action_mismatch", message: "action 与目标声明的 affordance 不匹配。" };
+  }
+
+  let recipientId = null;
+  let placementTargetId = null;
+  if (affordance.ownershipMode === "transfer") {
+    recipientId = String(rawIntent.recipientId ?? "");
+    if (!recipientId) {
+      return { ok: false, code: "missing_recipient", message: "transfer affordance 必须声明 recipientId。" };
+    }
+    const recipient = stateFor(project, frame, recipientId);
+    if (!recipient || !recipient.visible || recipient.source.entity?.role !== "character") {
+      return { ok: false, code: "invalid_recipient", message: "recipientId 必须指向可见角色根节点。" };
+    }
+    if (rawIntent.placementTargetId !== undefined) {
+      return { ok: false, code: "unexpected_semantic_target", message: "transfer 不接受 placementTargetId。" };
+    }
+  } else if (affordance.ownershipMode === "release") {
+    placementTargetId = String(rawIntent.placementTargetId ?? "");
+    if (!placementTargetId) {
+      return {
+        ok: false,
+        code: "missing_placement_target",
+        message: "release affordance 必须声明 placementTargetId。",
+      };
+    }
+    const placementTarget = stateFor(project, frame, placementTargetId);
+    const placementAnchor = affordance.placementAnchor;
+    if (
+      !placementTarget
+      || !placementTarget.visible
+      || !Object.hasOwn(placementTarget.source.interactionSpec?.anchors ?? {}, placementAnchor)
+    ) {
+      return {
+        ok: false,
+        code: "invalid_placement_target",
+        message: "placementTargetId 必须指向声明了对应放置锚点的可见对象。",
+      };
+    }
+    if (rawIntent.recipientId !== undefined) {
+      return { ok: false, code: "unexpected_semantic_target", message: "release 不接受 recipientId。" };
+    }
+  } else if (rawIntent.recipientId !== undefined || rawIntent.placementTargetId !== undefined) {
+    return {
+      ok: false,
+      code: "unexpected_semantic_target",
+      message: "这个 affordance 不接受额外语义目标。",
+    };
   }
 
   const actorHasNode = Boolean(
@@ -173,6 +233,14 @@ export function validateAgentIntent(project, frame, rawIntent) {
       actorNode: affordance.actorNode,
       targetAnchor: affordance.targetAnchor,
       resultingState: affordance.resultingState,
+      ownershipMode: affordance.ownershipMode,
+      holderAnchor: affordance.holderAnchor,
+      recipientId,
+      recipientAnchor: affordance.recipientAnchor,
+      placementTargetId,
+      placementAnchor: affordance.placementAnchor,
+      itemAnchor: affordance.itemAnchor,
+      actorContactAnchor: affordance.actorContactAnchor,
       reason: String(rawIntent.reason ?? "").trim().slice(0, 240),
     },
   };
@@ -255,6 +323,14 @@ export function compileAgentPlan(plan, frameTime = 0, { speed = 1.4, interaction
         targetId: step.intent.targetId, secondaryTargetId: step.intent.actorId,
         action: step.intent.action, actorNode: step.intent.actorNode,
         targetAnchor: step.intent.targetAnchor, resultingState: step.intent.resultingState,
+        ownershipMode: step.intent.ownershipMode,
+        holderAnchor: step.intent.holderAnchor,
+        recipientId: step.intent.recipientId,
+        recipientAnchor: step.intent.recipientAnchor,
+        placementTargetId: step.intent.placementTargetId,
+        placementAnchor: step.intent.placementAnchor,
+        itemAnchor: step.intent.itemAnchor,
+        actorContactAnchor: step.intent.actorContactAnchor,
         motion: { easing: "minimumJerk" },
       });
       cursor += interactionDuration;
