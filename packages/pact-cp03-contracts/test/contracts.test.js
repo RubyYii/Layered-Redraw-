@@ -1,20 +1,28 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CP03_COUNCIL_SCHEMA_VERSION,
   CP03_RUNTIME_SCHEMA_VERSION,
   canonicalJson,
   sha256Canonical,
   validateAgentActionDraft,
   validateAgentContribution,
   validateApprovalRecord,
+  validateConductorDraftCommit,
+  validateCouncilShard,
   validateProviderCallEnvelope,
+  validateProviderRoutingManifest,
   validateViewerTurn,
 } from "../src/index.js";
 import {
+  kindByRole,
   validAgentActionDraft,
   validAgentContribution,
   validApprovalRecord,
+  validConductorDraftCommit,
+  validCouncilShards,
   validProviderCallEnvelope,
+  validProviderRoutingManifest,
   validRuntimeAgentActionDraft,
   validViewerTurn,
 } from "./fixtures.js";
@@ -42,6 +50,64 @@ describe("CP03 foundation gate contracts", () => {
     expect(validateAgentActionDraft(validRuntimeAgentActionDraft)).toBe(validRuntimeAgentActionDraft);
     expect(validateApprovalRecord(validApprovalRecord)).toBe(validApprovalRecord);
     expect(validateProviderCallEnvelope(validProviderCallEnvelope)).toBe(validProviderCallEnvelope);
+  });
+
+  it("accepts every frozen council shard, the minimal commit, and the dual-provider manifest", () => {
+    expect(CP03_COUNCIL_SCHEMA_VERSION).toBe("cp03-council/0.2");
+    for (const [role, shard] of Object.entries(validCouncilShards)) {
+      expect(shard.role).toBe(role);
+      expect(shard.kind).toBe(kindByRole[role]);
+      expect(Object.isFrozen(shard)).toBe(true);
+      expect(validateCouncilShard(shard)).toBe(shard);
+    }
+    expect(validateConductorDraftCommit(validConductorDraftCommit))
+      .toBe(validConductorDraftCommit);
+    expect(validateProviderRoutingManifest(validProviderRoutingManifest))
+      .toBe(validProviderRoutingManifest);
+  });
+
+  it("keeps council roles, commit authority, capability arguments, and providers closed", () => {
+    expect(() => validateCouncilShard({
+      ...validCouncilShards.Rewriter,
+      role: "Guardian",
+    })).toThrow(/validation failed/);
+    expect(() => validateCouncilShard({
+      ...validCouncilShards.Rewriter,
+      kind: "GUARDIAN",
+    })).toThrow(/validation failed/);
+    expect(() => validateConductorDraftCommit({
+      ...validConductorDraftCommit,
+      creative: { publicPoeticText: "not allowed in a commit" },
+    })).toThrow(/additionalProperties/);
+    expect(() => validateCouncilShard({
+      ...validCouncilShards.Rewriter,
+      content: {
+        ...validCouncilShards.Rewriter.content,
+        semanticCapabilityCalls: [{
+          capability: "performRegisteredInteraction",
+          arguments: {
+            actorId: "interaction-actor-a",
+            targetId: "interaction-cup",
+            affordance: "pickup",
+            position: [99, 0, 0],
+          },
+        }],
+      },
+    })).toThrow(/validation failed/);
+    expect(() => validateConductorDraftCommit({
+      ...validConductorDraftCommit,
+      actionSequence: ["Continue", "Reframe"],
+    })).toThrow(/validation failed/);
+    expect(() => validateProviderRoutingManifest({
+      ...validProviderRoutingManifest,
+      assignments: {
+        ...validProviderRoutingManifest.assignments,
+        CaseConductor: {
+          ...validProviderRoutingManifest.assignments.CaseConductor,
+          provider: "unapproved-provider",
+        },
+      },
+    })).toThrow(/validation failed/);
   });
 
   it("rejects requested action authority in a viewer turn", () => {

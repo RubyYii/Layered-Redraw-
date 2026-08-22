@@ -1,0 +1,400 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://layered-redraw.local/cp03/council/council-shard.schema.json",
+  "$defs": {
+    "role": {
+      "enum": ["CaseConductor", "Witness", "Archivist", "Rewriter", "Guardian"]
+    },
+    "kind": {
+      "enum": ["CONDUCTOR_INTENT", "WITNESS", "ARCHIVIST", "REWRITER", "GUARDIAN"]
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "stableRef": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$"
+    },
+    "creativeString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "creativeArray": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/creativeString" }
+    },
+    "refArray": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/stableRef" }
+    },
+    "terminalAction": {
+      "enum": ["Continue", "KeepOpaque"]
+    },
+    "nonterminalAction": {
+      "enum": ["Translate", "Reframe", "Merge"]
+    },
+    "actionSequence": {
+      "type": "array",
+      "oneOf": [
+        {
+          "minItems": 1,
+          "maxItems": 5,
+          "items": { "$ref": "#/$defs/nonterminalAction" }
+        },
+        {
+          "minItems": 1,
+          "maxItems": 1,
+          "prefixItems": [{ "$ref": "#/$defs/terminalAction" }],
+          "items": false
+        },
+        {
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/terminalAction" }
+          ],
+          "items": false
+        },
+        {
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/terminalAction" }
+          ],
+          "items": false
+        },
+        {
+          "minItems": 4,
+          "maxItems": 4,
+          "prefixItems": [
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/terminalAction" }
+          ],
+          "items": false
+        },
+        {
+          "minItems": 5,
+          "maxItems": 5,
+          "prefixItems": [
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/terminalAction" }
+          ],
+          "items": false
+        }
+      ]
+    },
+    "runtimeCapabilityCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "arguments"],
+      "properties": {
+        "capability": { "const": "performRegisteredInteraction" },
+        "arguments": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["actorId", "targetId", "affordance"],
+          "properties": {
+            "actorId": { "$ref": "#/$defs/stableRef" },
+            "targetId": { "$ref": "#/$defs/stableRef" },
+            "affordance": { "$ref": "#/$defs/stableRef" },
+            "recipientId": { "$ref": "#/$defs/stableRef" },
+            "placementTargetId": { "$ref": "#/$defs/stableRef" }
+          }
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observationId", "text", "inputRefIds"],
+      "properties": {
+        "observationId": {
+          "type": "string",
+          "pattern": "^observation_[A-Za-z0-9_-]{8,80}$"
+        },
+        "text": { "$ref": "#/$defs/creativeString" },
+        "inputRefIds": { "$ref": "#/$defs/refArray" }
+      }
+    },
+    "dissentRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dissentId", "text", "evidenceIds"],
+      "properties": {
+        "dissentId": { "$ref": "#/$defs/stableRef" },
+        "text": { "$ref": "#/$defs/creativeString" },
+        "evidenceIds": { "$ref": "#/$defs/refArray" }
+      }
+    },
+    "conductorContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "initialInterpretation",
+        "candidateActionSequence",
+        "roleRelevance",
+        "terminalIntent"
+      ],
+      "properties": {
+        "initialInterpretation": { "$ref": "#/$defs/creativeString" },
+        "candidateActionSequence": { "$ref": "#/$defs/actionSequence" },
+        "roleRelevance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["CaseConductor", "Witness", "Archivist", "Rewriter", "Guardian"],
+          "properties": {
+            "CaseConductor": { "$ref": "#/$defs/creativeString" },
+            "Witness": { "$ref": "#/$defs/creativeString" },
+            "Archivist": { "$ref": "#/$defs/creativeString" },
+            "Rewriter": { "$ref": "#/$defs/creativeString" },
+            "Guardian": { "$ref": "#/$defs/creativeString" }
+          }
+        },
+        "terminalIntent": { "enum": [null, "Continue", "KeepOpaque"] }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "candidateActionSequence": {
+                "type": "array",
+                "contains": { "const": "Continue" }
+              }
+            },
+            "required": ["candidateActionSequence"]
+          },
+          "then": {
+            "properties": { "terminalIntent": { "const": "Continue" } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "candidateActionSequence": {
+                "type": "array",
+                "contains": { "const": "KeepOpaque" }
+              }
+            },
+            "required": ["candidateActionSequence"]
+          },
+          "then": {
+            "properties": { "terminalIntent": { "const": "KeepOpaque" } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "candidateActionSequence": {
+                "type": "array",
+                "not": { "contains": { "$ref": "#/$defs/terminalAction" } }
+              }
+            },
+            "required": ["candidateActionSequence"]
+          },
+          "then": {
+            "properties": { "terminalIntent": { "type": "null" } }
+          }
+        }
+      ]
+    },
+    "witnessContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observations"],
+      "properties": {
+        "observations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/observation" }
+        }
+      }
+    },
+    "archivistContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestedAssetIds",
+        "requestedSpatialBridgeIds",
+        "provenanceAnchors",
+        "rightsRequirements",
+        "unavailableRefs"
+      ],
+      "properties": {
+        "requestedAssetIds": { "$ref": "#/$defs/refArray" },
+        "requestedSpatialBridgeIds": { "$ref": "#/$defs/refArray" },
+        "provenanceAnchors": { "$ref": "#/$defs/refArray" },
+        "rightsRequirements": { "$ref": "#/$defs/creativeArray" },
+        "unavailableRefs": { "$ref": "#/$defs/refArray" }
+      }
+    },
+    "rewriterContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "interpretation",
+        "unresolvedAmbiguities",
+        "spatialIntent",
+        "visualIntent",
+        "cameraIntent",
+        "lightIntent",
+        "soundIntent",
+        "publicPoeticText",
+        "seamsAndContradictionsToPreserve",
+        "semanticCapabilityCalls",
+        "expectedChanges"
+      ],
+      "properties": {
+        "interpretation": { "$ref": "#/$defs/creativeString" },
+        "unresolvedAmbiguities": { "$ref": "#/$defs/creativeArray" },
+        "spatialIntent": { "$ref": "#/$defs/creativeString" },
+        "visualIntent": { "$ref": "#/$defs/creativeString" },
+        "cameraIntent": { "$ref": "#/$defs/creativeString" },
+        "lightIntent": { "$ref": "#/$defs/creativeString" },
+        "soundIntent": { "$ref": "#/$defs/creativeString" },
+        "publicPoeticText": { "$ref": "#/$defs/creativeString" },
+        "seamsAndContradictionsToPreserve": { "$ref": "#/$defs/creativeArray" },
+        "semanticCapabilityCalls": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/runtimeCapabilityCall" }
+        },
+        "expectedChanges": { "$ref": "#/$defs/refArray" }
+      }
+    },
+    "guardianContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "disposition",
+        "forbiddenCapabilityIds",
+        "requiredSourceLockIds",
+        "requiredRightsIds",
+        "requiredRollbackCapabilityIds",
+        "contestedEvidenceIds",
+        "requiredDissentRecords",
+        "guardianChallenge"
+      ],
+      "properties": {
+        "disposition": { "enum": ["ALLOW", "NEEDS_CLARIFICATION", "WITHHOLD"] },
+        "forbiddenCapabilityIds": { "$ref": "#/$defs/refArray" },
+        "requiredSourceLockIds": { "$ref": "#/$defs/refArray" },
+        "requiredRightsIds": { "$ref": "#/$defs/refArray" },
+        "requiredRollbackCapabilityIds": { "$ref": "#/$defs/refArray" },
+        "contestedEvidenceIds": { "$ref": "#/$defs/refArray" },
+        "requiredDissentRecords": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/dissentRecord" }
+        },
+        "guardianChallenge": { "$ref": "#/$defs/creativeString" }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "shardId",
+    "kind",
+    "role",
+    "childSessionId",
+    "caseSessionId",
+    "turnId",
+    "snapshotHash",
+    "parentSceneHash",
+    "registryVersion",
+    "routingManifestVersion",
+    "deadlineId",
+    "publicTrace",
+    "uncertainties",
+    "evidenceAnchors",
+    "content"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "cp03-council/0.2" },
+    "shardId": { "$ref": "#/$defs/stableRef" },
+    "kind": { "$ref": "#/$defs/kind" },
+    "role": { "$ref": "#/$defs/role" },
+    "childSessionId": { "type": "string", "format": "uuid" },
+    "caseSessionId": { "type": "string", "pattern": "^case_[A-Za-z0-9_-]{8,80}$" },
+    "turnId": { "type": "string", "pattern": "^turn_[A-Za-z0-9_-]{8,80}$" },
+    "snapshotHash": { "$ref": "#/$defs/hash" },
+    "parentSceneHash": { "$ref": "#/$defs/hash" },
+    "registryVersion": { "$ref": "#/$defs/version" },
+    "routingManifestVersion": { "$ref": "#/$defs/version" },
+    "deadlineId": { "$ref": "#/$defs/stableRef" },
+    "publicTrace": { "$ref": "#/$defs/creativeString" },
+    "uncertainties": { "$ref": "#/$defs/creativeArray" },
+    "evidenceAnchors": { "$ref": "#/$defs/refArray" },
+    "content": {
+      "oneOf": [
+        { "$ref": "#/$defs/conductorContent" },
+        { "$ref": "#/$defs/witnessContent" },
+        { "$ref": "#/$defs/archivistContent" },
+        { "$ref": "#/$defs/rewriterContent" },
+        { "$ref": "#/$defs/guardianContent" }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "kind": { "const": "CONDUCTOR_INTENT" },
+            "role": { "const": "CaseConductor" },
+            "content": { "$ref": "#/$defs/conductorContent" }
+          }
+        },
+        {
+          "properties": {
+            "kind": { "const": "WITNESS" },
+            "role": { "const": "Witness" },
+            "content": { "$ref": "#/$defs/witnessContent" }
+          }
+        },
+        {
+          "properties": {
+            "kind": { "const": "ARCHIVIST" },
+            "role": { "const": "Archivist" },
+            "content": { "$ref": "#/$defs/archivistContent" }
+          }
+        },
+        {
+          "properties": {
+            "kind": { "const": "REWRITER" },
+            "role": { "const": "Rewriter" },
+            "content": { "$ref": "#/$defs/rewriterContent" }
+          }
+        },
+        {
+          "properties": {
+            "kind": { "const": "GUARDIAN" },
+            "role": { "const": "Guardian" },
+            "content": { "$ref": "#/$defs/guardianContent" }
+          }
+        }
+      ]
+    }
+  ]
+}
