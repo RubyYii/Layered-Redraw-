@@ -2,6 +2,7 @@ import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import {
+  COMPATIBILITY_CREDENTIAL_REFS,
   COMPATIBILITY_LIMITS,
   inspectCompatibilityConfig,
 } from './compatibility-config.js';
@@ -15,6 +16,11 @@ import {
   type ProviderRealRunApproval,
   type ProviderRealRunPreflightFacts,
 } from './provider-real-run-gate.js';
+import {
+  ProviderRunEvidenceError,
+  verifyProviderRunEvidence,
+  type ProviderRunArchive,
+} from './provider-run-evidence.js';
 
 export interface ExecuteProviderRealCommandOptions {
   readonly cwd: string;
@@ -50,14 +56,49 @@ export const executeProviderRealCommand = async (
       });
       const rawPath = resolve(runRoot, 'raw-run.json');
       const pendingPath = resolve(runRoot, '.raw-run.json.pending');
-      await writeFile(pendingPath, `${JSON.stringify({
+      const archive: ProviderRunArchive = {
         schemaVersion: 'cp03-provider-raw-run/0.1',
         approval: options.approval,
         preflight: options.preflight,
         result,
-      }, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+      };
+      const serialized = `${JSON.stringify(archive, null, 2)}\n`;
+      const credentialValues = Object.values(COMPATIBILITY_CREDENTIAL_REFS)
+        .flatMap((reference) => {
+          const value = options.env[reference];
+          return value === undefined ? [] : [value];
+        });
+      const evidence = verifyProviderRunEvidence(
+        serialized,
+        credentialValues,
+      );
+      const evidencePath = resolve(runRoot, 'evidence-report.json');
+      const evidencePendingPath = resolve(
+        runRoot,
+        '.evidence-report.json.pending',
+      );
+      await writeFile(
+        evidencePendingPath,
+        `${JSON.stringify(evidence, null, 2)}\n`,
+        { encoding: 'utf8', flag: 'wx' },
+      );
+      if (evidence.checks.secretScan === 'FAIL') {
+        await rename(evidencePendingPath, evidencePath);
+        throw new ProviderRunEvidenceError(
+          'PROVIDER_RUN_SECRET_LEAK_BLOCKED',
+          evidence,
+        );
+      }
+      await writeFile(pendingPath, serialized, { encoding: 'utf8', flag: 'wx' });
       await rename(pendingPath, rawPath);
-      return result;
+      await rename(evidencePendingPath, evidencePath);
+      if (evidence.status === 'FAIL') {
+        throw new ProviderRunEvidenceError(
+          'PROVIDER_RUN_EVIDENCE_INVALID',
+          evidence,
+        );
+      }
+      return { ...result, evidence };
     },
   });
 };
