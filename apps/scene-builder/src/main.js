@@ -1367,7 +1367,7 @@ const renderCameraEditor = (state) => {
   elements.cameraShotForm.querySelectorAll("input, select, textarea, button").forEach((control) => {
     control.disabled = directorMode === "preview";
   });
-  setCameraEditorStatus("改动会自动保存，并进入撤销历史。");
+  setCameraEditorStatus("改动会进入撤销历史；大型工程请用“保存 JSON”持久化。");
 };
 
 const openCameraEditor = (preferredId = null) => {

@@ -181,7 +181,7 @@ npm run build:interaction-demo
 npm run render:interaction-demo:video30
 ```
 
-载入项目后，点击时间线工具栏的“电影镜头”或直接点击镜头轨道片段即可打开镜头编辑器。先点 A／B 的“查看”，在视口中用左键旋转、右键平移、滚轮推进，再点“记录当前视口”；需要弧线时展开“高级 · 运镜路径”。“播放本镜头”只运行所选区间。修改会自动保存到浏览器并进入撤销历史，最后用“保存 JSON”持久化；完整 166 秒手工工程不要点击“编译时间线”，因为重新编译的职责仍是依据剧本文本重建轨道。
+载入项目后，点击时间线工具栏的“电影镜头”或直接点击镜头轨道片段即可打开镜头编辑器。先点 A／B 的“查看”，在视口中用左键旋转、右键平移、滚轮推进，再点“记录当前视口”；需要弧线时展开“高级 · 运镜路径”。“播放本镜头”只运行所选区间。修改会立即写入当前会话并进入撤销历史；超过浏览器自动保存上限的大型工程必须点“保存 JSON”持久化。完整 166 秒手工工程不要点击“编译时间线”，因为重新编译的职责仍是依据剧本文本重建轨道。
 
 两条 `render:*:video30` 命令成功后都会在视频旁生成同名 `.simulation-package/`。如果视频已经存在，可用 `npm run package:window-case` 或 `npm run package:interaction-demo` 单独补建。进入包目录运行 `node verify-delivery.mjs` 验证全部哈希；运行 `node serve-replay.mjs` 后打开本地地址，可同时检查成片、自由 3D 视角、逐帧状态、所有权与碰撞报告。完整合同见 [`docs/simulation-delivery-package.md`](docs/simulation-delivery-package.md)。
 
