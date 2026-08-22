@@ -1,6 +1,6 @@
 # PACT CP03 12-Second Provider Graph Design
 
-**Status:** `author_approved`
+**Status:** `verified`
 
 **Decision date:** 2026-08-22
 
@@ -106,3 +106,20 @@ When implemented and locally verified, this design may be reported as:
 > The CP03 DSH compatibility runner has a locally scripted, bounded 8-dispatch graph with isolated child settlement and explicit 2.5/8/12-second timing evidence.
 
 It may not be reported as real-provider latency success, production interaction readiness, checkpoint acceptance, deployment, or public release until a separately approved Live Run 03 and later visual/human gates supply that evidence.
+
+## Verification Record
+
+Locally verified on 2026-08-22 with zero provider calls:
+
+- Agent Host focused graph/gate/evidence tests: `50/50 PASS`;
+- Agent Host full suite: `93/93 PASS`;
+- TypeScript typecheck: `PASS`;
+- build: `PASS`;
+- normal scripted graph: exactly 8 streams, DeepSeek 5 and Gemini 3;
+- retry ceilings: 9 streams for one provider retry, 10 for one retry on each provider;
+- representative barrier: Probe 02, 04 and 05 all in flight before completion;
+- settlement isolation: active Conductor 2 explicit turns; 5/5 sink turns blocked locally;
+- controlled timing: first trace 2.0 s, draft 7.5 s, hard deadline met;
+- late path: 12.001 s draft quarantined at dispatch 6, with later probes not started.
+
+This status means the local implementation and its tests satisfy this spec. It does not change the two historical live failures or create Live Run 03 evidence.

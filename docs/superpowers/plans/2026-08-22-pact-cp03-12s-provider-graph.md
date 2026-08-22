@@ -151,11 +151,11 @@ npm run build
 
 Also verify that no generated archive contains credential fields or configured secret values. Do not print those values.
 
-- [ ] **Step 2: Update progress truth**
+- [x] **Step 2: Update progress truth**
 
 Record the local 8/10 graph as scripted and verified, keep Live Run 02 as failed historical evidence, and mark Live Run 03 as `NOT_RUN / REQUIRES_NEW_APPROVAL`.
 
-- [ ] **Step 3: Commit coherent milestones**
+- [x] **Step 3: Commit coherent milestones**
 
 Stage explicit files only. Use small descriptive commits for design/plan, implementation, and evidence/progress.
 
