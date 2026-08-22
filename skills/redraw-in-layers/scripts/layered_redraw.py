@@ -1149,7 +1149,7 @@ def serve_editor(
     allowed_origins: set[str] = set()
 
     class Handler(SimpleHTTPRequestHandler):
-        server_version = "LayeredRedrawEditor/0.6"
+        server_version = "LayeredRedrawEditor/0.8"
         sys_version = ""
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -1295,6 +1295,26 @@ def serve_editor(
                 return
             if path == "/api/references":
                 self._send_json({"ok": True, "reference_intelligence": REFERENCES.public_state(project_dir)})
+                return
+            if path == "/api/spatial-bridge":
+                query = parse_qs(parsed.query)
+
+                def first(name: str, fallback: Any = None) -> Any:
+                    return query.get(name, [fallback])[0]
+
+                try:
+                    bridge = REFERENCES.build_spatial_bridge(
+                        project_dir,
+                        first("source"),
+                        depth_run_id=first("run"),
+                        displacement=first("displacement", 0.65),
+                        mesh_resolution=first("resolution", 96),
+                        perspective=first("perspective", 0.58),
+                    )
+                except REFERENCES.ReferenceIntelligenceError as exc:
+                    self._send_json({"ok": False, "error": str(exc)}, status=400)
+                    return
+                self._send_json({"ok": True, "bridge": bridge})
                 return
             if path.startswith("/api/references/"):
                 parts = [unquote(item) for item in path.split("/") if item]
@@ -1791,6 +1811,18 @@ def build_parser() -> argparse.ArgumentParser:
     depth_register_parser.add_argument("--low-percentile", type=float, default=0.0)
     depth_register_parser.add_argument("--high-percentile", type=float, default=100.0)
 
+    spatial_bridge_parser = subparsers.add_parser(
+        "spatial-bridge",
+        help="Export a non-destructive RGB + relative-depth 3D height-field contract",
+    )
+    spatial_bridge_parser.add_argument("target")
+    spatial_bridge_parser.add_argument("--source", dest="source_id")
+    spatial_bridge_parser.add_argument("--depth-run")
+    spatial_bridge_parser.add_argument("--displacement", type=float, default=0.65)
+    spatial_bridge_parser.add_argument("--resolution", type=int, default=96)
+    spatial_bridge_parser.add_argument("--perspective", type=float, default=0.58)
+    spatial_bridge_parser.add_argument("--output", help="Defaults to <project>/spatial-bridge.json")
+
     plan_request_parser = subparsers.add_parser("plan-request", help="Create a prompt-directed semantic-layer request")
     plan_request_parser.add_argument("target")
     plan_request_parser.add_argument("prompt")
@@ -2055,6 +2087,19 @@ def main(argv: list[str] | None = None) -> int:
                 low_percentile=args.low_percentile,
                 high_percentile=args.high_percentile,
             )
+        elif args.command == "spatial-bridge":
+            project_dir, _ = project_manifest(args.target)
+            bridge = REFERENCES.build_spatial_bridge(
+                project_dir,
+                args.source_id,
+                depth_run_id=args.depth_run,
+                displacement=args.displacement,
+                mesh_resolution=args.resolution,
+                perspective=args.perspective,
+            )
+            output = Path(args.output).expanduser().resolve() if args.output else project_dir / "spatial-bridge.json"
+            write_json(output, bridge)
+            result = {"ok": True, "file": str(output), "bridge": bridge}
         elif args.command == "plan-request":
             project_dir, _ = project_manifest(args.target)
             merge_groups = []

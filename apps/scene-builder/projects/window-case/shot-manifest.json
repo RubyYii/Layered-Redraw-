@@ -1,0 +1,818 @@
+{
+  "version": 2,
+  "title": "不存在的窗 · 电影沙盒交互版",
+  "duration": 166,
+  "shots": [
+    {
+      "id": "B1-01",
+      "start": 0,
+      "duration": 12,
+      "note": "摄影机穿过门框进入同一房间。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          0,
+          1.65,
+          10.5
+        ],
+        "positionPath": [],
+        "toPosition": [
+          0.15,
+          1.82,
+          5.05
+        ],
+        "fromLookAt": [
+          0,
+          1.55,
+          -1.2
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          -0.4,
+          1.35,
+          -1
+        ],
+        "fromFov": 46,
+        "toFov": 38
+      }
+    },
+    {
+      "id": "B2-01",
+      "start": 12,
+      "duration": 18,
+      "note": "见证代理进入并检查未改动照片。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          4.65,
+          2.48,
+          5.4
+        ],
+        "positionPath": [],
+        "toPosition": [
+          -1,
+          1.86,
+          3.75
+        ],
+        "fromLookAt": [
+          0,
+          1.15,
+          -0.5
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          -2.45,
+          1.35,
+          0.05
+        ],
+        "fromFov": 43,
+        "toFov": 35
+      }
+    },
+    {
+      "id": "B3-01",
+      "start": 30,
+      "duration": 9,
+      "note": "越肩跟随墙面记忆光。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          -1.72,
+          1.7,
+          2.35
+        ],
+        "positionPath": [],
+        "toPosition": [
+          -0.95,
+          1.55,
+          1.3
+        ],
+        "fromLookAt": [
+          -0.3,
+          2.15,
+          -3
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          1.2,
+          1.9,
+          -2.85
+        ],
+        "fromFov": 40,
+        "toFov": 33
+      }
+    },
+    {
+      "id": "B3-02",
+      "start": 39,
+      "duration": 9,
+      "note": "低机位跟随光抵达床面。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          4.65,
+          2.1,
+          2.75
+        ],
+        "positionPath": [],
+        "toPosition": [
+          3.65,
+          1.5,
+          1.12
+        ],
+        "fromLookAt": [
+          2.8,
+          1,
+          -1.2
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          1.35,
+          0.6,
+          -0.95
+        ],
+        "fromFov": 42,
+        "toFov": 34
+      }
+    },
+    {
+      "id": "B4-01",
+      "start": 48,
+      "duration": 7,
+      "note": "见证代理触碰录音器。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          2.55,
+          2.15,
+          3.55
+        ],
+        "positionPath": [
+          [
+            2.55,
+            2.15,
+            3.55
+          ],
+          [
+            2.28,
+            2.12,
+            3.22
+          ],
+          [
+            1.72,
+            1.88,
+            2.72
+          ],
+          [
+            1.15,
+            1.68,
+            2.25
+          ]
+        ],
+        "toPosition": [
+          1.15,
+          1.68,
+          2.25
+        ],
+        "fromLookAt": [
+          -2.1,
+          1.2,
+          0
+        ],
+        "lookAtPath": [
+          [
+            -2.1,
+            1.2,
+            0
+          ],
+          [
+            -1.98,
+            1.22,
+            0.04
+          ],
+          [
+            -1.8,
+            1.18,
+            0.09
+          ],
+          [
+            -1.65,
+            1.16,
+            0.12
+          ]
+        ],
+        "toLookAt": [
+          -1.65,
+          1.16,
+          0.12
+        ],
+        "fromFov": 44,
+        "toFov": 35
+      }
+    },
+    {
+      "id": "B4-02",
+      "start": 55,
+      "duration": 7,
+      "note": "守护代理冲入并切断波形，保持角色与物品同框。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          3.35,
+          2.18,
+          3.55
+        ],
+        "positionPath": [
+          [
+            3.35,
+            2.18,
+            3.55
+          ],
+          [
+            3.18,
+            2.22,
+            3.42
+          ],
+          [
+            2.92,
+            2.18,
+            3.22
+          ],
+          [
+            2.58,
+            2.08,
+            2.92
+          ]
+        ],
+        "toPosition": [
+          2.58,
+          2.08,
+          2.92
+        ],
+        "fromLookAt": [
+          -1.2,
+          1.18,
+          0.12
+        ],
+        "lookAtPath": [
+          [
+            -1.2,
+            1.18,
+            0.12
+          ],
+          [
+            -1.12,
+            1.22,
+            0.16
+          ],
+          [
+            -1.02,
+            1.24,
+            0.2
+          ],
+          [
+            -0.92,
+            1.23,
+            0.2
+          ]
+        ],
+        "toLookAt": [
+          -0.92,
+          1.23,
+          0.2
+        ],
+        "fromFov": 43,
+        "toFov": 38
+      }
+    },
+    {
+      "id": "B5-01",
+      "start": 62,
+      "duration": 10,
+      "note": "改写投影与许可屏障第一次正面冲突。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          0,
+          2.42,
+          5
+        ],
+        "positionPath": [],
+        "toPosition": [
+          0.05,
+          1.9,
+          3
+        ],
+        "fromLookAt": [
+          0,
+          1.5,
+          -2.4
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          0.25,
+          2,
+          -3
+        ],
+        "fromFov": 46,
+        "toFov": 37
+      }
+    },
+    {
+      "id": "B6-01",
+      "start": 72,
+      "duration": 6,
+      "note": "四个非人角色代理进入同一现场。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          -4,
+          2.55,
+          3.3
+        ],
+        "positionPath": [],
+        "toPosition": [
+          -2.2,
+          2.15,
+          2.55
+        ],
+        "fromLookAt": [
+          0,
+          1,
+          0
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          -0.3,
+          1.1,
+          -0.5
+        ],
+        "fromFov": 46,
+        "toFov": 39
+      }
+    },
+    {
+      "id": "B6-02",
+      "start": 78,
+      "duration": 6,
+      "note": "证物搬运、投影与屏障同时发生。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          4.15,
+          2.05,
+          2.75
+        ],
+        "positionPath": [],
+        "toPosition": [
+          2.6,
+          1.58,
+          1.55
+        ],
+        "fromLookAt": [
+          0.2,
+          1.45,
+          -1.5
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          -0.6,
+          1.1,
+          -0.2
+        ],
+        "fromFov": 43,
+        "toFov": 34
+      }
+    },
+    {
+      "id": "B6-03",
+      "start": 84,
+      "duration": 6,
+      "note": "代理重新站位，准备五种动作。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          -4.15,
+          2.42,
+          3.75
+        ],
+        "positionPath": [],
+        "toPosition": [
+          -2.55,
+          2.02,
+          2.62
+        ],
+        "fromLookAt": [
+          -0.4,
+          1,
+          0.1
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          0.2,
+          1.4,
+          -1.5
+        ],
+        "fromFov": 45,
+        "toFov": 39
+      }
+    },
+    {
+      "id": "B7-01",
+      "start": 90,
+      "duration": 8,
+      "note": "改写代理逐笔把语言投成墙面光。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          3.05,
+          1.92,
+          3.35
+        ],
+        "positionPath": [],
+        "toPosition": [
+          1.75,
+          1.68,
+          2.02
+        ],
+        "fromLookAt": [
+          -0.3,
+          2.1,
+          -2.95
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          0.15,
+          2.1,
+          -2.95
+        ],
+        "fromFov": 42,
+        "toFov": 36
+      }
+    },
+    {
+      "id": "B7-02",
+      "start": 98,
+      "duration": 8,
+      "note": "摄影机与见证代理一起侧移，发现原画框外的窗。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          1.85,
+          2.02,
+          3
+        ],
+        "positionPath": [],
+        "toPosition": [
+          -3.15,
+          2.18,
+          2.55
+        ],
+        "fromLookAt": [
+          -1.6,
+          1.45,
+          -1.2
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          -4.75,
+          2.45,
+          1.6
+        ],
+        "fromFov": 46,
+        "toFov": 42
+      }
+    },
+    {
+      "id": "B7-03",
+      "start": 106,
+      "duration": 8,
+      "note": "第二张床被实际推入房间，接缝保留。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          4.45,
+          1.82,
+          3.45
+        ],
+        "positionPath": [],
+        "toPosition": [
+          2.65,
+          1.42,
+          1.72
+        ],
+        "fromLookAt": [
+          1.3,
+          0.8,
+          -1.7
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          0.55,
+          0.85,
+          -1.1
+        ],
+        "fromFov": 43,
+        "toFov": 34
+      }
+    },
+    {
+      "id": "B7-04",
+      "start": 114,
+      "duration": 8,
+      "note": "反事实入口向摄影机展开，角色接近门槛。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          0.1,
+          1.75,
+          3.2
+        ],
+        "positionPath": [],
+        "toPosition": [
+          -1.45,
+          1.7,
+          1.25
+        ],
+        "fromLookAt": [
+          0.25,
+          2,
+          -2.95
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          0.25,
+          1.9,
+          -3
+        ],
+        "fromFov": 43,
+        "toFov": 34
+      }
+    },
+    {
+      "id": "B7-05",
+      "start": 122,
+      "duration": 8,
+      "note": "守护代理封住入口，推断在墙面终止。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          4.55,
+          2.55,
+          4.15
+        ],
+        "positionPath": [],
+        "toPosition": [
+          3.7,
+          2.05,
+          2.95
+        ],
+        "fromLookAt": [
+          0.1,
+          1.5,
+          -2.35
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          0.15,
+          1.5,
+          -2.95
+        ],
+        "fromFov": 45,
+        "toFov": 40
+      }
+    },
+    {
+      "id": "B8-01",
+      "start": 130,
+      "duration": 8,
+      "note": "角色搬运照片并拼装带缝窗框。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          -3.75,
+          2.08,
+          2.35
+        ],
+        "positionPath": [],
+        "toPosition": [
+          -1.55,
+          1.68,
+          1.32
+        ],
+        "fromLookAt": [
+          -0.3,
+          2.05,
+          -3
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          0.25,
+          2.15,
+          -2.95
+        ],
+        "fromFov": 42,
+        "toFov": 33
+      }
+    },
+    {
+      "id": "B8-02",
+      "start": 138,
+      "duration": 8,
+      "note": "无缝窗与漂亮光线占领同一房间，守护信号报警。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          4.45,
+          2.48,
+          3.75
+        ],
+        "positionPath": [],
+        "toPosition": [
+          1.35,
+          1.88,
+          2.05
+        ],
+        "fromLookAt": [
+          0.5,
+          2.1,
+          -2.9
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          0.45,
+          2.1,
+          -2.95
+        ],
+        "fromFov": 44,
+        "toFov": 34
+      }
+    },
+    {
+      "id": "B8-03",
+      "start": 146,
+      "duration": 8,
+      "note": "守护代理关闭生成层，房间恢复封闭。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          0.72,
+          1.48,
+          0.55
+        ],
+        "positionPath": [],
+        "toPosition": [
+          2,
+          1.62,
+          1.55
+        ],
+        "fromLookAt": [
+          0.45,
+          2,
+          -2.95
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          0.2,
+          1.6,
+          -2.95
+        ],
+        "fromFov": 31,
+        "toFov": 38
+      }
+    },
+    {
+      "id": "B9-01",
+      "start": 154,
+      "duration": 12,
+      "note": "证物归位，代理逐一离开，摄影机退出同一门框。",
+      "preset": "perspective",
+      "camera": {
+        "fromPosition": [
+          0.15,
+          1.72,
+          4.55
+        ],
+        "positionPath": [],
+        "toPosition": [
+          0,
+          1.65,
+          10.25
+        ],
+        "fromLookAt": [
+          -0.4,
+          1.35,
+          -0.8
+        ],
+        "lookAtPath": [],
+        "toLookAt": [
+          0,
+          1.5,
+          -1.15
+        ],
+        "fromFov": 38,
+        "toFov": 46
+      }
+    }
+  ],
+  "interactionContract": {
+    "roomContinuity": "同一房间和物品贯穿全片，不再切换展示台。",
+    "agents": [
+      "见证代理",
+      "改写代理",
+      "许可守护代理",
+      "档案代理"
+    ],
+    "causalActions": [
+      "检查",
+      "追随",
+      "触碰",
+      "切断",
+      "投射",
+      "阻挡",
+      "搬运",
+      "拼装",
+      "关闭",
+      "归位"
+    ],
+    "humanBoundary": "角色为非人形空间代理，不制造人脸、人体或声音克隆。"
+  },
+  "runtimeInterfaces": {
+    "assetReplacement": {
+      "format": "glTF 2.0 / GLB",
+      "objectField": "asset",
+      "bindings": [
+        "root",
+        "head",
+        "effector",
+        "statusLight"
+      ],
+      "animationSlots": [
+        "idle",
+        "move",
+        "interact",
+        "react"
+      ],
+      "invariant": "剧情和时间线引用角色根节点与语义绑定，不引用具体网格名称。"
+    },
+    "semanticInteraction": {
+      "objectField": "interactionSpec",
+      "requiredParts": [
+        "anchors",
+        "affordances"
+      ],
+      "timelineClip": "interaction",
+      "invariant": "执行器对准目标锚点，接触距离由引擎计算。"
+    },
+    "agentIntelligence": {
+      "observationBuilder": "src/agent-runtime.js#buildAgentObservation",
+      "intentValidator": "src/agent-runtime.js#validateAgentIntent",
+      "allowedIntentKinds": [
+        "interact"
+      ],
+      "transformAuthority": "deterministic-runtime-only",
+      "invariant": "大模型只选择语义意图；路径、碰撞、动画和状态提交由场景运行时处理。"
+    }
+  },
+  "entities": {
+    "roles": [
+      {
+        "key": "witness",
+        "label": "见证代理",
+        "objectId": "sandbox-witness_root"
+      },
+      {
+        "key": "rewriter",
+        "label": "改写代理",
+        "objectId": "sandbox-rewriter_root"
+      },
+      {
+        "key": "guardian",
+        "label": "许可守护代理",
+        "objectId": "sandbox-guardian_root"
+      },
+      {
+        "key": "archivist",
+        "label": "档案代理",
+        "objectId": "sandbox-archivist_root"
+      }
+    ],
+    "evidenceTraces": [
+      {
+        "key": "photograph",
+        "label": "未改动照片",
+        "objectId": "sandbox-photo_image"
+      },
+      {
+        "key": "voice",
+        "label": "非原始重演录音器",
+        "objectId": "sandbox-recorder"
+      },
+      {
+        "key": "cup",
+        "label": "留存杯子",
+        "objectId": "sandbox-cup_body"
+      }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stage in 3D"
+  short_description: "Build cinematic 3D blockouts from screenplays"
+  default_prompt: "Use $stage-in-3d to turn this screenplay into an editable 3D scene with smooth cameras and continuous character–prop interactions."

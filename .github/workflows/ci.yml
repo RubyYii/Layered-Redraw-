@@ -61,3 +61,38 @@ jobs:
 
       - name: Require committed generated artifacts to be current
         run: git diff --exit-code -- examples/cat-cave-npc
+
+  scene-builder:
+    name: 3D Scene Builder
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/scene-builder/package-lock.json
+
+      - name: Install 3D application dependencies
+        working-directory: apps/scene-builder
+        run: npm ci
+
+      - name: Run 3D schema, motion, director, and agent tests
+        working-directory: apps/scene-builder
+        run: npm test
+
+      - name: Rebuild the deterministic cinematic fixture
+        working-directory: apps/scene-builder
+        run: npm run build:window-case
+
+      - name: Require committed 3D fixture data to be current
+        run: >-
+          git diff --exit-code --
+          apps/scene-builder/projects/window-case/window-that-wasnt-there.blockout.json
+          apps/scene-builder/projects/window-case/shot-manifest.json
+
+      - name: Build the production 3D application
+        working-directory: apps/scene-builder
+        run: npm run build

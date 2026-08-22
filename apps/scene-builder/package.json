@@ -1,0 +1,26 @@
+{
+  "name": "blockout-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A modular, object-first 3D blockout editor for controllable scene construction.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run",
+    "test:ui": "node scripts/smoke-test.mjs",
+    "build:window-case": "node scripts/build-window-case-sandbox-project.mjs",
+    "render:window-case": "npm run build:window-case && node scripts/render-window-case.mjs",
+    "render:window-case:video": "npm run build:window-case && node scripts/render-window-case-video.mjs",
+    "render:window-case:video30": "npm run build:window-case && node scripts/render-window-case-video-30fps.mjs"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.62.1",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  }
+}

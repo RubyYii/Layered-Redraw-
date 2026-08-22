@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#f4f0e8" />
     <link rel="icon" href="data:," />
     <title>Layered Redraw Studio</title>
-    <link rel="stylesheet" href="styles.css?v=0.6.0" />
+    <link rel="stylesheet" href="styles.css?v=0.8.0" />
   </head>
   <body>
     <div class="app-shell">
@@ -153,6 +153,14 @@
               <p class="eyebrow" id="canvasKicker" data-i18n="canvasKickerVector">VECTOR CANVAS</p>
               <h2 id="canvasTitle" data-i18n="canvasTitle">画布</h2>
             </div>
+            <div class="canvas-view-switch" role="group" aria-label="画布视图" data-i18n-aria-label="canvasViewLabel">
+              <button class="canvas-view-button is-active" type="button" data-canvas-view="2d" aria-pressed="true">
+                <span aria-hidden="true">▱</span> <span data-i18n="canvasView2d">2D 图层</span>
+              </button>
+              <button class="canvas-view-button" type="button" data-canvas-view="3d" aria-pressed="false" disabled>
+                <span aria-hidden="true">◇</span> <span data-i18n="canvasView3d">3D 空间</span>
+              </button>
+            </div>
             <div class="mode-switch" role="group" aria-label="选择方式" data-i18n-aria-label="selectionMethodLabel">
               <button class="mode-button is-active" type="button" data-mode="layer">
                 <span aria-hidden="true">◫</span> <span data-i18n="modeLayerShort">图层点击</span>
@@ -185,6 +193,19 @@
               <h3 data-i18n="canvasEmptyTitle">从一个可编辑的分层工程开始</h3>
               <p data-i18n="canvasEmptyBody">打开本地 SVG，或通过本地服务载入矢量／位图工程。</p>
               <label class="button button-primary" for="svgFileInput" data-i18n="chooseSvg">选择 SVG 文件</label>
+            </div>
+            <div class="spatial-stage" id="spatialStage" hidden>
+              <canvas id="spatialCanvas" aria-label="RGB 与相对深度生成的可旋转三维画布" data-i18n-aria-label="spatialCanvasLabel"></canvas>
+              <div class="spatial-hud">
+                <span class="spatial-live-dot" aria-hidden="true"></span>
+                <div><strong data-i18n="spatialHeightfield">RGB-D 高度场</strong><small id="spatialHudStatus" data-i18n="spatialWaiting">等待配对深度</small></div>
+              </div>
+              <div class="spatial-empty" id="spatialEmpty">
+                <span aria-hidden="true">D³</span>
+                <strong data-i18n="spatialEmptyTitle">先为场景图准备深度</strong>
+                <small data-i18n="spatialEmptyBody">估计相对深度或导入配对深度图后，即可生成可旋转的空间画布。</small>
+              </div>
+              <p class="spatial-gesture-hint" data-i18n="spatialGestureHint">拖动旋转 · 滚轮缩放 · 双击复位</p>
             </div>
             <div class="artboard" id="artboard" hidden>
               <div class="svg-mount" id="svgMount"></div>
@@ -289,6 +310,38 @@
                 <label class="check-inline"><input id="depthOfflineCheckbox" type="checkbox" /><span data-i18n="offlineModelLabel">只用本地模型缓存</span></label>
               </div>
             </details>
+
+            <div class="planning-divider spatial-divider"><span data-i18n="spatialPaintingLabel">3D 深度空间绘画</span></div>
+            <section class="spatial-control-card" aria-labelledby="spatialControlTitle">
+              <div class="section-label-row">
+                <div>
+                  <p class="micro-kicker">RGB + RELATIVE DEPTH</p>
+                  <h4 id="spatialControlTitle" data-i18n="spatialControlTitle">非破坏式空间画布</h4>
+                </div>
+                <span class="mini-badge" id="spatialCapabilityBadge">D?</span>
+              </div>
+              <p data-i18n="spatialControlIntro">RGB 负责颜色，深度只负责表面位移；所有调整都不会改写原始 16 位深度。</p>
+              <div class="spatial-control-grid">
+                <label class="design-slider" for="spatialDepthStrength">
+                  <span data-i18n="spatialDepthStrengthLabel">纵深强度</span><output id="spatialDepthStrengthValue">65%</output>
+                  <input id="spatialDepthStrength" type="range" min="0" max="150" value="65" />
+                </label>
+                <label class="design-slider" for="spatialPerspective">
+                  <span data-i18n="spatialPerspectiveLabel">观察透视</span><output id="spatialPerspectiveValue">58%</output>
+                  <input id="spatialPerspective" type="range" min="0" max="100" value="58" />
+                </label>
+              </div>
+              <div class="field-grid compact-fields spatial-detail-row">
+                <label class="field-stack" for="spatialMeshResolution"><span data-i18n="spatialMeshResolutionLabel">网格精度</span><select id="spatialMeshResolution"><option value="48">48</option><option value="72">72</option><option value="96" selected>96</option><option value="128">128</option><option value="160">160</option></select></label>
+                <label class="check-inline"><input id="spatialWireframe" type="checkbox" /><span data-i18n="spatialWireframeLabel">显示网格线</span></label>
+              </div>
+              <div class="spatial-actions">
+                <button class="button button-primary" id="spatialOpenButton" type="button" disabled data-i18n="spatialOpenButton">打开 3D 画布</button>
+                <button class="button button-quiet" id="spatialResetButton" type="button" disabled data-i18n="spatialResetButton">复位视角</button>
+                <button class="button button-quiet" id="spatialExportButton" type="button" disabled data-i18n="spatialExportButton">导出空间桥接</button>
+              </div>
+              <p class="reference-note" id="spatialControlStatus" data-status="idle" data-i18n="spatialNeedsDepth">需要与当前 RGB 配对的深度图。</p>
+            </section>
 
             <div class="planning-divider"><span data-i18n="layerPlanningLabel">语义图层规划</span></div>
             <label class="field-stack" for="planningPromptInput">
@@ -544,6 +597,7 @@
       <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     </div>
 
-    <script src="app.js?v=0.6.0" defer></script>
+    <script src="spatial-3d.js?v=0.8.0" defer></script>
+    <script src="app.js?v=0.8.0" defer></script>
   </body>
 </html>
