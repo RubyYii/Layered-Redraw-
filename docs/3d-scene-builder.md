@@ -14,6 +14,7 @@
 8. **Spatial bridge runtime** — a selected carrier can load a Layered Redraw project folder containing `spatial-bridge.json`. The importer resolves the declared RGB and near-white depth-preview paths, verifies both SHA-256 digests, checks dimensions and hard relative-depth invariants, then creates an aspect-preserving textured height field. XY fitting keeps shallow carriers from crushing the authored display depth. The result remains session-only and is never added to collision or navigation data.
 9. **Agent boundary** — an observation builder exposes only visible semantic affordances. The validator rejects direct model control of transforms, paths, scripts, code, or asset URLs; the planner can deterministically add a collision-aware ground path before an out-of-range interaction. `runAgentTurn` is the single callback boundary for a future provider and returns validated timeline clips rather than executing model-authored transforms.
 10. **CP02 governed mutation** — `?case=pact-cp02` loads a source-locked derivative of the collaborator room. A deterministic fixture can propose only semantic assets in authored slots. Guardian approval routes one closed ScenePatch through exact changed-ID and protected-object checks; rejection and receipt-bound undo remain first-class outcomes. The route exposes only a read-only evidence snapshot and does not write the ordinary editor autosave key.
+11. **Reproducible delivery** — deterministic renderers emit a sibling `.simulation-package/` containing an independent video copy, canonical scene snapshot, asset lock, delta-encoded per-frame trace, interaction/ownership ledger, collision audit, portable render report, vendored replay runtime, and full-file SHA-256 manifest. A package-local verifier recomputes hashes and `simulationIdentity`; the browser replay uses only packaged files.
 
 ## Incoming depth-painting bridge
 
@@ -52,12 +53,16 @@ npm run build:interaction-demo
 npm run render:interaction-demo:video30
 npm run build:window-case
 npm run render:window-case:video30
+npm run package:interaction-demo
+npm run package:window-case
 npm run build:window-case:cp02
 npm run build
 npm run dev
 ```
 
-The bundled `projects/interaction-lab` fixture contains two gray-box agents, one prop, three legal ownership transitions, one continuous camera, and a ten-second timeline. Its regression test evaluates all 601 inclusive 60Hz samples for residual proxy penetration and checks persistent holder-contact poses. `npm run render:interaction-demo:video30` renders exactly 300 frames at 1280×720, saves six collision-audit PNGs (including both carry segments), and fails when any milestone reports non-zero residual penetration. The larger `projects/window-case` fixture contains one continuous room, four non-human agents, 200 objects, 720 timeline clips, 19 camera shots, 30 English screen-text cues, and a 166-second director timeline. Its regression test evaluates all 4,981 inclusive 30fps samples and requires zero residual penetration and zero simulation violations. `npm run render:window-case:video30` outputs exactly 4,980 frames at 1280×720 with the cues burned into the VP8 WebM. Generated frames, reports, and videos stay under the ignored `artifacts/` directory.
+The bundled `projects/interaction-lab` fixture contains two gray-box agents, one prop, three legal ownership transitions, one continuous camera, and a ten-second timeline. Its regression test evaluates all 601 inclusive 60Hz samples for residual proxy penetration and checks persistent holder-contact poses. `npm run render:interaction-demo:video30` renders exactly 300 frames at 1280×720, saves six collision-audit PNGs (including both carry segments), and fails when any milestone reports non-zero residual penetration. The larger `projects/window-case` fixture contains one continuous room, four non-human agents, 200 objects, 720 timeline clips, 19 camera shots, 30 English screen-text cues, and a 166-second director timeline. Its regression test evaluates all 4,981 inclusive 30fps samples and requires zero residual penetration and zero simulation violations. `npm run render:window-case:video30` outputs exactly 4,980 frames at 1280×720 with the cues burned into the VP8 WebM. Both renderers also build and validate the matching reproducible simulation package. `package:*` can retrofit the same contract around an existing video. Generated frames, reports, videos, and packages stay under the ignored `artifacts/` directory.
+
+Inside a generated package, run `node verify-delivery.mjs`, then `node serve-replay.mjs`. Verification checks every declared byte count and SHA-256, rejects undeclared files and incomplete publication markers, and recomputes the deterministic identity from the scene, asset lock, trace, interactions, and collision report. The identity deliberately excludes the video, renderer wall time, hardware, and absolute paths: two executions with the same simulation must match even when visual codecs or machines differ. See [`simulation-delivery-package.md`](simulation-delivery-package.md).
 
 ### CP02 runtime and evidence gate
 

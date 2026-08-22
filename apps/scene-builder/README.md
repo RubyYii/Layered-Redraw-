@@ -41,6 +41,7 @@
 - 基于静态碰撞体膨胀边界的确定性地面寻路，可把越界意图编译为“接近—交互”计划
 - 大模型意图观察器、校验器、计划器与单一 `runAgentTurn` 适配入口；模型不能直接写入位置、旋转、路径、脚本或资源 URL
 - 摄影机曲线缓存、轻量预览变换、增量时间线高亮、FPS/P95 监测、自适应像素比与弱设备阴影／局部灯降级；离线渲染固定为完整特效
+- 可复现仿真交付包：视频、场景快照、资产锁、逐帧增量轨迹、所有权／碰撞审计、离线 WebGL 回放和 SHA-256 验证器统一生成
 
 ## 剧本语法
 
@@ -79,6 +80,17 @@ npm run render:interaction-demo:video30
 ```
 
 右上角更多菜单中的“载入十秒交互仿真”会打开一个 19 对象、9 片段、10 秒的验收场景。预览 HUD 会显示仿真频率、交互阶段、持有者、剩余行程、防穿透修正数量和残余穿透；生成项目也可从 `projects/interaction-lab/interaction-simulation.blockout.json` 单独载入。离线渲染还会输出拾取、A 携带、交接、B 携带、放置和完成六张碰撞验收关键帧，任何关键帧残余穿透不为零都会中止。
+
+渲染成功会在视频旁生成 `.simulation-package/`；视频已有时可单独执行：
+
+```bash
+npm run package:interaction-demo
+npm run package:window-case
+```
+
+包内运行 `node verify-delivery.mjs` 可重算全部文件哈希与 `simulationIdentity`；运行 `node serve-replay.mjs` 可离线打开视频／3D 双视图回放。渲染器只有在视频编码和仿真审计同时通过时才返回成功。外部 OBJ／GLB／RGB-D 仍必须先进入持久资产合同；当前包会锁定项目中已声明的绑定和内嵌纹理，但不会把临时浏览器会话资产伪装成已归档资源。
+
+生成十秒包后，`npm run test:simulation-replay` 会自行启动临时回放服务器、定位到交接段、检查 WebGL／播放推进／控制台错误并保存 smoke 截图，结束时自动关闭服务器。
 
 ## 项目格式
 

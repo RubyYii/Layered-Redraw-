@@ -31,6 +31,8 @@ v1.1 adds an auditable anti-penetration layer to that slice. Character roots use
 
 v1.2 completes a deterministic full-screenplay render of *The Window That Wasn't There*. One continuous room carries 200 objects, four non-human agents, 19 shots, and 720 timeline clips through 166 seconds, with 30 English screen-text cues burned into a 4,980-frame, 1280×720, strict-30fps VP8 WebM. Character routes, evidence handling, and the photograph's lift–translate–lower motion were reblocked against penetration. The regression test evaluates all 4,981 inclusive frame-time samples and requires zero residual penetration and zero interaction-state violations. The result remains a stylised real-time 3D previz, not a claim of photoreal film rendering.
 
+v1.3 upgrades video output into a reproducible simulation delivery package. Both deterministic 30fps renderers now freeze the scene, asset lock, delta-encoded frame trace, interaction/ownership ledger, collision audit, and render report alongside an independent video copy, offline WebGL replay, and SHA-256 verifier. `simulationIdentity` depends only on deterministic simulation inputs and results—not machine paths, hardware, or wall-clock time. Illegal ownership or residual penetration preserves an inspectable `FAIL` package instead of emitting an unqualified video.
+
 Before production, the project can generate parameterized A/B/C proofs. The built-in output is a parameter contract, deltas, a low-detail schematic, and an external render request. It becomes image-effect evidence only after scene-specific renders are registered. Selection and promotion can guide the final 8–12 layers, but do not establish artistic quality on their own.
 
 The goal is not another brush picker. A style now changes crop, scale, negative space, depth, shape grammar, and value grouping before colour and surface treatment.
@@ -170,6 +172,8 @@ npm run render:window-case:video30
 npm run build:interaction-demo
 npm run render:interaction-demo:video30
 ```
+
+Each successful `render:*:video30` command now creates a sibling `.simulation-package/` directory. Existing videos can be packaged with `npm run package:window-case` or `npm run package:interaction-demo`. Run `node verify-delivery.mjs` inside the package to recheck every hash, then `node serve-replay.mjs` to inspect the rendered output, free 3D view, frame states, ownership, and collision audit together. See [`docs/simulation-delivery-package.md`](docs/simulation-delivery-package.md) for the contract.
 
 The editor can now import OBJ or a self-contained GLB for a selected object during the browser session and fit it inside the placeholder without distorting its proportions. OBJ is treated as static geometry. A GLB additionally reports skins, bones, animation clips, and morph targets, then infers semantic nodes, `idle/move/interact/react` actions, common rig bones, and expression slots. The runtime exposes `playAssetAction`, `setAssetExpression`, and `setAssetBonePose`, so a future character swap does not have to rewrite scene tracks. Expanded static bounds produce deterministic approach paths; replaceable `interactionSpec.collisionProxy` records provide capsule/box proxies for characters, props, and supports; and the kinematic interaction layer rejects handoffs or releases by a non-owner while keeping prop anchors constrained. Model files are not packaged with project JSON yet; real hand IK, animation retargeting, a navigation mesh, gravity, and Rapier rigid-body solving remain follow-up work.
 

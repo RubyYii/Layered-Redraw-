@@ -57,4 +57,6 @@ npm run render:window-case
 npm run render:window-case:video30
 ```
 
-第二条命令会重建项目、在本地启动灰场并逐镜驱动 WebGL 导演预览。第三条命令采用固定时间步输出 4,980 帧、1280×720、严格 30fps 的 VP8 WebM，并把英文画面提示烧录进成片；默认输出为 `../../artifacts/window-case-video/window-that-wasnt-there-30fps.webm`。渲染产物保留在本地 `artifacts/`，源项目和镜头清单保持可复现。
+第二条命令会重建项目、在本地启动灰场并逐镜驱动 WebGL 导演预览。第三条命令采用固定时间步输出 4,980 帧、1280×720、严格 30fps 的 VP8 WebM，并把英文画面提示烧录进成片；默认输出为 `../../artifacts/window-case-video/window-that-wasnt-there-30fps.webm`。
+
+同一命令还会生成 `window-that-wasnt-there-30fps.simulation-package/`：166 秒场景快照、4,981 个含终点仿真采样、交互／所有权账本、碰撞报告、视频独立副本、离线 3D 回放器和全文件哈希清单。视频已经存在时可运行 `npm run package:window-case` 补建。进入包目录运行 `node verify-delivery.mjs` 验证，再运行 `node serve-replay.mjs` 检查成片与自由视角。所有派生产物保留在本地 `artifacts/`，源项目和镜头清单保持可复现。

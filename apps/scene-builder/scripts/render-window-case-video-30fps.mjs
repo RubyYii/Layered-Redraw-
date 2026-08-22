@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { chromium } from "playwright-core";
 import { createServer } from "vite";
+import { buildSimulationDeliveryPackage } from "./simulation-delivery-package.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDir, "..");
@@ -398,7 +399,7 @@ try {
   const probe = spawnSync(ffmpegPath, ["-hide_banner", "-i", outputPath], { encoding: "utf8" });
   const probeText = `${probe.stdout ?? ""}\n${probe.stderr ?? ""}`;
   const cadenceLine = probeText.split(/\r?\n/).find((line) => line.includes("Video:"))?.trim() ?? null;
-  const result = {
+  const renderResult = {
     ok: true,
     outputPath,
     fileSize: fs.statSync(outputPath).size,
@@ -421,8 +422,23 @@ try {
     path.dirname(outputPath),
     `${path.parse(outputPath).name}.report.json`,
   );
+  const deliveryPackage = buildSimulationDeliveryPackage({
+    project,
+    projectText,
+    videoPath: outputPath,
+    renderReport: { ...renderResult, reportPath },
+    outputDir: valueAfter("--package-dir") ? path.resolve(valueAfter("--package-dir")) : undefined,
+    fps,
+    start,
+    duration: encodedDuration,
+    title: `${project.name} · 可复现仿真交付`,
+  });
+  const result = { ...renderResult, ok: deliveryPackage.ok, reportPath, deliveryPackage };
   fs.writeFileSync(reportPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
-  process.stdout.write(`${JSON.stringify({ ...result, reportPath }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  if (!deliveryPackage.ok) {
+    throw new Error(`仿真交付包验收失败：${deliveryPackage.manifestPath}`);
+  }
 } finally {
   await context?.close().catch(() => {});
   await browser?.close().catch(() => {});

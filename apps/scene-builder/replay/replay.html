@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:,">
+  <title>可复现仿真回放</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+      --ink: #edf1eb;
+      --muted: #8c9894;
+      --line: rgba(216, 231, 223, .13);
+      --panel: rgba(17, 22, 21, .9);
+      --lime: #b9ff62;
+      --cyan: #63dbe2;
+      --amber: #ffbe55;
+      --danger: #ff7979;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #080b0a; color: var(--ink); }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 18% 8%, rgba(99, 219, 226, .09), transparent 32%),
+        radial-gradient(circle at 88% 88%, rgba(185, 255, 98, .05), transparent 30%);
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    .shell { display: grid; grid-template-rows: 72px minmax(0, 1fr) 92px; height: 100%; }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(8, 11, 10, .82);
+      backdrop-filter: blur(18px);
+      z-index: 2;
+    }
+    .identity { display: flex; align-items: center; min-width: 0; gap: 14px; }
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(185, 255, 98, .38);
+      border-radius: 11px;
+      color: var(--lime);
+      background: rgba(185, 255, 98, .07);
+      font: 700 12px/1 ui-monospace, monospace;
+      letter-spacing: -.04em;
+    }
+    h1 { margin: 0; overflow: hidden; font-size: 16px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .subtitle { margin-top: 5px; color: var(--muted); font: 11px/1.2 ui-monospace, monospace; letter-spacing: .04em; }
+    .header-stats { display: flex; align-items: center; gap: 24px; }
+    .metric { text-align: right; }
+    .metric strong { display: block; font: 600 13px/1.2 ui-monospace, monospace; }
+    .metric span { color: var(--muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 11px;
+      border: 1px solid rgba(185, 255, 98, .22);
+      border-radius: 999px;
+      color: var(--lime);
+      background: rgba(185, 255, 98, .07);
+      font: 700 11px/1 ui-monospace, monospace;
+    }
+    .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 12px currentColor; }
+    .status.fail { color: var(--danger); border-color: rgba(255, 121, 121, .3); background: rgba(255, 121, 121, .07); }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 370px; min-height: 0; }
+    .stage { position: relative; min-width: 0; background: #080b0a; }
+    #viewport { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+    #viewport:active { cursor: grabbing; }
+    .stage-top {
+      position: absolute;
+      top: 18px;
+      left: 18px;
+      display: flex;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .chip { padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(8, 11, 10, .74); color: #bdc7c3; font: 10px/1 ui-monospace, monospace; backdrop-filter: blur(8px); }
+    .stage-note { position: absolute; right: 18px; bottom: 16px; color: rgba(220, 228, 224, .5); font-size: 10px; letter-spacing: .03em; pointer-events: none; }
+    aside { min-height: 0; overflow: auto; border-left: 1px solid var(--line); background: rgba(12, 16, 15, .88); }
+    .panel { padding: 19px 20px 20px; border-bottom: 1px solid var(--line); }
+    .panel-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 13px; color: var(--muted); font: 700 10px/1 ui-monospace, monospace; letter-spacing: .12em; text-transform: uppercase; }
+    .panel-label span:last-child { color: #60706b; letter-spacing: 0; }
+    video { display: block; width: 100%; aspect-ratio: 16/9; border: 1px solid var(--line); border-radius: 8px; background: #050706; object-fit: contain; }
+    .hash { margin-top: 11px; overflow: hidden; color: #798681; font: 10px/1.5 ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .event { display: grid; grid-template-columns: 7px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 8px 0; border-bottom: 1px solid rgba(216, 231, 223, .07); }
+    .event:last-child { border: 0; }
+    .event-dot { width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; background: #4c5653; }
+    .event.active .event-dot { background: var(--cyan); box-shadow: 0 0 10px rgba(99, 219, 226, .7); }
+    .event.past .event-dot { background: var(--lime); }
+    .event-title { overflow: hidden; color: #cbd4d0; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .event-meta { margin-top: 3px; color: #68746f; font: 10px/1.25 ui-monospace, monospace; }
+    .event-time { color: #75817d; font: 10px/1.4 ui-monospace, monospace; }
+    .empty { color: #66716d; font-size: 11px; line-height: 1.55; }
+    .audit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .audit-cell { padding: 11px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255, 255, 255, .018); }
+    .audit-cell strong { display: block; font: 600 14px/1.2 ui-monospace, monospace; }
+    .audit-cell span { color: var(--muted); font-size: 9px; letter-spacing: .05em; }
+    .audit-cell.safe strong { color: var(--lime); }
+    footer {
+      display: grid;
+      grid-template-columns: 54px minmax(0, 1fr) 178px;
+      align-items: center;
+      gap: 17px;
+      padding: 0 24px;
+      border-top: 1px solid var(--line);
+      background: rgba(8, 11, 10, .95);
+      z-index: 3;
+    }
+    #play {
+      display: grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border: 1px solid rgba(185, 255, 98, .28);
+      border-radius: 50%;
+      background: rgba(185, 255, 98, .08);
+      color: var(--lime);
+      cursor: pointer;
+    }
+    #play:hover { background: rgba(185, 255, 98, .13); }
+    #play svg { width: 16px; fill: currentColor; }
+    .timeline { min-width: 0; }
+    .timeline-meta { display: flex; justify-content: space-between; margin-bottom: 9px; color: var(--muted); font: 10px/1 ui-monospace, monospace; }
+    input[type="range"] { width: 100%; height: 4px; margin: 0; accent-color: var(--lime); cursor: pointer; }
+    .timecode { display: flex; align-items: baseline; justify-content: flex-end; gap: 7px; font: 600 18px/1 ui-monospace, monospace; }
+    .timecode span { color: var(--muted); font-size: 11px; font-weight: 400; }
+    .error { position: fixed; inset: 0; display: none; place-items: center; z-index: 20; padding: 30px; background: #080b0a; text-align: center; }
+    .error.visible { display: grid; }
+    .error strong { color: var(--danger); }
+    .error p { max-width: 620px; color: var(--muted); line-height: 1.65; }
+    @media (max-width: 920px) {
+      main { grid-template-columns: minmax(0, 1fr) 300px; }
+      .header-stats .metric { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="identity">
+        <div class="mark">SIM</div>
+        <div style="min-width:0">
+          <h1 id="title">正在验证交付包…</h1>
+          <div class="subtitle" id="package-id">REPRODUCIBLE SIMULATION DELIVERY</div>
+        </div>
+      </div>
+      <div class="header-stats">
+        <div class="metric"><strong id="object-count">—</strong><span>Objects</span></div>
+        <div class="metric"><strong id="frame-count">—</strong><span>Frames</span></div>
+        <div class="metric"><strong id="fps">—</strong><span>Cadence</span></div>
+        <div class="status" id="status">VERIFYING</div>
+      </div>
+    </header>
+    <main>
+      <section class="stage">
+        <canvas id="viewport"></canvas>
+        <div class="stage-top">
+          <div class="chip">DETERMINISTIC TRACE</div>
+          <div class="chip" id="backend">KINEMATIC / COLLISION PROXY</div>
+        </div>
+        <div class="stage-note">拖动旋转 · 滚轮缩放 · 时间轴逐帧检查</div>
+      </section>
+      <aside>
+        <section class="panel">
+          <div class="panel-label"><span>Rendered output</span><span id="video-role">VIDEO</span></div>
+          <video id="video" muted playsinline preload="metadata"></video>
+          <div class="hash" id="video-hash">SHA-256 —</div>
+        </section>
+        <section class="panel">
+          <div class="panel-label"><span>Interaction ledger</span><span id="event-count">0 EVENTS</span></div>
+          <div id="events" class="empty">当前时间段没有声明交互。</div>
+        </section>
+        <section class="panel">
+          <div class="panel-label"><span>Simulation audit</span><span>RECORDED</span></div>
+          <div class="audit-grid">
+            <div class="audit-cell safe"><strong id="residual">—</strong><span>MAX RESIDUAL</span></div>
+            <div class="audit-cell"><strong id="violations">—</strong><span>VIOLATIONS</span></div>
+            <div class="audit-cell"><strong id="samples">—</strong><span>SAMPLES</span></div>
+            <div class="audit-cell"><strong id="ownership">—</strong><span>HELD OBJECTS</span></div>
+          </div>
+        </section>
+      </aside>
+    </main>
+    <footer>
+      <button id="play" type="button" aria-label="播放仿真">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3.4a1 1 0 0 1 1.52-.85l10.2 6.6a1 1 0 0 1 0 1.7l-10.2 6.6A1 1 0 0 1 5 16.6V3.4Z"/></svg>
+      </button>
+      <div class="timeline">
+        <div class="timeline-meta"><span id="frame-label">FRAME —</span><span id="range-label">—</span></div>
+        <input id="scrubber" type="range" min="0" max="1" value="0" step="0.001" aria-label="仿真时间轴">
+      </div>
+      <div class="timecode"><strong id="timecode">00:00.000</strong><span id="duration">/ 00:00.000</span></div>
+    </footer>
+  </div>
+  <div class="error" id="error"><div><strong>交付包无法回放</strong><p id="error-message"></p></div></div>
+  <script type="module" src="./replay-runtime.js"></script>
+</body>
+</html>

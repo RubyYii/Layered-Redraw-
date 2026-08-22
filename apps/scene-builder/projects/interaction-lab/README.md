@@ -15,6 +15,8 @@ npm run dev
 npm run render:interaction-demo:video30
 ```
 
+渲染命令会同时生成 `artifacts/interaction-simulation/interaction-simulation-30fps.simulation-package/`。包内含视频独立副本、300 帧加终点采样的状态轨迹、三次所有权转换、碰撞报告、六张关键帧、离线 3D 回放器与哈希验证器。进入包目录运行 `node verify-delivery.mjs` 应返回 `PASS`；再运行 `node serve-replay.mjs` 可逐帧检查。
+
 ## 验收边界
 
 - 三个合法转换必须依次为 `claim → transfer → release`。
