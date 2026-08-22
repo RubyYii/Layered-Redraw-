@@ -12,6 +12,11 @@ import {
   SIMULATION_HZ,
   resolveInteractionSimulation,
 } from "./simulation-runtime.js";
+import {
+  mergeCollisionReports,
+  resolveCharacterCollisions,
+  resolvePropCollisions,
+} from "./collision-runtime.js";
 
 const NUMBER = "-?(?:\\d+(?:\\.\\d+)?|\\.\\d+)";
 const VECTOR_PATTERN = new RegExp(`[（(]\\s*(${NUMBER})\\s*[,，、\\s]+\\s*(${NUMBER})\\s*[,，、\\s]+\\s*(${NUMBER})\\s*[)）]`);
@@ -358,6 +363,7 @@ export function compileScreenplay(screenplay, project) {
         ownershipMode: "transfer",
         recipientAnchor: affordance.recipientAnchor,
         itemAnchor: affordance.itemAnchor,
+        actorContactAnchor: affordance.actorContactAnchor,
         duration,
         motion: { easing: "minimumJerk" },
       });
@@ -397,6 +403,7 @@ export function compileScreenplay(screenplay, project) {
         ownershipMode: "release",
         placementAnchor,
         itemAnchor: affordance.itemAnchor,
+        actorContactAnchor: affordance.actorContactAnchor,
         duration,
         motion: { easing: "minimumJerk" },
       });
@@ -431,6 +438,7 @@ export function compileScreenplay(screenplay, project) {
           ownershipMode: "claim",
           holderAnchor: affordance.holderAnchor,
           itemAnchor: affordance.itemAnchor,
+          actorContactAnchor: affordance.actorContactAnchor,
           duration: durationFrom(line, 0.6),
           motion: { easing: "minimumJerk" },
         });
@@ -536,8 +544,8 @@ export function evaluateTimeline(project, rawTime) {
           ownershipMode: clip.ownershipMode,
           recipientId: clip.recipientId,
           placementTargetId: clip.placementTargetId,
-          contactTargetId: clip.ownershipMode === "release" ? clip.placementTargetId : clip.targetId,
-          contactAnchor: clip.ownershipMode === "release" ? clip.placementAnchor : clip.targetAnchor,
+          contactTargetId: clip.targetId,
+          contactAnchor: clip.actorContactAnchor || clip.targetAnchor,
         });
       } else if (clip.resultingState) {
         target.semanticState = clip.resultingState;
@@ -574,12 +582,35 @@ export function evaluateTimeline(project, rawTime) {
     else if (source.nodeRole === "probe") state.rotation[1] += Math.sin(secondaryCycle * 0.41) * 0.8;
   }
 
+  const characterCollisions = resolveCharacterCollisions(project, objects);
   const simulation = resolveInteractionSimulation(project, objects, time);
+  const propCollisions = resolvePropCollisions(project, objects);
+  simulation.collision = mergeCollisionReports(characterCollisions, propCollisions);
   const contactsByClip = new Map(simulation.contacts.map((contact) => [contact.clipId, contact]));
   for (const interaction of interactions) {
     const contact = contactsByClip.get(interaction.id);
     if (contact) Object.assign(interaction, contact);
   }
+  const activeInteractionItems = new Set(interactions.map((interaction) => interaction.targetId));
+  const persistentHolds = Object.entries(simulation.ownership)
+    .filter(([itemId, ownership]) => ownership.status === "held" && !activeInteractionItems.has(itemId))
+    .map(([itemId, ownership]) => {
+      const itemSource = sourceById.get(itemId);
+      const holdAffordance = Object.values(itemSource?.interactionSpec?.affordances ?? {})
+        .find((affordance) => affordance.ownershipMode === "claim" || affordance.ownershipMode === "transfer");
+      return {
+        id: `persistent-hold-${itemId}`,
+        actorId: ownership.holderId,
+        targetId: itemId,
+        action: "hold",
+        actorNode: holdAffordance?.actorNode ?? "effector",
+        ownershipMode: "hold",
+        contactTargetId: itemId,
+        contactAnchor: ownership.itemAnchor ?? holdAffordance?.actorContactAnchor ?? "grip",
+        phase: { name: "contact", progress: 1, contactWeight: 1 },
+        passive: true,
+      };
+    });
 
   return {
     time,
@@ -588,6 +619,7 @@ export function evaluateTimeline(project, rawTime) {
     camera,
     dialogue,
     interactions,
+    interactionPoses: [...interactions, ...persistentHolds],
     simulation,
     activeClipIds,
   };

@@ -668,6 +668,10 @@ const renderSimulationStatus = (frame) => {
   const simulation = frame.simulation ?? {};
   const clockHz = simulation.clock?.hz ?? simulation.hz ?? 60;
   const violation = simulation.violations?.[0];
+  const collision = simulation.collision;
+  const collisionLabel = collision
+    ? ` · 防穿透 ${collision.resolvedCount ?? 0} 处 · 残余 ${Number(collision.residualPenetration ?? 0).toFixed(3)}m`
+    : "";
   const interaction = frame.interactions?.find((item) => item.ownershipMode && item.ownershipMode !== "none")
     ?? frame.interactions?.[0];
   const names = new Map(currentState.project.objects.map((object) => [object.id, object.name]));
@@ -679,6 +683,10 @@ const renderSimulationStatus = (frame) => {
     state = "error";
     phase = "转换被拒绝";
     detail = violation.message;
+  } else if (collision && !collision.safe) {
+    state = "error";
+    phase = "碰撞约束失败";
+    detail = `仍有 ${Number(collision.residualPenetration ?? 0).toFixed(3)}m 穿透，请检查碰撞代理。`;
   } else if (interaction) {
     state = interaction.phase?.name ?? "active";
     phase = SIMULATION_PHASE_LABELS[interaction.phase?.name] ?? "语义交互";
@@ -686,19 +694,21 @@ const renderSimulationStatus = (frame) => {
     const actorName = names.get(interaction.actorId) ?? interaction.actorId;
     const targetName = names.get(interaction.targetId) ?? interaction.targetId;
     const error = Number(interaction.constraintError);
-    const errorLabel = Number.isFinite(error) ? ` · 约束误差 ${error.toFixed(3)}m` : "";
-    detail = `${mode} · ${actorName} → ${targetName}${errorLabel}`;
+    const errorLabel = Number.isFinite(error) ? ` · 剩余行程 ${error.toFixed(3)}m` : "";
+    detail = `${mode} · ${actorName} → ${targetName}${errorLabel}${collisionLabel}`;
   } else {
     const heldEntry = Object.entries(simulation.ownership ?? {}).find(([, value]) => value.status === "held");
     const placedEntry = Object.entries(simulation.ownership ?? {}).find(([, value]) => value.status === "placed");
     if (heldEntry) {
       state = "held";
       phase = "持续持有";
-      detail = `${names.get(heldEntry[0]) ?? heldEntry[0]} · 持有者 ${names.get(heldEntry[1].holderId) ?? heldEntry[1].holderId}`;
+      detail = `${names.get(heldEntry[0]) ?? heldEntry[0]} · 持有者 ${names.get(heldEntry[1].holderId) ?? heldEntry[1].holderId}${collisionLabel}`;
     } else if (placedEntry) {
       state = "placed";
       phase = "放置完成";
-      detail = `${names.get(placedEntry[0]) ?? placedEntry[0]} · 接触面 ${names.get(placedEntry[1].placementTargetId) ?? placedEntry[1].placementTargetId}`;
+      detail = `${names.get(placedEntry[0]) ?? placedEntry[0]} · 接触面 ${names.get(placedEntry[1].placementTargetId) ?? placedEntry[1].placementTargetId}${collisionLabel}`;
+    } else if (collision) {
+      detail = `确定性运动学后端${collisionLabel}`;
     }
   }
 

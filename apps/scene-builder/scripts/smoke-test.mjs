@@ -424,6 +424,7 @@ try {
   await seekInteraction(3);
   assert((await page.locator("#simulation-phase").textContent())?.includes("接触约束"), "抓取接触阶段未显示。");
   assert((await page.locator("#simulation-detail").textContent())?.includes("抓取"), "抓取语义未显示。");
+  assert((await page.locator("#simulation-detail").textContent())?.includes("残余 0.000m"), "抓取阶段仍有未解决穿透。");
   await seekInteraction(4.2);
   assert((await page.locator("#simulation-phase").textContent())?.includes("持续持有"), "角色 A 持有状态未保持。");
   assert((await page.locator("#simulation-detail").textContent())?.includes("角色 A"), "角色 A 所有权未显示。");
@@ -436,6 +437,7 @@ try {
   assert((await page.locator("#simulation-detail").textContent())?.includes("角色 B"), "角色 B 所有权未显示。");
   await seekInteraction(8.65);
   assert((await page.locator("#simulation-detail").textContent())?.includes("放置"), "放置语义未显示。");
+  assert((await page.locator("#simulation-detail").textContent())?.includes("残余 0.000m"), "放置阶段仍有未解决穿透。");
   await seekInteraction(9.6);
   assert((await page.locator("#simulation-phase").textContent())?.includes("放置完成"), "物品没有稳定释放到接触面。");
 

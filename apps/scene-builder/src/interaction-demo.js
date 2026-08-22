@@ -17,7 +17,7 @@ const prop = (state) => createEntityConfig("prop", {
   physics: { bodyType: "kinematic", mass: 0.45, friction: 0.56, restitution: 0.05 },
 });
 
-const actorObjects = ({ id, name, position, rotation, color, accent }) => [
+const actorObjects = ({ id, name, position, rotation, color, accent, carryHeight }) => [
   {
     id,
     type: "group",
@@ -35,8 +35,14 @@ const actorObjects = ({ id, name, position, rotation, color, accent }) => [
       anchors: {
         gaze: [0, 1.46, -0.18],
         shoulder: [0, 1.02, -0.12],
-        effector: [0, 1.02, -0.72],
-        carry: [0, 0.98, -0.62],
+        effector: [0, 1.02, -0.26],
+        carry: [0, carryHeight, -0.62],
+      },
+      collisionProxy: {
+        shape: "capsule",
+        dimensions: [0.78, 1.76, 0.66],
+        offset: [0, 0.88, 0],
+        margin: 0.06,
       },
     },
   },
@@ -70,8 +76,8 @@ const actorObjects = ({ id, name, position, rotation, color, accent }) => [
     nodeRole: "arm",
     type: "box",
     name: `${name} · 伸缩机械臂`,
-    position: [0, 1.02, -0.4],
-    dimensions: [0.13, 0.13, 0.56],
+    position: [0, 1.02, -0.19],
+    dimensions: [0.13, 0.13, 0.14],
     color: accent,
     render: { roughness: 0.3, metalness: 0.62, emissive: accent, emissiveIntensity: 0.08 },
     entity: character("角色子节点"),
@@ -82,7 +88,7 @@ const actorObjects = ({ id, name, position, rotation, color, accent }) => [
     nodeRole: "effector",
     type: "sphere",
     name: `${name} · 交互执行器`,
-    position: [0, 1.02, -0.68],
+    position: [0, 1.02, -0.26],
     dimensions: [0.24, 0.24, 0.24],
     color: "#f2a33a",
     render: { roughness: 0.25, metalness: 0.65, emissive: "#f2a33a", emissiveIntensity: 0.22 },
@@ -129,6 +135,7 @@ export function createInteractionDemoProject() {
     rotation: [0, -65, 0],
     color: "#3d7880",
     accent: "#75d7d8",
+    carryHeight: 1.24,
   });
   const actorB = actorObjects({
     id: "interaction-actor-b",
@@ -137,6 +144,7 @@ export function createInteractionDemoProject() {
     rotation: [0, 90, 0],
     color: "#8b6b38",
     accent: "#f0bc58",
+    carryHeight: 1.38,
   });
 
   const screenplay = `# 固定 60Hz 的十秒交互验收
@@ -145,7 +153,7 @@ export function createInteractionDemoProject() {
 角色 A · 递交者 拿起 交互杯，用时 1.2 秒
 角色 A · 递交者 移动到 (1, 0, 0)，用时 1.85 秒
 角色 A · 递交者 将 交互杯 交给 角色 B · 接收者，用时 1.3 秒
-角色 B · 接收者 移动到 (3.25, 0, 0)，用时 1.55 秒
+角色 B · 接收者 移动到 (2.7, 0, 0)，用时 1.55 秒
 角色 B · 接收者 将 交互杯 放到 放置台，用时 1.25 秒
 等待 0.2 秒`;
 
@@ -186,7 +194,10 @@ export function createInteractionDemoProject() {
         color: "#6c6253",
         render: { roughness: 0.74, metalness: 0.12 },
         entity: environment(),
-        interactionSpec: { anchors: { surface: [0, 0.45, 0] } },
+        interactionSpec: {
+          anchors: { surface: [0, 0.45, 0] },
+          collisionProxy: { shape: "box", support: true, margin: 0.01 },
+        },
       },
       {
         id: "interaction-destination-table",
@@ -197,7 +208,10 @@ export function createInteractionDemoProject() {
         color: "#5e6657",
         render: { roughness: 0.7, metalness: 0.16, emissive: "#4f6c55", emissiveIntensity: 0.08 },
         entity: environment(),
-        interactionSpec: { anchors: { surface: [0, 0.55, 0] } },
+        interactionSpec: {
+          anchors: { surface: [0, 0.55, 0] },
+          collisionProxy: { shape: "box", support: true, margin: 0.01 },
+        },
       },
       {
         id: "interaction-cup",
@@ -210,6 +224,7 @@ export function createInteractionDemoProject() {
         entity: prop("位于起始台"),
         interactionSpec: {
           anchors: { grip: [0, 0, 0], bottom: [0, -0.28, 0] },
+          collisionProxy: { shape: "cylinder", margin: 0 },
           affordances: {
             pickup: {
               action: "pick_up",
@@ -220,6 +235,7 @@ export function createInteractionDemoProject() {
               ownershipMode: "claim",
               holderAnchor: "carry",
               itemAnchor: "grip",
+              actorContactAnchor: "grip",
             },
             handoff: {
               action: "hand_over",
@@ -230,6 +246,7 @@ export function createInteractionDemoProject() {
               ownershipMode: "transfer",
               recipientAnchor: "carry",
               itemAnchor: "grip",
+              actorContactAnchor: "grip",
             },
             place: {
               action: "place_on_surface",
@@ -240,6 +257,7 @@ export function createInteractionDemoProject() {
               ownershipMode: "release",
               placementAnchor: "surface",
               itemAnchor: "bottom",
+              actorContactAnchor: "grip",
             },
           },
         },
@@ -252,7 +270,7 @@ export function createInteractionDemoProject() {
       timeline: {
         duration: INTERACTION_DEMO_DURATION,
         compiledScript: screenplay,
-        compiledAt: "deterministic-interaction-fixture-v1",
+        compiledAt: "deterministic-interaction-fixture-v2",
         issues: [],
         clips: [
           {
@@ -303,6 +321,7 @@ export function createInteractionDemoProject() {
             ownershipMode: "claim",
             holderAnchor: "carry",
             itemAnchor: "grip",
+            actorContactAnchor: "grip",
             motion: { easing: "minimumJerk" },
           },
           {
@@ -337,6 +356,7 @@ export function createInteractionDemoProject() {
             ownershipMode: "transfer",
             recipientAnchor: "carry",
             itemAnchor: "grip",
+            actorContactAnchor: "grip",
             motion: { easing: "minimumJerk" },
           },
           {
@@ -363,8 +383,8 @@ export function createInteractionDemoProject() {
             duration: 1.55,
             targetId: "interaction-actor-b",
             from: [2.2, 0, 0],
-            to: [3.25, 0, 0],
-            path: [[2.2, 0, 0], [2.55, 0, 0.35], [2.95, 0, 0.28], [3.25, 0, 0]],
+            to: [2.7, 0, 0],
+            path: [[2.2, 0, 0], [2.38, 0, 0.3], [2.58, 0, 0.22], [2.7, 0, 0]],
             fromYaw: 90,
             toYaw: -90,
             motion: { easing: "minimumJerk", orientToPath: true, leanDegrees: 1.5, bankDegrees: 1, turnPortion: 0.42 },
@@ -386,6 +406,7 @@ export function createInteractionDemoProject() {
             ownershipMode: "release",
             placementAnchor: "surface",
             itemAnchor: "bottom",
+            actorContactAnchor: "grip",
             motion: { easing: "minimumJerk" },
           },
           {

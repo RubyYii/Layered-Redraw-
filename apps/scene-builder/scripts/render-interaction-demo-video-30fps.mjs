@@ -130,14 +130,32 @@ try {
   await seek(start);
   await page.waitForTimeout(80);
 
+  const viewport = page.locator("#viewport");
   const milestones = {};
-  for (const [label, time] of Object.entries({ pickup: 3, handoff: 5.95, placed: 9.6 })) {
+  const auditFrames = {};
+  for (const [label, time] of Object.entries({
+    pickup: 3,
+    carryA: 4.2,
+    handoff: 5.95,
+    carryB: 7.2,
+    place: 8.65,
+    placed: 9.6,
+  })) {
     await seek(time);
     milestones[label] = await page.evaluate(() => ({
       phase: document.querySelector("#simulation-phase")?.textContent,
       detail: document.querySelector("#simulation-detail")?.textContent,
       state: document.querySelector("#simulation-indicator")?.dataset.state,
     }));
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const auditPath = path.join(artifactDir, `collision-${label}.png`);
+    await viewport.screenshot({ path: auditPath, type: "png" });
+    auditFrames[label] = auditPath;
+  }
+  const unsafeMilestone = Object.entries(milestones)
+    .find(([, milestone]) => !milestone.detail?.includes("残余 0.000m"));
+  if (unsafeMilestone) {
+    throw new Error(`关键帧仍有穿透：${unsafeMilestone[0]} · ${unsafeMilestone[1].detail}`);
   }
   await seek(start);
 
@@ -168,7 +186,6 @@ try {
     });
   });
 
-  const viewport = page.locator("#viewport");
   const startedAt = Date.now();
   for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
     const timelineTime = Math.min(start + frameIndex / fps, timelineDuration);
@@ -219,8 +236,10 @@ try {
     rendererState,
     media,
     milestones,
+    auditFrames,
     cadenceLine,
     simulationBackend: "deterministic-kinematic",
+    collisionBackend: "collision-proxy-v1",
     encoding: "deterministic 30fps JPEG pipe -> VP8 WebM",
   };
   fs.writeFileSync(result.reportPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");

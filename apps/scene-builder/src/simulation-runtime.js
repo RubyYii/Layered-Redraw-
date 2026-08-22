@@ -253,6 +253,8 @@ export function resolveInteractionSimulation(project, objects, rawTime) {
     holderId: state.kind === "held" ? state.holderId : state.holderId ?? null,
     nextHolderId: state.nextHolderId ?? null,
     placementTargetId: state.placementTargetId ?? null,
+    holderAnchor: state.holderAnchor ?? null,
+    itemAnchor: state.itemAnchor ?? null,
     mode: state.mode ?? null,
   }]));
 

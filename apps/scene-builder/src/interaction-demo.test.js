@@ -51,6 +51,60 @@ describe("ten-second interaction simulation fixture", () => {
     });
   });
 
+  it("keeps a persistent surface-contact pose during both carry segments", () => {
+    const project = createInteractionDemoProject();
+    const carriedByA = evaluateTimeline(project, 4.2).interactionPoses;
+    const carriedByB = evaluateTimeline(project, 7.2).interactionPoses;
+
+    expect(carriedByA).toContainEqual(expect.objectContaining({
+      id: "persistent-hold-interaction-cup",
+      actorId: "interaction-actor-a",
+      targetId: "interaction-cup",
+      ownershipMode: "hold",
+      contactAnchor: "grip",
+    }));
+    expect(carriedByB).toContainEqual(expect.objectContaining({
+      id: "persistent-hold-interaction-cup",
+      actorId: "interaction-actor-b",
+      targetId: "interaction-cup",
+      ownershipMode: "hold",
+      contactAnchor: "grip",
+    }));
+
+    const cup = project.objects.find((object) => object.id === "interaction-cup");
+    const hand = project.objects.find((object) => object.id === "interaction-actor-a-hand");
+    const requiredClearance = cup.dimensions[0] / 2 + hand.dimensions[0] / 2;
+    for (const actorId of ["interaction-actor-a", "interaction-actor-b"]) {
+      const actor = project.objects.find((object) => object.id === actorId);
+      const carry = actor.interactionSpec.anchors.carry;
+      const restEffector = actor.interactionSpec.anchors.effector;
+      expect(Math.hypot(carry[0] - restEffector[0], carry[2] - restEffector[2]))
+        .toBeGreaterThan(requiredClearance);
+    }
+  });
+
+  it("keeps every 60 Hz sample free of character and prop penetration", () => {
+    const project = createInteractionDemoProject();
+    let resolvedContacts = 0;
+
+    for (let tick = 0; tick <= INTERACTION_DEMO_DURATION * 60; tick += 1) {
+      const frame = evaluateTimeline(project, tick / 60);
+      resolvedContacts += frame.simulation.collision.resolvedCount;
+      expect(frame.simulation.collision.safe, `tick ${tick}`).toBe(true);
+      expect(frame.simulation.collision.residualPenetration, `tick ${tick}`).toBeLessThan(1e-6);
+    }
+
+    const pickup = evaluateTimeline(project, 3);
+    const place = evaluateTimeline(project, 8.65);
+    expect(resolvedContacts).toBeGreaterThan(0);
+    expect(pickup.objects["interaction-actor-a"].position[0]).toBeLessThanOrEqual(-1.409);
+    expect(place.objects["interaction-actor-b"].position[0]).toBeLessThanOrEqual(3.016);
+    expect(place.interactions[0]).toMatchObject({
+      contactTargetId: "interaction-cup",
+      contactAnchor: "grip",
+    });
+  });
+
   it("recompiles the readable script without losing ownership semantics", () => {
     const project = createInteractionDemoProject();
     const compiled = compileScreenplay(project.director.screenplay, project);
@@ -58,6 +112,8 @@ describe("ten-second interaction simulation fixture", () => {
     expect(compiled.issues.filter((item) => item.severity === "error")).toEqual([]);
     expect(compiled.clips.filter((clip) => clip.type === "interaction").map((clip) => clip.ownershipMode))
       .toEqual(["claim", "transfer", "release"]);
+    expect(compiled.clips.filter((clip) => clip.type === "interaction").map((clip) => clip.actorContactAnchor))
+      .toEqual(["grip", "grip", "grip"]);
     expect(compiled.duration).toBe(10);
   });
 });
