@@ -5,16 +5,19 @@ import agentActionDraftSchema from "../schemas/gate/agent-action-draft.schema.js
 import agentContributionSchema from "../schemas/gate/agent-contribution.schema.json" with { type: "json" };
 import providerCallEnvelopeSchema from "../schemas/gate/provider-call-envelope.schema.json" with { type: "json" };
 import viewerTurnSchema from "../schemas/gate/viewer-turn.schema.json" with { type: "json" };
+import approvalRecordSchema from "../schemas/runtime/approval-record.schema.json" with { type: "json" };
 
 export { canonicalJson, sha256Canonical } from "./canonical-json.js";
 export {
   agentActionDraftSchema,
   agentContributionSchema,
+  approvalRecordSchema,
   providerCallEnvelopeSchema,
   viewerTurnSchema,
 };
 
 export const CP03_FOUNDATION_SCHEMA_VERSION = "cp03-foundation-gate/0.1";
+export const CP03_RUNTIME_SCHEMA_VERSION = "cp03-runtime/0.1";
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 addFormats(ajv);
@@ -22,6 +25,7 @@ addFormats(ajv);
 const validators = {
   agentActionDraft: ajv.compile(agentActionDraftSchema),
   agentContribution: ajv.compile(agentContributionSchema),
+  approvalRecord: ajv.compile(approvalRecordSchema),
   providerCallEnvelope: ajv.compile(providerCallEnvelopeSchema),
   viewerTurn: ajv.compile(viewerTurnSchema),
 };
@@ -41,4 +45,5 @@ const checked = (contractName, validate) => (value) => {
 export const validateViewerTurn = checked("ViewerTurn", validators.viewerTurn);
 export const validateAgentContribution = checked("AgentContribution", validators.agentContribution);
 export const validateAgentActionDraft = checked("AgentActionDraft", validators.agentActionDraft);
+export const validateApprovalRecord = checked("ApprovalRecord", validators.approvalRecord);
 export const validateProviderCallEnvelope = checked("ProviderCallEnvelope", validators.providerCallEnvelope);

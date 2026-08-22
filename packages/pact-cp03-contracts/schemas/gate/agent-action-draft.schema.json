@@ -28,6 +28,26 @@
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/stableRef" }
     },
+    "runtimeCapabilityCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "arguments"],
+      "properties": {
+        "capability": { "const": "performRegisteredInteraction" },
+        "arguments": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["actorId", "targetId", "affordance"],
+          "properties": {
+            "actorId": { "$ref": "#/$defs/stableRef" },
+            "targetId": { "$ref": "#/$defs/stableRef" },
+            "affordance": { "$ref": "#/$defs/stableRef" },
+            "recipientId": { "$ref": "#/$defs/stableRef" },
+            "placementTargetId": { "$ref": "#/$defs/stableRef" }
+          }
+        }
+      }
+    },
     "nonterminalAction": {
       "enum": ["Translate", "Reframe", "Merge"]
     },
@@ -113,7 +133,7 @@
       "required": ["draftId", "schemaVersion", "caseSessionId", "turnId", "parentSceneHash"],
       "properties": {
         "draftId": { "type": "string", "pattern": "^draft_[A-Za-z0-9_-]{8,80}$" },
-        "schemaVersion": { "const": "cp03-foundation-gate/0.1" },
+        "schemaVersion": { "enum": ["cp03-foundation-gate/0.1", "cp03-runtime/0.1"] },
         "caseSessionId": { "type": "string", "pattern": "^case_[A-Za-z0-9_-]{8,80}$" },
         "turnId": { "type": "string", "pattern": "^turn_[A-Za-z0-9_-]{8,80}$" },
         "parentSceneHash": { "$ref": "#/$defs/hash" }
@@ -166,24 +186,70 @@
       }
     },
     "execution": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "executionMode",
-        "semanticCapabilityCalls",
-        "expectedChanges",
-        "forbiddenChanges",
-        "rollbackRequirements",
-        "terminalIntent"
-      ],
-      "properties": {
-        "executionMode": { "const": "NON_EXECUTABLE_COMPATIBILITY" },
-        "semanticCapabilityCalls": { "type": "array", "maxItems": 0 },
-        "expectedChanges": { "type": "array", "maxItems": 0 },
-        "forbiddenChanges": { "const": ["no scene mutation in provider gate"] },
-        "rollbackRequirements": { "type": "array", "maxItems": 0 },
-        "terminalIntent": { "enum": [null, "Continue", "KeepOpaque"] }
-      }
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "executionMode",
+            "semanticCapabilityCalls",
+            "expectedChanges",
+            "forbiddenChanges",
+            "rollbackRequirements",
+            "terminalIntent"
+          ],
+          "properties": {
+            "executionMode": { "const": "NON_EXECUTABLE_COMPATIBILITY" },
+            "semanticCapabilityCalls": { "type": "array", "maxItems": 0 },
+            "expectedChanges": { "type": "array", "maxItems": 0 },
+            "forbiddenChanges": { "const": ["no scene mutation in provider gate"] },
+            "rollbackRequirements": { "type": "array", "maxItems": 0 },
+            "terminalIntent": { "enum": [null, "Continue", "KeepOpaque"] }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "executionMode",
+            "semanticCapabilityCalls",
+            "expectedChanges",
+            "forbiddenChanges",
+            "rollbackRequirements",
+            "terminalIntent"
+          ],
+          "properties": {
+            "executionMode": { "const": "EXECUTABLE_PROPOSAL" },
+            "semanticCapabilityCalls": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": { "$ref": "#/$defs/runtimeCapabilityCall" }
+            },
+            "expectedChanges": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/stableRef" }
+            },
+            "forbiddenChanges": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/stableRef" }
+            },
+            "rollbackRequirements": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+            },
+            "terminalIntent": { "enum": [null, "Continue", "KeepOpaque"] }
+          }
+        }
+      ]
     },
     "agency": {
       "type": "object",
@@ -201,6 +267,53 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "identity": {
+            "type": "object",
+            "properties": { "schemaVersion": { "const": "cp03-foundation-gate/0.1" } },
+            "required": ["schemaVersion"]
+          }
+        },
+        "required": ["identity"]
+      },
+      "then": {
+        "properties": {
+          "execution": {
+            "type": "object",
+            "properties": { "executionMode": { "const": "NON_EXECUTABLE_COMPATIBILITY" } },
+            "required": ["executionMode"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "identity": {
+            "type": "object",
+            "properties": { "schemaVersion": { "const": "cp03-runtime/0.1" } },
+            "required": ["schemaVersion"]
+          }
+        },
+        "required": ["identity"]
+      },
+      "then": {
+        "properties": {
+          "decision": {
+            "type": "object",
+            "properties": { "status": { "const": "PROPOSED" } },
+            "required": ["status"]
+          },
+          "execution": {
+            "type": "object",
+            "properties": { "executionMode": { "const": "EXECUTABLE_PROPOSAL" } },
+            "required": ["executionMode"]
+          }
+        }
+      }
+    },
     {
       "if": {
         "properties": {

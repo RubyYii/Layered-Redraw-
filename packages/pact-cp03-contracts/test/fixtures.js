@@ -69,6 +69,42 @@ export const validAgentActionDraft = Object.freeze({
   },
 });
 
+export const validRuntimeAgentActionDraft = Object.freeze({
+  ...validAgentActionDraft,
+  identity: {
+    ...validAgentActionDraft.identity,
+    draftId: "draft_runtime01",
+    schemaVersion: "cp03-runtime/0.1",
+  },
+  execution: {
+    executionMode: "EXECUTABLE_PROPOSAL",
+    semanticCapabilityCalls: [{
+      capability: "performRegisteredInteraction",
+      arguments: {
+        actorId: "interaction-actor-a",
+        targetId: "interaction-cup",
+        affordance: "pickup",
+      },
+    }],
+    expectedChanges: ["interaction-actor-a", "interaction-cup"],
+    forbiddenChanges: ["source-plane", "evidence-overlay"],
+    rollbackRequirements: ["Discard the transient director overlay."],
+    terminalIntent: null,
+  },
+});
+
+export const validApprovalRecord = Object.freeze({
+  schemaVersion: "cp03-runtime/0.1",
+  approvalId: "approval_example01",
+  caseSessionId: "case_example01",
+  turnId: "turn_example01",
+  draftHash: "d".repeat(64),
+  parentSceneHash: "a".repeat(64),
+  decision: "APPROVE",
+  approvedBy: "viewer",
+  decidedAt: "2026-08-22T00:00:00.000Z",
+});
+
 export const validProviderCallEnvelope = Object.freeze({
   schemaVersion: "cp03-foundation-gate/0.1",
   callId: "call_example01",
