@@ -10,6 +10,7 @@ import {
   type GenerateOptions,
   type StreamChunk,
 } from '@deepseek-ai/dsh-llm';
+import type { Context } from '@deepseek-ai/cordis';
 import {
   CP03_FOUNDATION_SCHEMA_VERSION,
   validateProviderCallEnvelope,
@@ -184,7 +185,11 @@ class ProbeRoutingAdapter extends LlmAdapter {
 
   constructor(
     private readonly failOnceAt: ReadonlySet<string> = new Set(),
-    private readonly beforeResponse: ReadonlyMap<string, () => void> = new Map(),
+    private readonly beforeResponse: ReadonlyMap<
+      string,
+      () => void | Promise<void>
+    > = new Map(),
+    private readonly fatalAuthAt: ReadonlySet<string> = new Set(),
   ) {
     super();
   }
@@ -200,7 +205,10 @@ class ProbeRoutingAdapter extends LlmAdapter {
       this.failed.add(failureKey);
       throw new LlmError('scripted transport reset before completion', 'TRANSPORT');
     }
-    this.beforeResponse.get(failureKey)?.();
+    if (this.fatalAuthAt.has(failureKey)) {
+      throw new LlmError('scripted fatal authentication failure', 'AUTH');
+    }
+    await this.beforeResponse.get(failureKey)?.();
     this.steps.set(stepKey, step + 1);
 
     let chunks: readonly StreamChunk[];
@@ -270,8 +278,14 @@ class ProbeRoutingAdapter extends LlmAdapter {
 
 interface ScriptedRunOptions {
   readonly deepseekFailures?: ReadonlySet<string>;
+  readonly deepseekFatalAuth?: ReadonlySet<string>;
   readonly geminiFailures?: ReadonlySet<string>;
   readonly deepseekBeforeResponse?: ReadonlyMap<string, () => void>;
+  readonly geminiBeforeResponse?: ReadonlyMap<
+    string,
+    () => void | Promise<void>
+  >;
+  readonly onContext?: (ctx: Context) => void;
   readonly now?: () => number;
   readonly chainDeadlineMs?: number;
 }
@@ -286,8 +300,12 @@ const runScriptedCompatibility = async (
   const deepseek = new ProbeRoutingAdapter(
     options.deepseekFailures,
     options.deepseekBeforeResponse,
+    options.deepseekFatalAuth,
   );
-  const gemini = new ProbeRoutingAdapter(options.geminiFailures);
+  const gemini = new ProbeRoutingAdapter(
+    options.geminiFailures,
+    options.geminiBeforeResponse,
+  );
   const result = await runProviderCompatibilityRuntime({
     runId: 'compat_scripted_eight_probe01',
     config: inspectCompatibilityConfig(completeEnv()),
@@ -300,6 +318,7 @@ const runScriptedCompatibility = async (
       ? {}
       : { chainDeadlineMs: options.chainDeadlineMs }),
     mountAdapters(ctx) {
+      options.onContext?.(ctx);
       ctx.llm.registerAdapter(['deepseek-official'], deepseek);
       ctx.llm.registerAdapter(['google'], gemini);
     },
@@ -308,6 +327,43 @@ const runScriptedCompatibility = async (
 };
 
 describe('fixed real-provider DSH runner with local routing adapters', () => {
+  it('surfaces a settled child provider failure instead of re-flushing its detached session', async () => {
+    let resolveFirstChildDisposed: () => void = () => {};
+    const firstChildDisposed = new Promise<void>((resolve) => {
+      resolveFirstChildDisposed = resolve;
+    });
+
+    await expect(runScriptedCompatibility({
+      deepseekFatalAuth: new Set(['probe-1:step-0']),
+      geminiBeforeResponse: new Map([[
+        'probe-3:step-0',
+        () => firstChildDisposed,
+      ]]),
+      onContext(ctx) {
+        ctx.on('session/disposed', () => resolveFirstChildDisposed());
+      },
+    })).rejects.toThrow(
+      /STRUCTURED_SUBMISSION_MISSING: probe-01 ended with error/,
+    );
+  }, 10_000);
+
+  it('stops before later waves after a terminal provider failure', async () => {
+    let laterWaveStarted = false;
+
+    await expect(runScriptedCompatibility({
+      deepseekFatalAuth: new Set(['probe-1:step-0']),
+      geminiBeforeResponse: new Map([[
+        'probe-4:step-0',
+        () => {
+          laterWaveStarted = true;
+        },
+      ]]),
+    })).rejects.toThrow(
+      /STRUCTURED_SUBMISSION_MISSING: probe-01 ended with error/,
+    );
+    expect(laterWaveStarted).toBe(false);
+  }, 10_000);
+
   it('completes eight logical probes through exactly twelve actual DSH streams', async () => {
     const { result, deepseek, gemini } = await runScriptedCompatibility();
 

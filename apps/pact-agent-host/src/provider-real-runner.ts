@@ -142,11 +142,31 @@ const contributionRef = (
   };
 };
 
-const flushSessions = async (
+const checkpointSessions = async (
   harness: FoundationHarness,
   sessions: readonly Session[],
 ): Promise<void> => {
-  await Promise.all(sessions.map((session) => harness.ctx.sessions.flush(session)));
+  await Promise.all(sessions.map(async (session) => {
+    const expectedLastSeq = session.events.at(-1)?.seq;
+    if (expectedLastSeq === undefined) {
+      throw new Error(`PROVIDER_SESSION_EMPTY: ${session.id}`);
+    }
+    if (harness.ctx.sessions.get(session.id) === session) {
+      try {
+        const participated = await harness.ctx.sessions.flush(session);
+        if (!participated) {
+          throw new Error(`PROVIDER_SESSION_FLUSH_UNOBSERVED: ${session.id}`);
+        }
+        return;
+      } catch (error) {
+        if (harness.ctx.sessions.get(session.id) === session) throw error;
+      }
+    }
+    const inspected = await harness.ctx.sessionPersistence.inspect(session.id);
+    if (inspected.events.at(-1)?.seq !== expectedLastSeq) {
+      throw new Error(`PROVIDER_SESSION_PERSISTENCE_INCOMPLETE: ${session.id}`);
+    }
+  }));
 };
 
 export const runProviderCompatibilityRuntime = async (
@@ -351,11 +371,12 @@ export const runProviderCompatibilityRuntime = async (
       waitForTurnEnd(harness.ctx, chainConductor.agent.session, 1, COMPATIBILITY_LIMITS.deadlineMs),
       waitForTurnEnd(harness.ctx, probe3.session, 1, COMPATIBILITY_LIMITS.deadlineMs),
     ]);
-    await flushSessions(harness, [
+    await checkpointSessions(harness, [
       probe1.session,
       chainConductor.agent.session,
       probe3.session,
     ]);
+    ledger.assertComplete();
     completed.add('probe-01');
     completed.add('probe-02');
     completed.add('probe-03');
@@ -388,7 +409,7 @@ export const runProviderCompatibilityRuntime = async (
       waitForTurnEnd(harness.ctx, probe4.session, 1, COMPATIBILITY_LIMITS.deadlineMs),
       waitForTurnEnd(harness.ctx, probe5.session, 1, COMPATIBILITY_LIMITS.deadlineMs),
     ]);
-    await flushSessions(harness, [probe4.session, probe5.session]);
+    await checkpointSessions(harness, [probe4.session, probe5.session]);
     completed.add('probe-04');
     completed.add('probe-05');
 
@@ -417,7 +438,7 @@ export const runProviderCompatibilityRuntime = async (
       2,
       COMPATIBILITY_LIMITS.deadlineMs,
     );
-    await flushSessions(harness, [chainConductor.agent.session]);
+    await checkpointSessions(harness, [chainConductor.agent.session]);
     completed.add('probe-06');
     closeTurn('turn_chain_01');
 
@@ -469,7 +490,10 @@ export const runProviderCompatibilityRuntime = async (
     } finally {
       clearTimeout(timeout);
     }
-    await flushSessions(harness, [timeoutConductor.agent.session, probe8.session]);
+    await checkpointSessions(harness, [
+      timeoutConductor.agent.session,
+      probe8.session,
+    ]);
     completed.add('probe-07');
     completed.add('probe-08');
 
