@@ -73,7 +73,13 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: apps/scene-builder/package-lock.json
+          cache-dependency-path: |
+            packages/pact-cp03-contracts/package-lock.json
+            apps/scene-builder/package-lock.json
+
+      - name: Install CP03 contract dependencies
+        working-directory: packages/pact-cp03-contracts
+        run: npm ci
 
       - name: Install 3D application dependencies
         working-directory: apps/scene-builder
