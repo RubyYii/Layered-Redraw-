@@ -2,7 +2,7 @@
 
 **Status:** `live_roadmap`
 
-**Updated:** 2026-08-23
+**Updated:** 2026-08-24
 
 **Runtime branch:** `codex/pact-cp03-agent-native`
 
@@ -38,7 +38,7 @@ The viewer does not directly drive a character with keyboard/game controls in th
 | CP00 Reference Grammar | visual/theoretical grammar and checkpoint media | `ARCHIVED`; human visual direction recorded | preserve as source, not final 3D proof |
 | CP01 Asset Bake-off | compare public and generated 3D candidates | `PARTIAL`; preflight and fixed public candidates exist, formal model bake-off incomplete | decide whether a generated challenger is still needed |
 | CP02 Mutable Room / One Reframe | source-locked room, governed add/move/undo/reject, real local assets | `CHECKPOINT_ARCHIVED`, runtime tested, artistic `R2 KEEP`, public release false | frozen; do not rewrite its evidence |
-| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `MERGED_LOCAL_SCRIPTED_VERIFIED + REMOTE_SYNC_VERIFIED + RUBY_FIVE_EFFECT_UI_ENGINEERING_VERIFIED + GEMINI_37_ADAPTER_STAGE_A_ENGINEERING_READY_ARCHIVED + THREE_FAILED_LIVE_RUNS`; the combined tree passes council, exact viewer approval, Ruby interaction/rollback, audience UI, five Three.js effects, rig, physics, persistence and archive-contract gates. Replacement Run 02 archives the zero-call Gemini 3.7 catalog audit plus reviewed local media; it made no provider call and is not a model-quality result or formal CP03 capture. | complete the separately gated Stage B model/provider/human decisions, Stage C representative 3D encounter and formal five-class archive |
+| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `MERGED_LOCAL_SCRIPTED_VERIFIED + REMOTE_SYNC_VERIFIED + RUBY_FIVE_EFFECT_UI_ENGINEERING_VERIFIED + GEMINI_37_ADAPTER_STAGE_A_ENGINEERING_READY_ARCHIVED + BAKEOFF_IMPLEMENTED_LOCAL_SCRIPTED + THREE_FAILED_LIVE_RUNS`; the combined tree passes council, exact viewer approval, Ruby interaction/rollback, audience UI, five Three.js effects, rig, physics, persistence and archive-contract gates. The fixed-input Stage B machinery and anonymous comparison surface are now locally scripted and archived with zero calls; no real bake-off, provider-quality finding, author selection or formal CP03 capture has occurred. | run a fresh separately approved Stage B preflight/bake-off, collect blinded human decisions, then complete Stage C representative 3D encounter and formal five-class archive |
 | CP04 Rights-aware Retrieval | local semantic search over cleared asset registry | `NOT_STARTED`; three fixed Case Pack assets are not a vector database | source records, embeddings, retrieval/Guardian UI |
 | CP05 Generated Gap Asset | one approved offline generated asset | `NOT_STARTED` | separately authorised model/API or local generation bake-off |
 | CP06 Four Positions | 0/1/4-person role and takeover behaviour | `NOT_STARTED` | participant protocol and role runtime |
@@ -90,6 +90,7 @@ Ruby owns the 3D execution primitives and authored stage. New CP03 code should c
 | `1558a01` | parallel representative wave and settlement isolation | verifies one-stream tool probes, parked settlement sinks, 2.5/8/12 timing facts and fail-fast late quarantine with scripted providers |
 | `0941cbb`–`3ddd70e` | approved council critical-path redesign and local evidence | five typed durable shards, one minimal Conductor commit, deterministic fail-closed assembly, fixed 6/8 routing/evidence and viewer-approved Ruby vertical slice; local scripted only |
 | `73fa91a`–`2856736` | exact Gemini 3.7 catalog-adapter lock, zero-call audit, Stage A archive machinery and isolated-media repair | direct DSH remains `0.1.0-rc.6`; installed pi-ai is overridden to `0.84.2`; the failed first archive attempt is retained honestly, and approved replacement Run 02 generated the reviewed engineering packet from clean runtime commit `2856736` |
+| `08682f2`–`97251de` | fixed-input five-model bake-off inputs, preflight, approval gate, bounded runner, real DSH transport, evidence verifier, blind-review builder and capture surface | Tasks 1–6 are local/scripted only: exact 28 planned / 30 maximum, two provider-scoped retry slots, twelve role/model pairs, five anonymous author decisions and reviewed checkpoint media; no provider call or Keychain value read occurred |
 
 Haorui/Codex owns viewer approval, governance, agent/session contracts, deterministic authority checks, evidence and checkpoint integration. It does not own Ruby's 3D authorship.
 
@@ -121,6 +122,7 @@ This is roughly the first third of the full CP00-CP08 production route. It is no
 | B3. Real provider compatibility | `THREE FAILED LIVE RUNS / LIVE NOT PASSED` | Run 01 sent 3; Run 02 sent 10 on the old graph; Run 03 sent 6 on the replacement graph and quarantined a draft 2.215 seconds beyond the shared 12-second cutoff. The redesigned 6/8 path remains local scripted evidence; Live Run 04 is not authorised here. |
 | B4. Council critical path redesign | `CRITICAL_PATH_IMPLEMENTED_LOCAL_SCRIPTED` | immutable turn; five typed shard calls plus one minimal commit; 6 planned / 8 maximum; durable trace; Guardian constraints; deterministic assembler; no hidden provider stream; controlled 2.5/8/12 outcomes; independent evidence verifier |
 | B5. Gemini 3.7 adapter Stage A | `ENGINEERING_READY_ARCHIVED` | replacement Run 02 binds the exact installed catalog and six passing local gates to runtime commit `2856736`, plus a reviewed 1280×720 PNG and uninterrupted 18.04-second WebM; provider requests 0 and browser non-local requests 0; no model-quality claim |
+| B6. Fixed-input Stage B bake-off machinery | `BAKEOFF_IMPLEMENTED_LOCAL_SCRIPTED / REAL_RUN_NOT_AUTHORIZED` | five frozen candidates, two repetitions, exact 28 planned / 30 maximum scheduling, provider-scoped retry validation, true DSH scripted transport, ten-class technical verifier, cryptographically blinded five-decision packet and reviewed 1280×720 / 26.2-second local capture; provider requests 0, Keychain reads 0, author selections 0 |
 | C1. Draft/approval/Gate to Ruby role interaction | `LOCAL_SLICE_TESTED + COUNCIL_SLICE_TESTED` | historical real DSH root scripted-provider slice plus the fictional five-shard council slice cross exact viewer approval → Gate → Ruby navigation/ownership/rollback receipt → durable CaseSession transition with zero adapter requests |
 | C2. Five-action effect runtime | `MERGED LOCAL IMPLEMENTED / BROWSER VERIFIED` | Translate cyan relation, Reframe amber frame, Merge purple seam, Continue green ripples and KeepOpaque dark veil execute in the Three.js viewport and link to Ruby receipts; this remains engineering, not artistic acceptance |
 | C3. Loopback host, privacy and evidence API | `PARTIAL` | routing and formal-evidence contracts are fail-closed; a production loopback host and cleared audience media policy remain absent |
@@ -138,6 +140,20 @@ This is roughly the first third of the full CP00-CP08 production route. It is no
 - After the isolated-media repair, the separately approved replacement Run 02, `cp03-adapter-readiness-20260823T213417Z`, ran once from clean runtime commit `2856736ca888b8c2c76dee443a1314a78b1ff5d2`. It passed Shared Contracts `25/25`, Agent Host `377/377` across 26 files plus typecheck/build, Scene Builder `217/217` across 31 files plus build, and the canonical catalog audit. The manifest reports `providerRequestsMade: 0` and `nonLocalBrowserRequests: 0`.
 - The replacement packet's six log hashes and two media hashes were independently matched to the manifest. Its PNG is 1280×720; its VP8 WebM is 1280×720, 25 fps and 18.04 seconds. Visual inspection confirmed all nine catalog/claim rows appear legibly and highlight in order without unrelated content. The packet is anchored by [`evidence-manifest.json`](../checkpoints/cp03/adapter-readiness/cp03-adapter-readiness-20260823T213417Z/evidence-manifest.json).
 - Production routing remains `pending-bakeoff`. Provider/model quality, the paid fixed-input Stage B bake-off, blinded human selection, an approved final routing manifest, Stage C representative 3D interaction, the formal CP03 checkpoint, deployment and public release are all still not done.
+
+### Fixed-input Stage B machinery — local scripted readiness on 2026-08-24
+
+**Status:** `BAKEOFF_IMPLEMENTED_LOCAL_SCRIPTED / REAL_RUN_NOT_AUTHORIZED`
+
+- Commits `08682f2` through `97251de` freeze one fictional text, one programmatically generated 384×256 room image, the synthetic scene/registry, exact prompts/schemas, five candidate IDs, two repetitions and a counterbalanced `28 planned / 30 maximum` matrix. This is an implementation boundary, not a model result.
+- The real-mode command is behind a fresh approval gate and exact run root. Only an authorised parent may read the two named Keychain values; the child revalidates the same capability, strips inherited credential fallbacks, permits at most one pre-side-effect retry per provider and has no search, grounding, repository, file, shell or arbitrary-code capability. No real mode or Keychain value path was executed in Tasks 1–6.
+- Scripted transport tests exercise the actual DSH foundation/session/continuable-child/tool/attachment/durability stack. Conductor intent and commit share one candidate/repetition session; Witness and Rewriter alone receive the synthetic image; every accepted role calls its exact typed tool once and stops without an undeclared settlement stream.
+- The technical verifier checks archive, approval, exact plan, dispatch/retry accounting, contracts and durable receipts, image grounding, 12-second component timing, usage/estimated cost, DSH trace and exact-value/forbidden-field secret scans. Both `28 dispatch / no retry` and `30 dispatch / one legal retry per provider` synthetic archives pass. A tampered repetition excludes only its affected role/model pair.
+- The blind-review builder keeps provider/route/model identity and its cryptographic seed in a sealed mapping, exposes two outputs per technically eligible candidate, and leaves all five author decisions empty. It cannot auto-select a model. Stage B still cannot establish the production 2.5/8/12 council graph or a Ruby interaction.
+- The reviewed local presentation archive is [`cp03-model-bakeoff-local-scripted-20260824T002300Z`](../checkpoints/cp03/model-bakeoff/cp03-model-bakeoff-local-scripted-20260824T002300Z/README.md). Its contact sheet is 1280×720 and its uninterrupted VP8 WebM is 1280×720, 25 fps and 26.2 seconds. The packet reports provider requests `0`, non-local browser requests `0`, author selections `0` and sealed mapping loaded `false`; the old-film styling remains legible across the full contact sheet and role-by-role video pass.
+- The complete local gate passed Shared Contracts `30/30`, Agent Host `445/445` across 36 files plus typecheck/build, and Scene Builder `217/217` across 31 files plus build. The first audience-smoke invocation failed before page assertions because its documented external Vite prerequisite was not running; after starting that local-only service, the unchanged smoke passed all five actions and five receipts with `providerRequestsMade: 0` and `checkpointEligible: false`, and the service was stopped.
+
+Task 7 is deliberately not started. It requires a fresh user request to browse current official prices, inspect only the presence of the exact named Keychain items, generate one zero-call preflight, and stop again for approval. No prior Live Run budget or generic “continue” authorises that boundary.
 
 ## Technology Feasibility and Current Test Boundary
 
@@ -215,10 +231,11 @@ remote branch at the same full SHA with `git ls-remote`. No force push was used.
 3. Keep the remote-verified `fef3a99` collaboration merge as the integration baseline; future work must fetch again before changing it.
 4. Preserve the council-v2 critical path as `LOCAL_SCRIPTED`; do not describe fictional fixtures or controlled timing as model quality.
 5. Preserve failed Stage A Run 01 and successful replacement Run 02 as separate records; keep Run 02's ceiling at `zero-network adapter verification; no model-quality result`.
-6. Run the separately approved fixed-input Stage B model bake-off before replacing `pending-bakeoff` manifest identifiers.
-7. Any zero-call 6/8 preflight or Live Run 04 requires a fresh exact scope; Live Run 04 is not authorised by this refresh.
-8. After a passing archived provider run and human quality review, harden the production loopback/privacy boundary and cleared image/audio ingestion around Ruby's existing audience/effect runtime.
-9. Run formal encounters, capture continuous 3D mutation/rollback, fill all five archive classes, then request separate technical `PASS` and artistic `KEEP` decisions.
+6. Keep Stage B Tasks 1–6 at `BAKEOFF_IMPLEMENTED_LOCAL_SCRIPTED`. Do not browse prices, inspect Keychain presence or create Task 7's zero-call preflight until the user freshly asks to prepare the real bake-off.
+7. After Task 7 presents one exact eligible preflight, require a fresh run-ID-bound approval before the one paid `28 planned / 30 maximum` Stage B run. No generic continuation, earlier budget or Live Run approval carries over.
+8. Keep Live Run 04 separately unauthorised. Stage B model-selection evidence does not repair or replace the three historical live-run failures.
+9. Only after a technically eligible archive and the author's five blinded decisions may routing replace `pending-bakeoff`; model identity must remain sealed until those decisions are signed.
+10. Then harden the production loopback/privacy boundary and cleared image/audio ingestion around Ruby's existing audience/effect runtime, run the separately approved Stage C encounter, capture continuous 3D mutation/rollback, fill all five archive classes, and request separate technical `PASS` and artistic `KEEP` decisions.
 
 ## Evidence Vocabulary
 
@@ -227,4 +244,5 @@ remote branch at the same full SHA with `git ls-remote`. No force push was used.
 - `real 3D mutation or interaction`: the actual Scene Builder runtime changes/evaluates the scene; not a video mock.
 - `real provider tested`: only after bounded external DeepSeek/Gemini calls and receipts.
 - `provider evidence verified`: the post-run archive passed fixed-scope, real-kind, contract, dispatch, timing, settlement-isolation and secret-leak checks; it is not a model-quality or artistic judgment.
+- `bakeoff implemented local scripted`: fixed inputs, gate, DSH transport, verifier, blind-packet builder and capture surface pass without a provider call; it is not an eligible preflight, paid run, model comparison or author selection.
 - `checkpoint archived`: only after all interaction, visual, provenance, discourse, archive and human-decision gates pass.
