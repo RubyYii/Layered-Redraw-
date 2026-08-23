@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
+import type { Agent } from '@deepseek-ai/dsh-agent';
 import type { Context } from '@deepseek-ai/cordis';
 import {
   createUserMessage,
   type ContentBlock,
 } from '@deepseek-ai/dsh-llm';
-import { SessionId } from '@deepseek-ai/dsh-session';
+import { SessionId, type Session } from '@deepseek-ai/dsh-session';
 import { foldSubagentDescriptor } from '@deepseek-ai/dsh-subagent';
 import { sha256Canonical } from '@layered-redraw/pact-cp03-contracts';
 
@@ -26,6 +27,7 @@ import {
 } from './council-registry.js';
 import {
   COUNCIL_TIMING_LIMITS,
+  monotonicNowMs,
   type FrozenCouncilTurn,
 } from './council-turn.js';
 import { assembleCouncilDraft } from './draft-assembler.js';
@@ -87,6 +89,8 @@ export interface CouncilRuntimeOrchestration {
   readonly settlementSinkTurns: number;
   readonly blockedSettlementSinkTurns: number;
   readonly undeclaredProviderStreams: number;
+  readonly deadlineCancellationRequested: boolean;
+  readonly harnessDisposed: boolean;
 }
 
 export type CouncilRuntimeResult =
@@ -129,6 +133,9 @@ export interface CouncilRuntimeOptions {
   readonly persistenceRoot: string;
   readonly providerKind: 'real' | 'scripted';
   readonly now?: () => number;
+  readonly onPublicTrace?: (
+    trace: CouncilPublicTrace,
+  ) => void | Promise<void>;
   readonly mountAdapters: (ctx: Context) => void | Promise<void>;
 }
 
@@ -155,6 +162,10 @@ const roleAssignment = (
 ) => manifest.assignments[role];
 
 const failureCode = (error: unknown): string => {
+  if (error !== null && typeof error === 'object') {
+    const code = (error as { readonly code?: unknown }).code;
+    if (typeof code === 'string' && code.length > 0) return code;
+  }
   if (error instanceof Error && error.message.length > 0) {
     return error.message.split(':', 1)[0] ?? 'COUNCIL_RUNTIME_FAILED';
   }
@@ -266,7 +277,7 @@ const statusForAssembly = (
 export const runCouncilRuntime = async (
   options: CouncilRuntimeOptions,
 ): Promise<CouncilRuntimeResult> => {
-  const now = options.now ?? Date.now;
+  const now = options.now ?? monotonicNowMs;
   const startedAtMonotonicMs = options.turn.startedAtMonotonicMs;
   let systemStatusAtMonotonicMs: number | null = null;
   let firstPublicTraceAtMonotonicMs: number | null = null;
@@ -284,6 +295,64 @@ export const runCouncilRuntime = async (
   let councilRegistry: NonNullable<FoundationHarness['councilRegistry']> | undefined;
   let activeConductor: Awaited<ReturnType<FoundationHarness['createConductor']>> | undefined;
   const settlementSinks: Awaited<ReturnType<FoundationHarness['createConductor']>>[] = [];
+  const synthesisAgents = new Set<Agent>();
+  const childAbortControllers = new Set<AbortController>();
+  const deadlineAbortController = new AbortController();
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let deadlineCancellationRequested = false;
+  let deadlineReached = false;
+  let harnessDisposed = false;
+
+  const cancelAtDeadline = (): void => {
+    if (deadlineCancellationRequested) return;
+    deadlineCancellationRequested = true;
+    deadlineReached = true;
+    const reason = new Error('COUNCIL_ABSOLUTE_DEADLINE_EXCEEDED');
+    deadlineAbortController.abort(reason);
+    for (const controller of childAbortControllers) {
+      if (!controller.signal.aborted) controller.abort(reason);
+    }
+    for (const agent of synthesisAgents) {
+      try {
+        agent.cancel({ kind: 'user' });
+      } catch {
+        // Cancellation is best-effort per Agent; the shared abort signal still
+        // releases every runtime-owned durability wait.
+      }
+    }
+  };
+
+  const trackSynthesisAgent = (agent: Agent): void => {
+    synthesisAgents.add(agent);
+    if (deadlineAbortController.signal.aborted) {
+      agent.cancel({ kind: 'user' });
+    }
+  };
+
+  const deadlineClosed = (): boolean =>
+    deadlineReached ||
+    deadlineAbortController.signal.aborted ||
+    now() >= options.turn.deadlineAtMonotonicMs;
+
+  const remainingMs = (): number => {
+    const remaining = options.turn.deadlineAtMonotonicMs - now();
+    if (deadlineReached || deadlineAbortController.signal.aborted || remaining <= 0) {
+      cancelAtDeadline();
+      throw new Error('COUNCIL_ABSOLUTE_DEADLINE_EXCEEDED');
+    }
+    return Math.max(1, Math.ceil(remaining));
+  };
+
+  const initialRemainingMs = options.turn.deadlineAtMonotonicMs - now();
+  if (initialRemainingMs <= 0) {
+    cancelAtDeadline();
+  } else {
+    deadlineTimer = setTimeout(
+      cancelAtDeadline,
+      Math.max(1, Math.ceil(initialRemainingMs)),
+    );
+  }
+
   const timing = (): CouncilRuntimeTiming => {
     const elapsed = (value: number | null): number | null =>
       value === null ? null : Math.max(0, value - startedAtMonotonicMs);
@@ -340,7 +409,26 @@ export const runCouncilRuntime = async (
       0,
     ),
     undeclaredProviderStreams: 0,
+    get deadlineCancellationRequested() {
+      return deadlineCancellationRequested;
+    },
+    get harnessDisposed() {
+      return harnessDisposed;
+    },
   });
+
+  const notifyPublicTrace = (trace: CouncilPublicTrace): void => {
+    if (options.onPublicTrace === undefined) return;
+    try {
+      const observed = options.onPublicTrace(trace);
+      if (observed !== undefined) {
+        void Promise.resolve(observed).catch(() => undefined);
+      }
+    } catch {
+      // This observer is additive and non-authoritative. A consumer failure
+      // cannot change the accepted durable council state.
+    }
+  };
 
   const resultFailure = (
     status: Exclude<CouncilRuntimeResult, { status: 'COMPLETED' }>['status'],
@@ -361,6 +449,7 @@ export const runCouncilRuntime = async (
   });
 
   try {
+    remainingMs();
     if (options.routingManifest.manifestVersion !==
       options.turn.snapshot.routingManifestVersion) {
       return resultFailure('FAILED_NO_MUTATION', ['COUNCIL_ROUTING_MANIFEST_MISMATCH']);
@@ -383,6 +472,7 @@ export const runCouncilRuntime = async (
       },
       mountAdapters: options.mountAdapters,
     });
+    remainingMs();
     councilRegistry = harness.councilRegistry;
     if (councilRegistry === undefined) {
       return resultFailure('FAILED_NO_MUTATION', ['COUNCIL_REGISTRY_UNAVAILABLE']);
@@ -440,11 +530,13 @@ export const runCouncilRuntime = async (
       SessionId(randomUUID()),
       { parked: false },
     );
+    trackSynthesisAgent(activeConductor.agent);
     for (const role of ROLE_ORDER.slice(1)) {
       const sink = await harness.createConductor(
         SessionId(`${options.turn.snapshot.caseSessionId}_${role.toLowerCase()}_sink`),
       );
       settlementSinks.push(sink);
+      trackSynthesisAgent(sink.agent);
     }
 
     const shardPrompts = new Map<CouncilRole, ContentBlock[]>();
@@ -467,17 +559,46 @@ export const runCouncilRuntime = async (
       return { assignment, prompt };
     };
 
-    const conductorShard = await assignShard('CaseConductor', String(activeConductor.agent.id));
-    ledger.assignSession(conductorShard.assignment);
-
     const childRoles = ROLE_ORDER.slice(1) as readonly Exclude<
       CouncilRole,
       'CaseConductor'
     >[];
+    const plannedShards = new Map<CouncilRole, Awaited<ReturnType<typeof assignShard>>>();
+    for (const role of ROLE_ORDER) {
+      plannedShards.set(
+        role,
+        await assignShard(
+          role,
+          role === 'CaseConductor'
+            ? String(activeConductor.agent.id)
+            : undefined,
+        ),
+      );
+    }
+    ledger.declareCouncilInitialWave(ROLE_ORDER.map((role) =>
+      plannedShards.get(role)!.assignment
+    ));
+    ledger.assignSession(plannedShards.get('CaseConductor')!.assignment);
+    for (const role of childRoles) {
+      pendingAssignments.set(
+        CHILD_LABELS[role],
+        plannedShards.get(role)!.assignment,
+      );
+    }
+
+    remainingMs();
+    activeConductor.agent.followup(createUserMessage({
+      content: plannedShards.get('CaseConductor')!.prompt,
+      source: { kind: 'user' },
+    }));
     const childStarts = childRoles.map(async (role) => {
-      const child = await assignShard(role);
-      pendingAssignments.set(CHILD_LABELS[role], child.assignment);
+      const child = plannedShards.get(role)!;
       const selected = roleAssignment(options.routingManifest, role);
+      const childAbortController = new AbortController();
+      childAbortControllers.add(childAbortController);
+      if (deadlineAbortController.signal.aborted) {
+        childAbortController.abort(deadlineAbortController.signal.reason);
+      }
       const started = await harness!.ctx.subagents.startContinuable({
         provider: 'spawn',
         label: CHILD_LABELS[role],
@@ -488,70 +609,76 @@ export const runCouncilRuntime = async (
           persona: `You are the bounded PACT ${role} council role. Use only the visible council shard tool.`,
           toolFilter: { allow: ['pact_submit_council_shard'] },
         },
-        signal: new AbortController().signal,
+        signal: childAbortController.signal,
       });
+      const agent = harness!.ctx.agents.get(started.childId);
+      if (agent === undefined) throw new Error('COUNCIL_CHILD_AGENT_REQUIRED');
+      trackSynthesisAgent(agent);
       return {
         role,
         session: harness!.sessionFor(started.childId),
-        childId: String(started.childId),
+        agent,
       };
     });
 
-    const conductorShardTurn = activeConductor.agent.followup(createUserMessage({
-      content: shardPrompts.get('CaseConductor')!,
-      source: { kind: 'user' },
-    }));
     const startedChildren = await Promise.all(childStarts);
-    await Promise.all([
-      conductorShardTurn,
-      ...startedChildren.map((child) =>
-        waitForTurnEnd(harness!.ctx, child.session, 1, COUNCIL_TIMING_LIMITS.hardDeadlineMs)),
-      waitForTurnEnd(
-        harness.ctx,
-        activeConductor.agent.session,
-        1,
-        COUNCIL_TIMING_LIMITS.hardDeadlineMs,
-      ),
-      ...settlementSinks.map((sink) => sink.agent.whenIdle()),
-    ]);
-    const acceptedContexts = councilRegistry.acceptedCouncilShardContexts(
-      options.turn.snapshot.turnId,
+    await ledger.waitForCouncilInitialWaveOpened(
+      deadlineAbortController.signal,
     );
-    const durabilityResults = await Promise.allSettled(acceptedContexts.map((context) => {
-      const session = councilRegistryRecoveryCapability(councilRegistry!)
+
+    const sessionByRole = new Map<CouncilRole, Session>([
+      ['CaseConductor', activeConductor.agent.session],
+      ...startedChildren.map((child) => [child.role, child.session] as const),
+    ]);
+    const durableByRole = new Map<CouncilRole, DurableCouncilShardReceipt>();
+    const durabilityJobs = ROLE_ORDER.map(async (role) => {
+      const session = sessionByRole.get(role);
+      if (session === undefined) throw new Error('COUNCIL_ROLE_SESSION_MISSING');
+      await waitForTurnEnd(
+        harness!.ctx,
+        session,
+        1,
+        remainingMs(),
+        deadlineAbortController.signal,
+      );
+      const context = councilRegistry!.acceptedCouncilShardContexts(
+        options.turn.snapshot.turnId,
+      ).find((candidate) => candidate.shard.role === role);
+      if (context === undefined) return;
+      const canonicalSession = councilRegistryRecoveryCapability(councilRegistry!)
         .canonicalShardSession(context.receipt);
-      return durableCouncilShard({
+      const durable = await durableCouncilShard({
         ctx: harness!.ctx,
         registry: councilRegistry!,
-        session,
+        session: canonicalSession,
         receipt: context.receipt,
       });
-    }));
-    if (durabilityResults.some((result) => result.status === 'rejected')) {
-      return resultFailure('FAILED_NO_MUTATION', ['COUNCIL_SHARD_DURABILITY_FAILED']);
-    }
-    const durableResults = durabilityResults.map((result) =>
-      result.status === 'fulfilled' ? result.value : undefined);
-    if (durableResults.some((receipt) => receipt === undefined)) {
-      return resultFailure('FAILED_NO_MUTATION', ['COUNCIL_SHARD_DURABILITY_FAILED']);
-    }
-    durableShardReceipts.push(...durableResults as DurableCouncilShardReceipt[]);
-    const firstTrace = acceptedContexts.find((context, index) =>
-      durableResults[index]?.projectedTrace === true,
+      durableByRole.set(role, durable);
+      if (durable.projectedTrace && firstPublicTrace === null) {
+        const durableContext = councilRegistry!.acceptedShardContext(durable);
+        const durableAtMonotonicMs = now();
+        const trace: CouncilPublicTrace = {
+          caseSessionId: durableContext.turn.snapshot.caseSessionId,
+          turnId: durableContext.turn.snapshot.turnId,
+          text: durableContext.shard.publicTrace,
+          role: durableContext.shard.role as 'Witness' | 'Rewriter',
+          sourceContributionHash: durable.payloadHash,
+          acceptanceSequence: durable.acceptanceSequence,
+          projectedAtMonotonicMs:
+            durableContext.projectionAtMonotonicMs ?? durable.acceptedAtMonotonicMs,
+          durableAtMonotonicMs,
+        };
+        firstPublicTrace = trace;
+        firstPublicTraceAtMonotonicMs = durableAtMonotonicMs;
+        notifyPublicTrace(trace);
+      }
+    });
+    const durabilityOutcomes = await Promise.allSettled(durabilityJobs);
+    durableShardReceipts = [...durableByRole.values()].sort(
+      (left, right) => left.acceptanceSequence - right.acceptanceSequence,
     );
-    if (firstTrace !== undefined) {
-      const durable = durableResults[acceptedContexts.indexOf(firstTrace)]!;
-      firstPublicTrace = {
-        caseSessionId: firstTrace.turn.snapshot.caseSessionId,
-        turnId: firstTrace.turn.snapshot.turnId,
-        text: firstTrace.shard.publicTrace,
-        role: firstTrace.shard.role as 'Witness' | 'Rewriter',
-        sourceContributionHash: durable.payloadHash,
-        acceptanceSequence: durable.acceptanceSequence,
-        projectedAtMonotonicMs: firstTrace.projectionAtMonotonicMs ?? durable.acceptedAtMonotonicMs,
-        durableAtMonotonicMs: now(),
-      };
-      firstPublicTraceAtMonotonicMs = firstPublicTrace.durableAtMonotonicMs;
+    if (!deadlineAbortController.signal.aborted) {
+      await Promise.all(settlementSinks.map((sink) => sink.agent.whenIdle()));
     }
 
     const durableRoles = new Set(
@@ -565,15 +692,22 @@ export const runCouncilRuntime = async (
         selectionBarrierClosed = true;
       }
       return resultFailure(
-        now() >= options.turn.deadlineAtMonotonicMs
+        deadlineClosed()
           ? 'LATE_QUARANTINED'
           : 'FAILED_NO_MUTATION',
-        ['COUNCIL_REQUIRED_SHARD_MISSING', ...missingRoles.map((role) => `COUNCIL_REQUIRED_ROLE_${role}`)],
+        [
+          ...(durabilityOutcomes.some((outcome) => outcome.status === 'rejected')
+            ? ['COUNCIL_SHARD_DURABILITY_FAILED']
+            : []),
+          'COUNCIL_REQUIRED_SHARD_MISSING',
+          ...missingRoles.map((role) => `COUNCIL_REQUIRED_ROLE_${role}`),
+        ],
       );
     }
     requiredShardsAtMonotonicMs = now();
     councilRegistry.closeSelectionBarrier(options.turn.snapshot.turnId);
     selectionBarrierClosed = true;
+    remainingMs();
 
     const proposalBeforeCommit = councilRegistry.durableProposal(options.turn.snapshot.turnId);
     const commitContent = commitPrompt(
@@ -596,6 +730,7 @@ export const runCouncilRuntime = async (
       ),
       options.turn.snapshotHash,
     ));
+    remainingMs();
     activeConductor.agent.followup(createUserMessage({
       content: commitContent,
       source: { kind: 'user' },
@@ -604,11 +739,14 @@ export const runCouncilRuntime = async (
       harness.ctx,
       activeConductor.agent.session,
       2,
-      COUNCIL_TIMING_LIMITS.hardDeadlineMs,
+      remainingMs(),
+      deadlineAbortController.signal,
     );
-    await activeConductor.agent.whenIdle();
     if (acceptedCommitEvent.current === null) {
-      return resultFailure('FAILED_NO_MUTATION', ['COUNCIL_CONDUCTOR_COMMIT_MISSING']);
+      return resultFailure(
+        deadlineClosed() ? 'LATE_QUARANTINED' : 'FAILED_NO_MUTATION',
+        ['COUNCIL_CONDUCTOR_COMMIT_MISSING'],
+      );
     }
     const acceptedCommit = acceptedCommitEvent.current;
     durableConductorCommitReceipt = await durableConductorCommit({
@@ -619,6 +757,7 @@ export const runCouncilRuntime = async (
     });
     conductorCommitAtMonotonicMs = now();
     ledger.assertComplete();
+    remainingMs();
 
     const proposal = councilRegistry.durableProposal(options.turn.snapshot.turnId);
     assemblyStartedAtMonotonicMs = now();
@@ -634,17 +773,42 @@ export const runCouncilRuntime = async (
         assembled.reasonCodes,
       );
     }
-    if (now() >= options.turn.deadlineAtMonotonicMs) {
-      return resultFailure('LATE_QUARANTINED', ['COUNCIL_ASSEMBLY_DEADLINE_EXCEEDED']);
-    }
+    remainingMs();
     const acceptedDraft = await harness.registry.acceptDraft(
       activeConductor.agent.session,
       assembled.draft,
     );
-    if (!acceptedDraft.accepted || acceptedDraft.payloadHash !== assembled.draftHash) {
+    if (!acceptedDraft.accepted) {
+      return resultFailure(
+        deadlineClosed() ? 'LATE_QUARANTINED' : 'FAILED_NO_MUTATION',
+        [deadlineClosed()
+          ? 'COUNCIL_DRAFT_ADMISSION_DEADLINE_CLOSED'
+          : 'COUNCIL_DRAFT_ADMISSION_FAILED'],
+      );
+    }
+    if (
+      acceptedDraft.payloadHash !== assembled.draftHash ||
+      acceptedDraft.acceptedAtMonotonicMs === undefined
+    ) {
       return resultFailure('FAILED_NO_MUTATION', ['COUNCIL_DRAFT_ADMISSION_FAILED']);
     }
-    draftAcceptedAtMonotonicMs = now();
+    if (
+      acceptedDraft.acceptedAtMonotonicMs >=
+        options.turn.deadlineAtMonotonicMs
+    ) {
+      return resultFailure(
+        'LATE_QUARANTINED',
+        ['COUNCIL_DRAFT_ADMISSION_DEADLINE_CLOSED'],
+      );
+    }
+    draftAcceptedAtMonotonicMs = acceptedDraft.acceptedAtMonotonicMs;
+    const completedTiming = timing();
+    if (!completedTiming.hardDeadlineMet) {
+      return resultFailure(
+        'LATE_QUARANTINED',
+        ['COUNCIL_DRAFT_ADMISSION_DEADLINE_CLOSED'],
+      );
+    }
     return {
       status: 'COMPLETED',
       draft: assembled.draft,
@@ -655,18 +819,19 @@ export const runCouncilRuntime = async (
       durableShardReceipts,
       durableConductorCommitReceipt,
       selectionBarrierClosed: true,
-      timing: timing(),
+      timing: completedTiming,
       orchestration: orchestration(),
     };
   } catch (error) {
     const code = failureCode(error);
     return resultFailure(
-      now() >= options.turn.deadlineAtMonotonicMs
+      deadlineClosed()
         ? 'LATE_QUARANTINED'
         : 'FAILED_NO_MUTATION',
       [code],
     );
   } finally {
+    if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
     if (councilRegistry !== undefined) {
       try {
         councilRegistry.closeTurn(options.turn.snapshot.turnId);
@@ -674,6 +839,9 @@ export const runCouncilRuntime = async (
         // The result already carries the authoritative failure if close is unavailable.
       }
     }
-    if (harness !== undefined) await harness.dispose();
+    if (harness !== undefined) {
+      await harness.dispose();
+      harnessDisposed = true;
+    }
   }
 };

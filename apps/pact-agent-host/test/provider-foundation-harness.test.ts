@@ -4,7 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { Context } from '@deepseek-ai/cordis';
-import { createUserMessage } from '@deepseek-ai/dsh-llm';
+import {
+  createUserMessage,
+  LlmAdapter,
+  LlmError,
+  type GenerateOptions,
+  type StreamChunk,
+} from '@deepseek-ai/dsh-llm';
 import LlmRuntime from '@deepseek-ai/dsh-llm';
 import { SessionId } from '@deepseek-ai/dsh-session';
 import { CP03_FOUNDATION_SCHEMA_VERSION } from '@layered-redraw/pact-cp03-contracts';
@@ -12,7 +18,10 @@ import { describe, expect, it } from 'vitest';
 
 import { createFoundationHarness } from '../src/create-foundation-harness.js';
 import { mountCompatibilityProviderAdapters } from '../src/catalog-eligibility.js';
-import { installProviderDispatchLedger } from '../src/provider-stream-ledger.js';
+import {
+  installProviderDispatchLedger,
+  type ProviderStreamAssignment,
+} from '../src/provider-stream-ledger.js';
 import {
   ScriptedAdapter,
   textResponse,
@@ -28,6 +37,57 @@ const deferred = <T>() => {
   });
   return { promise, resolve, reject };
 };
+
+const councilOrdinalOf = (options: GenerateOptions): number => {
+  const text = options.messages
+    .flatMap((message) => message.content)
+    .flatMap((block) => block.type === 'text' ? [block.text] : [])
+    .join('\n');
+  const ordinal = Number(text.match(/declared-ordinal=(\d+)/)?.[1]);
+  if (!Number.isInteger(ordinal)) throw new Error('declared ordinal missing');
+  return ordinal;
+};
+
+class RetryWaveAdapter extends LlmAdapter {
+  readonly requests: number[] = [];
+  readonly higherFailureObserved = deferred<void>();
+  private readonly attempts = new Map<number, number>();
+
+  async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    const ordinal = councilOrdinalOf(options);
+    this.requests.push(ordinal);
+    const attempt = (this.attempts.get(ordinal) ?? 0) + 1;
+    this.attempts.set(ordinal, attempt);
+    if (attempt === 1) {
+      if (ordinal === 5) this.higherFailureObserved.resolve();
+      throw new LlmError(`synthetic transport reset at ordinal ${ordinal}`, 'TRANSPORT');
+    }
+    yield* textResponse(`retry completed for ordinal ${ordinal}`);
+  }
+}
+
+const councilWaveAssignment = (
+  sessionId: string,
+  declaredDispatchOrdinal: 3 | 5,
+): ProviderStreamAssignment => ({
+  sessionId,
+  probeId: `council-wave-${declaredDispatchOrdinal}`,
+  provider: 'deepseek',
+  route: 'deepseek-official',
+  model: 'deepseek-v4-pro',
+  deadlineAt: 13_000,
+  dispatches: [{
+    purpose: `exercise retry arbitration for ordinal ${declaredDispatchOrdinal}`,
+    expectedOutcome: 'terminal-after-tool-result',
+  }],
+  council: {
+    role: declaredDispatchOrdinal === 3 ? 'Archivist' : 'Guardian',
+    phase: 'SHARD',
+    snapshotHash: 'a'.repeat(64),
+    promptHash: `${declaredDispatchOrdinal}`.repeat(64),
+    declaredDispatchOrdinal,
+  },
+});
 
 describe('provider-configurable DSH foundation harness', () => {
   it('runs the Conductor through the exact selected mounted provider and model', async () => {
@@ -216,6 +276,69 @@ describe('provider-configurable DSH foundation harness', () => {
         completedAssignments: 2,
         sentDispatches: 3,
       });
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  it('waits for a predeclared provider wave before awarding its sole retry to the lower failed ordinal', async () => {
+    const persistenceRoot = join(
+      tmpdir(),
+      `pact-provider-retry-wave-${randomUUID()}`,
+    );
+    mkdirSync(persistenceRoot, { recursive: true });
+    const deepseek = new RetryWaveAdapter();
+    const harness = await createFoundationHarness({
+      persistenceRoot,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['deepseek-official'], deepseek);
+      },
+      conductorSelection: {
+        provider: 'deepseek-official',
+        model: 'deepseek-v4-pro',
+      },
+    });
+
+    try {
+      const ledger = installProviderDispatchLedger(harness.ctx, {
+        runId: 'council_retry_wave01',
+        maximumDispatches: 8,
+        providerKind: 'scripted',
+        deadlineAt: 13_000,
+        now: () => 1_000,
+      });
+      const lower = await harness.createConductor(
+        SessionId(`case_lower_${randomUUID().replaceAll('-', '')}`),
+        { parked: false },
+      );
+      const higher = await harness.createConductor(
+        SessionId(`case_higher_${randomUUID().replaceAll('-', '')}`),
+        { parked: false },
+      );
+      const lowerAssignment = councilWaveAssignment(String(lower.agent.id), 3);
+      const higherAssignment = councilWaveAssignment(String(higher.agent.id), 5);
+
+      ledger.declareCouncilInitialWave([lowerAssignment, higherAssignment]);
+      ledger.assignSession(higherAssignment);
+      higher.agent.followup(createUserMessage({
+        content: [{ type: 'text', text: 'declared-ordinal=5' }],
+        source: { kind: 'user' },
+      }));
+      await deepseek.higherFailureObserved.promise;
+      expect(deepseek.requests).toEqual([5]);
+
+      ledger.assignSession(lowerAssignment);
+      lower.agent.followup(createUserMessage({
+        content: [{ type: 'text', text: 'declared-ordinal=3' }],
+        source: { kind: 'user' },
+      }));
+      await Promise.all([higher.agent.whenIdle(), lower.agent.whenIdle()]);
+
+      expect(deepseek.requests).toEqual([5, 3, 3]);
+      expect(ledger.sentDispatches).toBe(3);
+      expect(ledger.attemptRecords().filter((record) => record.attempt > 1).map(
+        (record) => record.council?.declaredDispatchOrdinal,
+      )).toEqual([3]);
     } finally {
       await harness.dispose();
     }

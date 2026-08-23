@@ -54,6 +54,16 @@ export const COUNCIL_TIMING_LIMITS = Object.freeze({
   assemblyTargetMs: 100,
 } as const);
 
+export const monotonicNowMs = (): number => {
+  if (typeof globalThis.performance?.now === 'function') {
+    return globalThis.performance.now();
+  }
+  if (typeof process.hrtime?.bigint === 'function') {
+    return Number(process.hrtime.bigint()) / 1_000_000;
+  }
+  return Date.now();
+};
+
 export interface FrozenCouncilTurn {
   readonly snapshot: CouncilTurnSnapshot;
   readonly snapshotHash: string;

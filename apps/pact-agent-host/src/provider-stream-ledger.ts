@@ -59,6 +59,10 @@ export interface ProviderDispatchLedgerOptions {
 
 export interface ProviderDispatchLedger {
   readonly sentDispatches: number;
+  declareCouncilInitialWave(
+    assignments: readonly ProviderStreamAssignment[],
+  ): void;
+  waitForCouncilInitialWaveOpened(signal?: AbortSignal): Promise<void>;
   assignSession(assignment: ProviderStreamAssignment): void;
   attemptRecords(): readonly ProviderLedgerAttemptRecord[];
   assertComplete(): ProviderDispatchLedgerSummary;
@@ -177,6 +181,10 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     CompatibilityProvider,
     Array<() => void>
   >();
+  private readonly councilInitialExpectedOrdinals = new Set<number>();
+  private readonly councilInitialOpenedOrdinals = new Set<number>();
+  private readonly councilInitialOpenWaiters = new Set<() => void>();
+  private councilInitialWaveDeclared = false;
   private readonly now: () => number;
   private readonly deadlineAt: number;
 
@@ -195,6 +203,7 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
         String(payload.agent.id),
         payload.provider,
         payload.failure,
+        payload.signal,
       )) {
         return { kind: 'retry' };
       }
@@ -243,6 +252,89 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     return this.sent;
   }
 
+  declareCouncilInitialWave(
+    assignments: readonly ProviderStreamAssignment[],
+  ): void {
+    if (this.councilInitialWaveDeclared) {
+      throw new CompatibilityDispatchError(
+        'PROVIDER_COUNCIL_WAVE_ALREADY_DECLARED',
+        'the initial council provider wave has already been declared',
+      );
+    }
+    if (assignments.length === 0) {
+      throw new CompatibilityDispatchError(
+        'PROVIDER_COUNCIL_WAVE_EMPTY',
+        'the initial council provider wave must contain shard assignments',
+      );
+    }
+    const declaredOrdinals = new Set<number>();
+    for (const assignment of assignments) {
+      if (assignment.council?.phase !== 'SHARD') {
+        throw new CompatibilityDispatchError(
+          'PROVIDER_COUNCIL_WAVE_INVALID_ASSIGNMENT',
+          `${assignment.probeId} is not an initial council shard assignment`,
+        );
+      }
+      const ordinal = assignment.council.declaredDispatchOrdinal;
+      if (declaredOrdinals.has(ordinal)) {
+        throw new CompatibilityDispatchError(
+          'PROVIDER_COUNCIL_WAVE_DUPLICATE_ORDINAL',
+          `initial council dispatch ordinal ${ordinal} was declared more than once`,
+        );
+      }
+      declaredOrdinals.add(ordinal);
+      this.councilInitialExpectedOrdinals.add(ordinal);
+      const expected = this.councilInitialOrdinalsByProvider.get(
+        assignment.provider,
+      ) ?? new Set<number>();
+      expected.add(ordinal);
+      this.councilInitialOrdinalsByProvider.set(assignment.provider, expected);
+      if (!this.councilInitialCompletedByProvider.has(assignment.provider)) {
+        this.councilInitialCompletedByProvider.set(
+          assignment.provider,
+          new Set<number>(),
+        );
+      }
+    }
+    this.councilInitialWaveDeclared = true;
+  }
+
+  async waitForCouncilInitialWaveOpened(signal?: AbortSignal): Promise<void> {
+    if (!this.councilInitialWaveDeclared) {
+      throw new CompatibilityDispatchError(
+        'PROVIDER_COUNCIL_WAVE_NOT_DECLARED',
+        'the initial council provider wave has not been declared',
+      );
+    }
+    if (this.isCouncilInitialWaveOpened()) return;
+    if (signal?.aborted) {
+      throw new CompatibilityDispatchError(
+        'PROVIDER_COUNCIL_WAVE_ABORTED',
+        'the initial council provider wave was aborted before every stream opened',
+      );
+    }
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: Error): void => {
+        if (settled) return;
+        settled = true;
+        this.councilInitialOpenWaiters.delete(onOpened);
+        signal?.removeEventListener('abort', onAbort);
+        if (error === undefined) resolve();
+        else reject(error);
+      };
+      const onOpened = (): void => finish();
+      const onAbort = (): void => finish(new CompatibilityDispatchError(
+        'PROVIDER_COUNCIL_WAVE_ABORTED',
+        'the initial council provider wave was aborted before every stream opened',
+      ));
+      this.councilInitialOpenWaiters.add(onOpened);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) onAbort();
+      else if (this.isCouncilInitialWaveOpened()) onOpened();
+    });
+  }
+
   assignSession(assignment: ProviderStreamAssignment): void {
     const sessionId = String(assignment.sessionId);
     const current = this.currentAssignmentBySession.get(sessionId);
@@ -261,6 +353,20 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
         `${assignment.probeId} has no provider dispatches`,
       );
     }
+    if (assignment.council?.phase === 'SHARD') {
+      const expected = this.councilInitialOrdinalsByProvider.get(
+        assignment.provider,
+      );
+      if (
+        !this.councilInitialWaveDeclared ||
+        expected?.has(assignment.council.declaredDispatchOrdinal) !== true
+      ) {
+        throw new CompatibilityDispatchError(
+          'PROVIDER_COUNCIL_WAVE_NOT_DECLARED',
+          `${assignment.probeId} was assigned before its initial provider wave was declared`,
+        );
+      }
+    }
     const state = {
       assignment,
       recordIndexes: [],
@@ -269,19 +375,6 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     };
     this.currentAssignmentBySession.set(sessionId, state);
     this.assignmentStates.push(state);
-    if (assignment.council?.phase === 'SHARD') {
-      const expected = this.councilInitialOrdinalsByProvider.get(
-        assignment.provider,
-      ) ?? new Set<number>();
-      expected.add(assignment.council.declaredDispatchOrdinal);
-      this.councilInitialOrdinalsByProvider.set(assignment.provider, expected);
-      if (!this.councilInitialCompletedByProvider.has(assignment.provider)) {
-        this.councilInitialCompletedByProvider.set(
-          assignment.provider,
-          new Set<number>(),
-        );
-      }
-    }
   }
 
   attemptRecords(): readonly ProviderLedgerAttemptRecord[] {
@@ -472,16 +565,32 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     return this.observeStream(recordIndex, state, next());
   }
 
+  private isCouncilInitialWaveOpened(): boolean {
+    return this.councilInitialExpectedOrdinals.size > 0 &&
+      [...this.councilInitialExpectedOrdinals].every((ordinal) =>
+        this.councilInitialOpenedOrdinals.has(ordinal)
+      );
+  }
+
+  private markCouncilInitialOpened(declaredDispatchOrdinal: number): void {
+    this.councilInitialOpenedOrdinals.add(declaredDispatchOrdinal);
+    if (!this.isCouncilInitialWaveOpened()) return;
+    for (const resolve of this.councilInitialOpenWaiters) resolve();
+    this.councilInitialOpenWaiters.clear();
+  }
+
   private async authorizeRetry(
     sessionId: string,
     providerRoute: string,
     failure: LlmFailure,
+    signal: AbortSignal,
   ): Promise<boolean> {
     if (failure.code !== 'TRANSPORT') return false;
     const state = this.currentAssignmentBySession.get(sessionId);
     if (
       state === undefined ||
       state.assignment.route !== providerRoute ||
+      signal.aborted ||
       this.pendingRetryBySession.has(sessionId) ||
       this.retriedProviders.has(state.assignment.provider) ||
       this.now() >= Math.min(
@@ -491,8 +600,12 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
       this.sent >= this.options.maximumDispatches
     ) return false;
     if (state.assignment.council?.phase === 'SHARD') {
-      await this.waitForCouncilWave(state.assignment.provider);
-      if (this.retriedProviders.has(state.assignment.provider)) return false;
+      if (!await this.waitForCouncilWave(state.assignment.provider, signal)) {
+        return false;
+      }
+      if (signal.aborted || this.retriedProviders.has(state.assignment.provider)) {
+        return false;
+      }
     }
     const dispatchIndex = state.nextDispatch - 1;
     const previousRecordIndex = state.recordIndexes[dispatchIndex];
@@ -532,6 +645,15 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     let usage: TokenUsage | null = null;
     let finish: Extract<StreamChunk, { type: 'finish' }> | null = null;
     let thrown: unknown = undefined;
+    const openingRecord = this.records[recordIndex];
+    if (
+      state.assignment.council?.phase === 'SHARD' &&
+      openingRecord?.attempt === 1
+    ) {
+      this.markCouncilInitialOpened(
+        state.assignment.council.declaredDispatchOrdinal,
+      );
+    }
     try {
       for await (const chunk of stream) {
         if (firstChunkAt === null) {
@@ -585,18 +707,39 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     this.councilWaveWaiters.delete(provider);
   }
 
-  private async waitForCouncilWave(provider: CompatibilityProvider): Promise<void> {
+  private async waitForCouncilWave(
+    provider: CompatibilityProvider,
+    signal: AbortSignal,
+  ): Promise<boolean> {
     const expected = this.councilInitialOrdinalsByProvider.get(provider);
     const completed = this.councilInitialCompletedByProvider.get(provider);
     if (
       expected === undefined ||
       completed === undefined ||
       [...expected].every((ordinal) => completed.has(ordinal))
-    ) return;
-    await new Promise<void>((resolve) => {
+    ) return true;
+    if (signal.aborted) return false;
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (ready: boolean): void => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        const current = this.councilWaveWaiters.get(provider);
+        if (current !== undefined) {
+          const remaining = current.filter((waiter) => waiter !== onReady);
+          if (remaining.length === 0) this.councilWaveWaiters.delete(provider);
+          else this.councilWaveWaiters.set(provider, remaining);
+        }
+        resolve(ready);
+      };
+      const onReady = (): void => finish(true);
+      const onAbort = (): void => finish(false);
       const waiters = this.councilWaveWaiters.get(provider) ?? [];
-      waiters.push(resolve);
+      waiters.push(onReady);
       this.councilWaveWaiters.set(provider, waiters);
+      signal.addEventListener('abort', onAbort, { once: true });
+      if (signal.aborted) onAbort();
     });
   }
 

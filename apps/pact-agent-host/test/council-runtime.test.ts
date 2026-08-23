@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   runCouncilRuntime,
   type CouncilAttemptRecord,
+  type CouncilPublicTrace,
   type CouncilRuntimeResult,
 } from '../src/council-runtime.js';
 import type {
@@ -84,12 +85,19 @@ interface AdapterOptions {
   readonly turn: FrozenCouncilTurn;
   readonly clock: TestClock;
   readonly missingRole?: CouncilRole;
+  readonly malformedRole?: CouncilRole;
   readonly lateRole?: CouncilRole;
+  readonly delayedRoles?: readonly CouncilRole[];
+  readonly hangRole?: CouncilRole;
   readonly withholdGuardian?: boolean;
   readonly failFirstOrdinals?: readonly number[];
   readonly reverseSameProviderFailures?: boolean;
   readonly draftAtMonotonicMs?: number;
   readonly assemblyAtMonotonicMs?: number;
+  readonly omitNow?: boolean;
+  readonly useProductionMonotonicClock?: boolean;
+  readonly shortDeadlineMs?: number;
+  readonly traceObserver?: (trace: CouncilPublicTrace) => void | Promise<void>;
 }
 
 interface RequestObservation {
@@ -102,16 +110,30 @@ interface RequestObservation {
 /** A local-only adapter whose barrier makes a serial council wave observable. */
 class CouncilScriptedAdapter extends LlmAdapter {
   readonly requests: RequestObservation[] = [];
+  readonly abortedRoles = new Set<CouncilRole>();
+  readonly releasedRoles = new Set<CouncilRole>();
   private readonly firstWaveOpened = deferred<void>();
   private readonly firstWaveFailures = new Set<number>();
   private readonly attemptsByOrdinal = new Map<number, number>();
   private readonly shardsByRole = new Map<CouncilRole, CouncilShard>();
+  private readonly roleReleases = new Map<CouncilRole, ReturnType<typeof deferred<void>>>();
 
   constructor(private readonly options: AdapterOptions) {
     super();
     for (const ordinal of options.failFirstOrdinals ?? []) {
       this.firstWaveFailures.add(ordinal);
     }
+    for (const role of [
+      ...(options.delayedRoles ?? []),
+      ...(options.hangRole === undefined ? [] : [options.hangRole]),
+    ]) {
+      this.roleReleases.set(role, deferred<void>());
+    }
+  }
+
+  releaseRole(role: CouncilRole): void {
+    this.releasedRoles.add(role);
+    this.roleReleases.get(role)?.resolve();
   }
 
   async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
@@ -126,59 +148,99 @@ class CouncilScriptedAdapter extends LlmAdapter {
     } satisfies RequestObservation;
     this.requests.push(observation);
 
-    if (phase === 'SHARD') {
-      if (this.requests.filter((request) => request.phase === 'SHARD').length === 5) {
-        this.firstWaveOpened.resolve();
-      }
-      await this.firstWaveOpened.promise;
-    }
+    const onAbort = (): void => {
+      this.abortedRoles.add(role);
+    };
+    options.signal?.addEventListener('abort', onAbort, { once: true });
 
-    const attempt = (this.attemptsByOrdinal.get(declaredDispatchOrdinal) ?? 0) + 1;
-    this.attemptsByOrdinal.set(declaredDispatchOrdinal, attempt);
-    if (
-      this.firstWaveFailures.has(declaredDispatchOrdinal) &&
-      attempt === 1
-    ) {
+    try {
+      if (phase === 'SHARD') {
+        if (this.requests.filter((request) => request.phase === 'SHARD').length === 5) {
+          this.firstWaveOpened.resolve();
+        }
+        await this.firstWaveOpened.promise;
+      }
+
+      const release = this.roleReleases.get(role);
+      if (this.options.delayedRoles?.includes(role) === true) {
+        if (release === undefined) throw new Error(`missing delayed ${role} release`);
+        await release.promise;
+      }
+
+      const attempt = (this.attemptsByOrdinal.get(declaredDispatchOrdinal) ?? 0) + 1;
+      this.attemptsByOrdinal.set(declaredDispatchOrdinal, attempt);
       if (
-        this.options.reverseSameProviderFailures &&
-        declaredDispatchOrdinal === 3
+        this.firstWaveFailures.has(declaredDispatchOrdinal) &&
+        attempt === 1
       ) {
-        await Promise.resolve();
+        if (
+          this.options.reverseSameProviderFailures &&
+          declaredDispatchOrdinal === 3
+        ) {
+          await Promise.resolve();
+        }
+        throw new LlmError(
+          `synthetic transport reset at dispatch ${declaredDispatchOrdinal}`,
+          'TRANSPORT',
+        );
       }
-      throw new LlmError(
-        `synthetic transport reset at dispatch ${declaredDispatchOrdinal}`,
-        'TRANSPORT',
-      );
-    }
 
-    if (this.options.missingRole === role) {
-      yield* textResponse(`missing ${role} shard`);
-      return;
-    }
-    if (this.options.lateRole === role) {
-      this.options.clock.set(this.options.turn.deadlineAtMonotonicMs);
-    }
-    if (phase === 'CONDUCTOR_COMMIT' && this.options.draftAtMonotonicMs !== undefined) {
-      this.options.clock.set(this.options.draftAtMonotonicMs);
-    }
+      if (this.options.hangRole === role) {
+        if (options.signal === undefined) throw new Error('hanging role requires a signal');
+        if (options.signal.aborted) throw new Error('hanging role aborted');
+        if (release === undefined) throw new Error(`missing hanging ${role} release`);
+        await new Promise<void>((resolve, reject) => {
+          const onHangingAbort = (): void => {
+            this.abortedRoles.add(role);
+            reject(new Error(`synthetic hanging ${role} aborted`));
+          };
+          options.signal?.addEventListener('abort', onHangingAbort, { once: true });
+          void release.promise.then(() => {
+            options.signal?.removeEventListener('abort', onHangingAbort);
+            resolve();
+          });
+        });
+      }
 
-    if (phase === 'CONDUCTOR_COMMIT') {
-      const commit = await this.commit();
+      if (this.options.missingRole === role) {
+        yield* textResponse(`missing ${role} shard`);
+        return;
+      }
+      if (this.options.malformedRole === role) {
+        yield* toolCallResponse(
+          `tool_malformed_${declaredDispatchOrdinal}_${attempt}`,
+          'pact_submit_council_shard',
+          { malformed: true, role },
+        );
+        return;
+      }
+      if (this.options.lateRole === role) {
+        this.options.clock.set(this.options.turn.deadlineAtMonotonicMs);
+      }
+      if (phase === 'CONDUCTOR_COMMIT' && this.options.draftAtMonotonicMs !== undefined) {
+        this.options.clock.set(this.options.draftAtMonotonicMs);
+      }
+
+      if (phase === 'CONDUCTOR_COMMIT') {
+        const commit = await this.commit();
+        yield* toolCallResponse(
+          `tool_commit_${declaredDispatchOrdinal}_${attempt}`,
+          'pact_submit_conductor_commit',
+          commit,
+        );
+        return;
+      }
+
+      const shard = await this.shard(role, options);
+      this.shardsByRole.set(role, shard);
       yield* toolCallResponse(
-        `tool_commit_${declaredDispatchOrdinal}_${attempt}`,
-        'pact_submit_conductor_commit',
-        commit,
+        `tool_shard_${declaredDispatchOrdinal}_${attempt}`,
+        'pact_submit_council_shard',
+        shard,
       );
-      return;
+    } finally {
+      options.signal?.removeEventListener('abort', onAbort);
     }
-
-    const shard = await this.shard(role, options);
-    this.shardsByRole.set(role, shard);
-    yield* toolCallResponse(
-      `tool_shard_${declaredDispatchOrdinal}_${attempt}`,
-      'pact_submit_council_shard',
-      shard,
-    );
   }
 
   private async shard(role: CouncilRole, request: GenerateOptions): Promise<CouncilShard> {
@@ -236,25 +298,43 @@ const testRoot = (): string => {
 const manifestFor = (fixtures: FullCouncilFixtures): ProviderRoutingManifest =>
   fixtures.routingManifest;
 
-const run = async (
+interface StartedRun {
+  readonly execution: Promise<CouncilRuntimeResult>;
+  readonly adapter: CouncilScriptedAdapter;
+  readonly turn: FrozenCouncilTurn;
+}
+
+const startRun = async (
   adapterOptions: Partial<AdapterOptions> = {},
-): Promise<{ readonly result: CouncilRuntimeResult; readonly adapter: CouncilScriptedAdapter; readonly turn: FrozenCouncilTurn }> => {
-  const time = clock(1_000);
+): Promise<StartedRun> => {
+  const startedAt = adapterOptions.useProductionMonotonicClock === true
+    ? performance.now()
+    : 1_000;
+  const time = clock(startedAt);
   const fixtures = await createFullCouncilFixtures(time.now);
+  const turn = adapterOptions.shortDeadlineMs === undefined
+    ? fixtures.turn
+    : {
+        ...fixtures.turn,
+        deadlineAtMonotonicMs: startedAt + adapterOptions.shortDeadlineMs,
+      };
   const adapter = new CouncilScriptedAdapter({
     fixtures,
-    turn: fixtures.turn,
+    turn,
     clock: time,
     ...adapterOptions,
   });
   const routingManifest = manifestFor(fixtures);
-  const result = await runCouncilRuntime({
+  const execution = runCouncilRuntime({
     runId: `council_test_${randomUUID().replaceAll('-', '')}`,
-    turn: fixtures.turn,
+    turn,
     routingManifest,
     persistenceRoot: testRoot(),
     providerKind: 'scripted',
-    now: time.now,
+    ...(adapterOptions.omitNow === true ? {} : { now: time.now }),
+    ...(adapterOptions.traceObserver === undefined
+      ? {}
+      : { onPublicTrace: adapterOptions.traceObserver }),
     mountAdapters(ctx) {
       ctx.llm.registerAdapter(
         ['deepseek-official', 'gemini-official'],
@@ -269,7 +349,18 @@ const run = async (
       }
     },
   });
-  return { result, adapter, turn: fixtures.turn };
+  return { execution, adapter, turn };
+};
+
+const run = async (
+  adapterOptions: Partial<AdapterOptions> = {},
+): Promise<{ readonly result: CouncilRuntimeResult; readonly adapter: CouncilScriptedAdapter; readonly turn: FrozenCouncilTurn }> => {
+  const started = await startRun(adapterOptions);
+  return {
+    result: await started.execution,
+    adapter: started.adapter,
+    turn: started.turn,
+  };
 };
 
 const success = (result: CouncilRuntimeResult): RuntimeSuccess => {
@@ -397,7 +488,42 @@ describe('Task 5 council-v2 critical path', () => {
       .toBe(completed.firstPublicTrace?.durableAtMonotonicMs);
   });
 
-  it('closes the selection barrier before commit and keeps a late optional output from changing the accepted draft', async () => {
+  it('observes the selected durable trace while an unrelated shard remains unfinished', async () => {
+    const observed = deferred<CouncilPublicTrace>();
+    const started = await startRun({
+      delayedRoles: ['Guardian'],
+      traceObserver: (trace) => {
+        observed.resolve(trace);
+      },
+    });
+    let runtimeResolved = false;
+    void started.execution.then(() => {
+      runtimeResolved = true;
+    });
+
+    try {
+      const outcome = await Promise.race([
+        observed.promise.then((trace) => ({ kind: 'trace' as const, trace })),
+        started.execution.then(() => ({ kind: 'resolved' as const })),
+        new Promise<{ readonly kind: 'timeout' }>((resolve) => {
+          setTimeout(() => resolve({ kind: 'timeout' }), 500);
+        }),
+      ]);
+      expect(outcome.kind).toBe('trace');
+      if (outcome.kind === 'trace') {
+        expect(outcome.trace.role).toMatch(/Witness|Rewriter/);
+        expect(outcome.trace.durableAtMonotonicMs)
+          .toBeGreaterThanOrEqual(outcome.trace.projectedAtMonotonicMs);
+      }
+      expect(started.adapter.releasedRoles).not.toContain('Guardian');
+      expect(runtimeResolved).toBe(false);
+    } finally {
+      started.adapter.releaseRole('Guardian');
+      await started.execution;
+    }
+  });
+
+  it('closes the selection barrier before commit and keeps repeated assembly deterministic', async () => {
     const first = success((await run()).result);
     const second = success((await run()).result);
     const stableDraftView = (draft: RuntimeSuccess['draft']) => ({
@@ -424,6 +550,11 @@ describe('Task 5 council-v2 critical path', () => {
     expect(missing.status).toBe('FAILED_NO_MUTATION');
     expect(missing.durableConductorCommitReceipt).toBeNull();
     expect(missing.draft).toBeNull();
+
+    const malformed = failure((await run({ malformedRole: 'Rewriter' })).result);
+    expect(malformed.status).toBe('FAILED_NO_MUTATION');
+    expect(malformed.durableConductorCommitReceipt).toBeNull();
+    expect(malformed.draft).toBeNull();
 
     const late = failure((await run({ lateRole: 'Witness' })).result);
     expect(['FAILED_NO_MUTATION', 'LATE_QUARANTINED']).toContain(late.status);
@@ -454,6 +585,14 @@ describe('Task 5 council-v2 critical path', () => {
       .toBeLessThan(result.timing.startedAtMonotonicMs + 2_500);
   });
 
+  it('uses the production monotonic clock when now is omitted', async () => {
+    const result = success((await run({
+      omitNow: true,
+      useProductionMonotonicClock: true,
+    })).result);
+    expect(result.timing.hardDeadlineMet).toBe(true);
+  });
+
   it('accepts a draft at 8,001ms before the hard deadline while reporting draftTargetMet false', async () => {
     const result = success((await run({ draftAtMonotonicMs: 9_001 })).result);
     expect(result.timing.draftTargetMet).toBe(false);
@@ -470,5 +609,45 @@ describe('Task 5 council-v2 critical path', () => {
     expect(result.draft).toBeNull();
     expect(result.draftHash).toBeNull();
     expect(result.timing.hardDeadlineMet).toBe(false);
+  });
+
+  it('cancels unfinished synthesis at a short absolute deadline and disposes the local harness', async () => {
+    const started = await startRun({
+      hangRole: 'Guardian',
+      shortDeadlineMs: 50,
+      useProductionMonotonicClock: true,
+    });
+    let result: CouncilRuntimeResult | undefined;
+    try {
+      const outcome = await Promise.race([
+        started.execution.then((value) => ({ kind: 'result' as const, value })),
+        new Promise<{ readonly kind: 'timeout' }>((resolve) => {
+          setTimeout(() => resolve({ kind: 'timeout' }), 750);
+        }),
+      ]);
+      expect(outcome.kind).toBe('result');
+      if (outcome.kind === 'result') result = outcome.value;
+      if (result === undefined) started.adapter.releaseRole('Guardian');
+      if (result === undefined) result = await started.execution;
+    } finally {
+      started.adapter.releaseRole('Guardian');
+      if (result === undefined) result = await started.execution;
+    }
+
+    const failed = failure(result);
+    expect(failed.status).toBe('LATE_QUARANTINED');
+    expect(failed.providerRequestsMade).toBe(5);
+    expect(failed.durableConductorCommitReceipt).toBeNull();
+    expect(failed.draft).toBeNull();
+    expect(failed.orchestration.deadlineCancellationRequested).toBe(true);
+    expect(failed.orchestration.harnessDisposed).toBe(true);
+    expect(started.adapter.abortedRoles).toContain('Guardian');
+    const guardianAttempt = failed.attemptRecords.find(
+      (record) => record.council.role === 'Guardian',
+    );
+    expect(guardianAttempt?.contract.finish.kind).toMatch(/aborted|error/);
+    expect(failed.attemptRecords.filter(
+      (record) => record.council.phase === 'CONDUCTOR_COMMIT',
+    )).toHaveLength(0);
   });
 });

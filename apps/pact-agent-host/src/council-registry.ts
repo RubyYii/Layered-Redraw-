@@ -16,6 +16,7 @@ import type {
 } from './contract-types.js';
 import {
   isBeforeCouncilDeadline,
+  monotonicNowMs,
   type FrozenCouncilTurn,
 } from './council-turn.js';
 import { SubmissionRegistry } from './submission-registry.js';
@@ -265,13 +266,6 @@ const postBarrierCommitReason = (
   return null;
 };
 
-const defaultMonotonicNow = (): number => {
-  if (typeof globalThis.performance?.now === 'function') {
-    return globalThis.performance.now();
-  }
-  return Number(process.hrtime.bigint()) / 1_000_000;
-};
-
 const hasDurabilityProof = (
   value: unknown,
 ): value is CouncilDurabilityProof =>
@@ -327,7 +321,7 @@ export class CouncilRegistry {
   >();
 
   constructor(private readonly options: CouncilRegistryOptions) {
-    this.now = options.now ?? defaultMonotonicNow;
+    this.now = options.now ?? monotonicNowMs;
     recoveryCapabilities.set(this, Object.freeze({
       assertCanonicalShardSession: (
         receipt: AcceptedCouncilShardReceipt,

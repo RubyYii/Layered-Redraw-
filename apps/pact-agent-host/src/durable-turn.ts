@@ -9,6 +9,7 @@ export class PactDurabilityError extends Error {
   constructor(
     readonly code:
       | 'PACT_DURABILITY_TURN_TIMEOUT'
+      | 'PACT_DURABILITY_TURN_ABORTED'
       | 'PACT_DURABILITY_FLUSH_FAILED'
       | 'PACT_DURABILITY_INSPECT_FAILED'
       | 'PACT_DURABILITY_INCOMPLETE',
@@ -30,19 +31,38 @@ export const waitForTurnEnd = async (
   session: Session,
   dshTurn: number,
   timeoutMs = 5_000,
+  signal?: AbortSignal,
 ): Promise<void> => {
   if (hasTurnEnd(session, dshTurn)) return;
+  if (signal?.aborted) {
+    throw new PactDurabilityError(
+      'PACT_DURABILITY_TURN_ABORTED',
+      `turn ${dshTurn} was aborted before its durability barrier`,
+      { cause: signal.reason },
+    );
+  }
   await new Promise<void>((resolve, reject) => {
     let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let off = (): void => undefined;
+    let onAbort = (): void => undefined;
     const finish = (error?: Error): void => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeout);
+      if (timeout !== undefined) clearTimeout(timeout);
       off();
+      signal?.removeEventListener('abort', onAbort);
       if (error === undefined) resolve();
       else reject(error);
     };
-    const off = ctx.on('session/event', (observed, event) => {
+    onAbort = (): void => {
+      finish(new PactDurabilityError(
+        'PACT_DURABILITY_TURN_ABORTED',
+        `turn ${dshTurn} was aborted before its durability barrier`,
+        { cause: signal?.reason },
+      ));
+    };
+    off = ctx.on('session/event', (observed, event) => {
       if (
         observed === session &&
         event.type === 'turn/end' &&
@@ -51,12 +71,14 @@ export const waitForTurnEnd = async (
         finish();
       }
     });
-    const timeout = setTimeout(() => {
+    signal?.addEventListener('abort', onAbort, { once: true });
+    timeout = setTimeout(() => {
       finish(new PactDurabilityError(
         'PACT_DURABILITY_TURN_TIMEOUT',
         `turn ${dshTurn} did not end before the durability timeout`,
       ));
     }, timeoutMs);
+    if (signal?.aborted) onAbort();
     if (hasTurnEnd(session, dshTurn)) finish();
   });
 };

@@ -12,11 +12,13 @@ import type {
   AgentActionDraft,
   AgentContribution,
 } from './contract-types.js';
+import { monotonicNowMs } from './council-turn.js';
 import type { PactRole } from './events.js';
 
 export interface SubmissionReceipt {
   readonly accepted: boolean;
   readonly payloadHash: string;
+  readonly acceptedAtMonotonicMs?: number;
 }
 
 export interface RoleBinding {
@@ -48,7 +50,7 @@ export class SubmissionRegistry {
   private readonly currentDraftByTurn = new Map<string, string>();
   private readonly draftPayloadByHash = new Map<string, AgentActionDraft>();
 
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(private readonly now: () => number = monotonicNowMs) {}
 
   bind(sessionId: SessionId, role: PactRole): () => void {
     const key = String(sessionId);
@@ -177,7 +179,8 @@ export class SubmissionRegistry {
     draft: AgentActionDraft,
   ): Promise<SubmissionReceipt> {
     const payloadHash = await sha256Canonical(draft);
-    if (this.isLate(draft.identity.turnId)) {
+    const acceptedAtMonotonicMs = this.now();
+    if (this.isLate(draft.identity.turnId, acceptedAtMonotonicMs)) {
       session.append('pact/quarantine', {
         turnId: draft.identity.turnId,
         reason: 'PACT_DEADLINE_CLOSED',
@@ -192,13 +195,13 @@ export class SubmissionRegistry {
     });
     this.draftPayloadByHash.set(payloadHash, structuredClone(draft));
     this.currentDraftByTurn.set(draft.identity.turnId, payloadHash);
-    return { accepted: true, payloadHash };
+    return { accepted: true, payloadHash, acceptedAtMonotonicMs };
   }
 
-  private isLate(turnId: string): boolean {
+  private isLate(turnId: string, observedAt = this.now()): boolean {
     const state = this.deadlines.get(turnId);
     if (state === undefined) return false;
     if (state.closed) return true;
-    return state.deadlineAt !== undefined && this.now() > state.deadlineAt;
+    return state.deadlineAt !== undefined && observedAt >= state.deadlineAt;
   }
 }
