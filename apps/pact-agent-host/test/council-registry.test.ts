@@ -108,6 +108,24 @@ const persistenceContext = (session: Session, events?: readonly SessionEvent[]) 
   };
 };
 
+const persistenceContextForSessions = (sessions: readonly Session[]) => {
+  const byId = new Map(sessions.map((session) => [String(session.id), session]));
+  const flush = vi.fn(async () => true);
+  const inspect = vi.fn(async (sessionId: SessionId) => {
+    const session = byId.get(String(sessionId));
+    if (session === undefined) throw new Error(`unknown session ${sessionId}`);
+    return { meta: session.header, events: session.events };
+  });
+  return {
+    ctx: {
+      sessions: { flush },
+      sessionPersistence: { inspect },
+    } as unknown as Context,
+    flush,
+    inspect,
+  };
+};
+
 describe('council-v2 registry admission', () => {
   test('projects the exact first eligible trace after the shard event', async () => {
     releases.push(registerPactSessionEventTypes());
@@ -478,27 +496,39 @@ describe('council-v2 durability and recovery', () => {
   });
 
   test('repairs one missing eligible projection from a durable shard using recovery time', async () => {
-    const { fixtures, sessionByRole } = await openRegistry();
+    releases.push(registerPactSessionEventTypes());
+    const { fixtures, registry, sessionByRole } = await openRegistry();
     const session = sessionByRole.Rewriter;
     const shard = fixtures.shards.Rewriter;
+    const originalAppend = session.append.bind(session);
+    let failTraceAppend = true;
+    vi.spyOn(session, 'append').mockImplementation(((type: string, data: unknown) => {
+      if (type === 'pact/public-trace' && failTraceAppend) {
+        failTraceAppend = false;
+        throw new Error('injected recovery setup trace failure');
+      }
+      return (originalAppend as unknown as (
+        appendType: string,
+        appendData: unknown,
+      ) => SessionEvent)(type, data);
+    }) as typeof session.append);
+    await expect(registry.acceptShard(session, shard))
+      .rejects.toThrow('injected recovery setup trace failure');
+    const acceptedContext = registry.acceptedCouncilShardContexts(
+      fixtures.turn.snapshot.turnId,
+    ).find((context) => context.shard.shardId === shard.shardId);
+    if (acceptedContext === undefined) throw new Error('expected pending shard');
     const shardPayloadHash = await sha256Canonical(shard);
-    session.append('pact/council-shard', {
-      caseSessionId: fixtures.turn.snapshot.caseSessionId,
-      turnId: fixtures.turn.snapshot.turnId,
-      shardId: shard.shardId,
-      role: shard.role,
-      payload: shard as unknown as Record<string, never>,
-      payloadHash: shardPayloadHash,
-      acceptanceSequence: 1,
-    });
     const context = persistenceContext(session);
     const input = {
       ctx: context.ctx,
+      registry,
+      acceptedSessions: [session],
       session,
       turn: fixtures.turn,
       shard,
       shardPayloadHash,
-      acceptanceSequence: 1,
+      acceptanceSequence: acceptedContext.receipt.acceptanceSequence,
       now: () => 4_800,
     } as const;
     const repaired = await recoverCouncilTraceProjection(input);
@@ -517,10 +547,15 @@ describe('council-v2 durability and recovery', () => {
     expect(repeated).toEqual({ appended: false, traceEventSeq: 1 });
     expect(session.events.filter((event) => event.type === 'pact/public-trace'))
       .toHaveLength(1);
+    const recoveredContext = registry.acceptedCouncilShardContexts(
+      fixtures.turn.snapshot.turnId,
+    ).find((context) => context.shard.shardId === shard.shardId);
+    expect(recoveredContext?.receipt.traceEventSeq).toBe(1);
+    expect(recoveredContext?.projectionAtMonotonicMs).toBe(4_800);
   });
 
   test('requires DSH persistence context and never falls back to in-memory recovery', async () => {
-    const { fixtures, sessionByRole } = await openRegistry();
+    const { fixtures, registry, sessionByRole } = await openRegistry();
     const session = sessionByRole.Rewriter;
     const shard = fixtures.shards.Rewriter;
     const shardPayloadHash = await sha256Canonical(shard);
@@ -547,50 +582,130 @@ describe('council-v2 durability and recovery', () => {
     });
   });
 
-  test('does not recover a later eligible shard when an earlier source exists', async () => {
-    const { fixtures, sessionByRole } = await openRegistry();
-    const session = sessionByRole.Rewriter;
-    const earlier = fixtures.shards.Witness;
-    const later = fixtures.shards.Rewriter;
-    const earlierHash = await sha256Canonical(earlier);
-    const laterHash = await sha256Canonical(later);
-    session.append('pact/council-shard', {
-      caseSessionId: fixtures.turn.snapshot.caseSessionId,
-      turnId: fixtures.turn.snapshot.turnId,
-      shardId: earlier.shardId,
-      role: earlier.role,
-      payload: earlier as unknown as Record<string, never>,
-      payloadHash: earlierHash,
-      acceptanceSequence: 1,
-    });
-    session.append('pact/council-shard', {
-      caseSessionId: fixtures.turn.snapshot.caseSessionId,
-      turnId: fixtures.turn.snapshot.turnId,
-      shardId: later.shardId,
-      role: later.role,
-      payload: later as unknown as Record<string, never>,
-      payloadHash: laterHash,
-      acceptanceSequence: 2,
-    });
-    const context = persistenceContext(session);
+  test('enforces one earliest trace across distinct persisted child sessions', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const { fixtures, registry, sessionByRole } = await openRegistry();
+    const witnessSession = sessionByRole.Witness;
+    const rewriterSession = sessionByRole.Rewriter;
+    const witness = await registry.acceptShard(
+      witnessSession,
+      fixtures.shards.Witness,
+    );
+    const rewriter = await registry.acceptShard(
+      rewriterSession,
+      fixtures.shards.Rewriter,
+    );
+    if (!witness.accepted || !rewriter.accepted) {
+      throw new Error('expected accepted eligible shards');
+    }
+    expect(witness.traceEventSeq).toBe(1);
+    expect(rewriter.traceEventSeq).toBeNull();
+    const scope = persistenceContextForSessions([
+      witnessSession,
+      rewriterSession,
+    ]);
 
     const repaired = await recoverCouncilTraceProjection({
-      ctx: context.ctx,
-      session,
+      ctx: scope.ctx,
+      registry,
+      acceptedSessions: [witnessSession, rewriterSession],
+      session: rewriterSession,
       turn: fixtures.turn,
-      shard: later,
-      shardPayloadHash: laterHash,
-      acceptanceSequence: 2,
+      shard: fixtures.shards.Rewriter,
+      shardPayloadHash: rewriter.payloadHash,
+      acceptanceSequence: rewriter.acceptanceSequence,
       now: () => 4_800,
     });
 
-    expect(repaired).toEqual({ appended: false, traceEventSeq: -1 });
-    expect(session.events.filter((event) => event.type === 'pact/public-trace'))
+    expect(repaired).toEqual({ appended: false, traceEventSeq: 1 });
+    expect(scope.inspect).toHaveBeenCalledTimes(2);
+    expect(witnessSession.events.filter((event) => event.type === 'pact/public-trace'))
+      .toHaveLength(1);
+    expect(rewriterSession.events.filter((event) => event.type === 'pact/public-trace'))
       .toHaveLength(0);
   });
 
+  test('fails closed when the accepted child-session scope is incomplete', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const { fixtures, registry, sessionByRole } = await openRegistry();
+    const witness = await registry.acceptShard(
+      sessionByRole.Witness,
+      fixtures.shards.Witness,
+    );
+    const rewriter = await registry.acceptShard(
+      sessionByRole.Rewriter,
+      fixtures.shards.Rewriter,
+    );
+    if (!witness.accepted || !rewriter.accepted) {
+      throw new Error('expected accepted eligible shards');
+    }
+    const scope = persistenceContextForSessions([sessionByRole.Rewriter]);
+
+    await expect(recoverCouncilTraceProjection({
+      ctx: scope.ctx,
+      registry,
+      acceptedSessions: [sessionByRole.Rewriter],
+      session: sessionByRole.Rewriter,
+      turn: fixtures.turn,
+      shard: fixtures.shards.Rewriter,
+      shardPayloadHash: rewriter.payloadHash,
+      acceptanceSequence: rewriter.acceptanceSequence,
+      now: () => 4_800,
+    })).rejects.toMatchObject({
+      name: 'PactDurabilityError',
+      code: 'PACT_DURABILITY_INCOMPLETE',
+    });
+    expect(scope.inspect).not.toHaveBeenCalled();
+  });
+
+  test('fails closed on a conflicting non-authoritative council trace', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const { fixtures, registry, sessionByRole } = await openRegistry();
+    const witness = await registry.acceptShard(
+      sessionByRole.Witness,
+      fixtures.shards.Witness,
+    );
+    const rewriter = await registry.acceptShard(
+      sessionByRole.Rewriter,
+      fixtures.shards.Rewriter,
+    );
+    if (!witness.accepted || !rewriter.accepted) {
+      throw new Error('expected accepted eligible shards');
+    }
+    sessionByRole.Rewriter.append('pact/public-trace', {
+      caseSessionId: fixtures.turn.snapshot.caseSessionId,
+      turnId: fixtures.turn.snapshot.turnId,
+      role: 'Rewriter',
+      text: fixtures.shards.Rewriter.publicTrace,
+      sourceContributionHash: rewriter.payloadHash,
+      acceptanceSequence: rewriter.acceptanceSequence,
+      phase: 'COUNCIL',
+      provisional: true,
+      projectedAtMonotonicMs: 4_800,
+    });
+    const scope = persistenceContextForSessions([
+      sessionByRole.Witness,
+      sessionByRole.Rewriter,
+    ]);
+
+    await expect(recoverCouncilTraceProjection({
+      ctx: scope.ctx,
+      registry,
+      acceptedSessions: [sessionByRole.Witness, sessionByRole.Rewriter],
+      session: sessionByRole.Rewriter,
+      turn: fixtures.turn,
+      shard: fixtures.shards.Rewriter,
+      shardPayloadHash: rewriter.payloadHash,
+      acceptanceSequence: rewriter.acceptanceSequence,
+      now: () => 4_800,
+    })).rejects.toMatchObject({
+      name: 'PactDurabilityError',
+      code: 'PACT_DURABILITY_INCOMPLETE',
+    });
+  });
+
   test('revalidates recovery payload identity against the live child session and turn snapshot', async () => {
-    const { fixtures, sessionByRole } = await openRegistry();
+    const { fixtures, registry, sessionByRole } = await openRegistry();
     const session = sessionByRole.Rewriter;
     const shard = {
       ...fixtures.shards.Rewriter,
@@ -610,6 +725,8 @@ describe('council-v2 durability and recovery', () => {
 
     await expect(recoverCouncilTraceProjection({
       ctx: persistenceContext(session).ctx,
+      registry,
+      acceptedSessions: [session],
       session,
       turn: fixtures.turn,
       shard,
@@ -622,6 +739,154 @@ describe('council-v2 durability and recovery', () => {
     });
     expect(session.events.filter((event) => event.type === 'pact/public-trace'))
       .toHaveLength(0);
+  });
+
+  test('requires the recovery session to be registry-bound to the shard role', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const { fixtures, registry, sessionByRole } = await openRegistry();
+    const accepted = await registry.acceptShard(
+      sessionByRole.Rewriter,
+      fixtures.shards.Rewriter,
+    );
+    if (!accepted.accepted) throw new Error('expected accepted shard');
+    const unbound = Session.create(SessionId(randomUUID()));
+    const scope = persistenceContextForSessions([
+      sessionByRole.Rewriter,
+      sessionByRole.Witness,
+      unbound,
+    ]);
+    for (const session of [sessionByRole.Witness, unbound]) {
+      await expect(recoverCouncilTraceProjection({
+        ctx: scope.ctx,
+        registry,
+        acceptedSessions: [sessionByRole.Rewriter, session],
+        session,
+        turn: fixtures.turn,
+        shard: fixtures.shards.Rewriter,
+        shardPayloadHash: accepted.payloadHash,
+        acceptanceSequence: accepted.acceptanceSequence,
+        now: () => 4_800,
+      })).rejects.toMatchObject({
+        name: 'PactDurabilityError',
+        code: 'PACT_DURABILITY_INCOMPLETE',
+      });
+    }
+  });
+
+  test('rejects a turn whose snapshot changed while retaining its old hash', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const { fixtures, registry, sessionByRole } = await openRegistry();
+    const accepted = await registry.acceptShard(
+      sessionByRole.Rewriter,
+      fixtures.shards.Rewriter,
+    );
+    if (!accepted.accepted) throw new Error('expected accepted shard');
+    const changedTurn = {
+      ...fixtures.turn,
+      snapshot: {
+        ...fixtures.turn.snapshot,
+        inputRefs: [
+          ...fixtures.turn.snapshot.inputRefs,
+          { refId: 'input_fabricated01', inputClass: 'text' as const },
+        ],
+      },
+    };
+    const scope = persistenceContextForSessions([sessionByRole.Rewriter]);
+
+    await expect(recoverCouncilTraceProjection({
+      ctx: scope.ctx,
+      registry,
+      acceptedSessions: [sessionByRole.Rewriter],
+      session: sessionByRole.Rewriter,
+      turn: changedTurn,
+      shard: fixtures.shards.Rewriter,
+      shardPayloadHash: accepted.payloadHash,
+      acceptanceSequence: accepted.acceptanceSequence,
+      now: () => 4_800,
+    })).rejects.toMatchObject({
+      name: 'PactDurabilityError',
+      code: 'PACT_DURABILITY_INCOMPLETE',
+    });
+    expect(scope.inspect).not.toHaveBeenCalled();
+  });
+
+  test('uses only the cold persisted shard payload and rejects caller text divergence', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const { fixtures, registry, sessionByRole } = await openRegistry();
+    const accepted = await registry.acceptShard(
+      sessionByRole.Rewriter,
+      fixtures.shards.Rewriter,
+    );
+    if (!accepted.accepted) throw new Error('expected accepted shard');
+    const divergentShard = {
+      ...fixtures.shards.Rewriter,
+      publicTrace: 'Caller-controlled divergent text.',
+    };
+    const divergentHash = await sha256Canonical(divergentShard);
+    const scope = persistenceContextForSessions([sessionByRole.Rewriter]);
+
+    await expect(recoverCouncilTraceProjection({
+      ctx: scope.ctx,
+      registry,
+      acceptedSessions: [sessionByRole.Rewriter],
+      session: sessionByRole.Rewriter,
+      turn: fixtures.turn,
+      shard: divergentShard,
+      shardPayloadHash: divergentHash,
+      acceptanceSequence: accepted.acceptanceSequence,
+      now: () => 4_800,
+    })).rejects.toMatchObject({
+      name: 'PactDurabilityError',
+      code: 'PACT_DURABILITY_INCOMPLETE',
+    });
+    expect(sessionByRole.Rewriter.events.filter(
+      (event) => event.type === 'pact/public-trace',
+    )).toHaveLength(1);
+  });
+
+  test('rejects every tampered accepted receipt field and linked projection time', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const { fixtures, registry, sessionByRole } = await openRegistry();
+    const session = sessionByRole.Rewriter;
+    const accepted = await registry.acceptShard(session, fixtures.shards.Rewriter);
+    if (!accepted.accepted) throw new Error('expected accepted shard');
+    const tamperedReceipts = [
+      { ...accepted, projectedTrace: false },
+      { ...accepted, acceptedAtMonotonicMs: 9_999 },
+      { ...accepted, traceEventSeq: null },
+    ];
+    for (const receipt of tamperedReceipts) {
+      await expect(durableCouncilShard({
+        ctx: persistenceContext(session).ctx,
+        registry,
+        session,
+        receipt: receipt as never,
+      })).rejects.toMatchObject({
+        name: 'PactDurabilityError',
+        code: 'PACT_DURABILITY_INCOMPLETE',
+      });
+    }
+    const tamperedEvents = session.events.map((event) =>
+      event.type === 'pact/public-trace'
+        ? {
+            ...event,
+            data: { ...event.data, projectedAtMonotonicMs: 9_999 },
+          }
+        : event);
+    await expect(durableCouncilShard({
+      ctx: {
+        sessions: { flush: async () => true },
+        sessionPersistence: {
+          inspect: async () => ({ meta: session.header, events: tamperedEvents }),
+        },
+      } as unknown as Context,
+      registry,
+      session,
+      receipt: accepted,
+    })).rejects.toMatchObject({
+      name: 'PactDurabilityError',
+      code: 'PACT_DURABILITY_INCOMPLETE',
+    });
   });
 
   test('recomputes shard and commit payload hashes and verifies the full linked trace', async () => {
@@ -722,6 +987,95 @@ describe('council-v2 durability and recovery', () => {
       session: sessionByRole.Rewriter,
       receipt: acceptedShard,
     });
+    expect(registry.durableProposal(fixtures.turn.snapshot.turnId).durableCommit)
+      .toBeNull();
+  });
+
+  test('does not expose a durable commit for an empty selected hash set', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const { fixtures, registry, sessionByRole } = await openRegistry();
+    const hashes: string[] = [];
+    for (const role of [
+      'CaseConductor',
+      'Witness',
+      'Archivist',
+      'Rewriter',
+      'Guardian',
+    ] as const) {
+      const accepted = await registry.acceptShard(
+        sessionByRole[role],
+        fixtures.shards[role],
+      );
+      if (!accepted.accepted) throw new Error(`expected accepted ${role} shard`);
+      hashes.push(accepted.payloadHash);
+      await durableCouncilShard({
+        ctx: persistenceContext(sessionByRole[role]).ctx,
+        registry,
+        session: sessionByRole[role],
+        receipt: accepted,
+      });
+    }
+    expect(hashes).toHaveLength(5);
+    const acceptedCommit = await registry.acceptCommit(
+      sessionByRole.CaseConductor,
+      { ...fixtures.proposedCommit, selectedShardHashes: [] },
+    );
+    if (!acceptedCommit.accepted) throw new Error('expected accepted commit');
+    await durableConductorCommit({
+      ctx: persistenceContext(sessionByRole.CaseConductor).ctx,
+      registry,
+      session: sessionByRole.CaseConductor,
+      receipt: acceptedCommit,
+    });
+
+    registry.closeSelectionBarrier(fixtures.turn.snapshot.turnId);
+    expect(registry.durableProposal(fixtures.turn.snapshot.turnId).durableCommit)
+      .toBeNull();
+  });
+
+  test('does not satisfy required roles with durable but unselected shards', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const { fixtures, registry, sessionByRole } = await openRegistry();
+    const hashByRole = new Map<string, string>();
+    for (const role of [
+      'CaseConductor',
+      'Witness',
+      'Archivist',
+      'Rewriter',
+      'Guardian',
+    ] as const) {
+      const accepted = await registry.acceptShard(
+        sessionByRole[role],
+        fixtures.shards[role],
+      );
+      if (!accepted.accepted) throw new Error(`expected accepted ${role} shard`);
+      hashByRole.set(role, accepted.payloadHash);
+      await durableCouncilShard({
+        ctx: persistenceContext(sessionByRole[role]).ctx,
+        registry,
+        session: sessionByRole[role],
+        receipt: accepted,
+      });
+    }
+    const selectedShardHashes = [
+      'CaseConductor',
+      'Archivist',
+      'Rewriter',
+      'Guardian',
+    ].map((role) => hashByRole.get(role) as string);
+    const acceptedCommit = await registry.acceptCommit(
+      sessionByRole.CaseConductor,
+      { ...fixtures.proposedCommit, selectedShardHashes },
+    );
+    if (!acceptedCommit.accepted) throw new Error('expected accepted commit');
+    await durableConductorCommit({
+      ctx: persistenceContext(sessionByRole.CaseConductor).ctx,
+      registry,
+      session: sessionByRole.CaseConductor,
+      receipt: acceptedCommit,
+    });
+
+    registry.closeSelectionBarrier(fixtures.turn.snapshot.turnId);
     expect(registry.durableProposal(fixtures.turn.snapshot.turnId).durableCommit)
       .toBeNull();
   });
