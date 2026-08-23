@@ -258,3 +258,16 @@ export {
   type ModelBakeoffKeychainReferenceManifest,
   type ModelBakeoffPreflight,
 } from './model-bakeoff-preflight.js';
+export {
+  runModelBakeoff,
+  type ModelBakeoffAttemptRecord,
+  type ModelBakeoffCaseOutcome,
+  type ModelBakeoffDispatchRequest,
+  type ModelBakeoffProviderFacts,
+  type ModelBakeoffRunResult,
+  type ModelBakeoffSessionEventRange,
+  type ModelBakeoffToolResult,
+  type ModelBakeoffTransport,
+  type ModelBakeoffTransportResult,
+  type ModelBakeoffTransportResultKind,
+} from './model-bakeoff-runner.js';
