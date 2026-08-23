@@ -16,6 +16,7 @@
     "test:simulation-replay": "node scripts/smoke-test-delivery-replay.mjs --package artifacts/interaction-simulation/interaction-simulation-30fps.simulation-package --screenshot artifacts/interaction-simulation/replay-smoke.png --seek 6",
     "test:cp03:foundation": "node scripts/smoke-test-cp03-foundation.mjs",
     "test:cp03:audience": "node scripts/smoke-test-cp03-audience.mjs",
+    "capture:cp03:adapter-readiness": "node scripts/capture-cp03-adapter-readiness.mjs",
     "test:large-autosave": "node scripts/smoke-test-large-autosave.mjs",
     "build:interaction-demo": "node scripts/build-interaction-demo-project.mjs",
     "build:window-case": "node scripts/build-window-case-sandbox-project.mjs",

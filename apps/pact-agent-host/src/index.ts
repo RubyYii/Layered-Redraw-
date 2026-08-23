@@ -196,3 +196,10 @@ export {
   type Gemini37CatalogAudit,
   type Gemini37CatalogSource,
 } from './model-catalog-audit.js';
+export {
+  ADAPTER_READINESS_CLAIM_CEILING,
+  ADAPTER_READINESS_VERIFICATION_IDS,
+  createAdapterReadinessManifest,
+  verifyAdapterReadinessManifest,
+  type AdapterReadinessManifest,
+} from './adapter-readiness-evidence.js';

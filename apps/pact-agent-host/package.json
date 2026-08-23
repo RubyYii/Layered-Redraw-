@@ -17,7 +17,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "compatibility": "node --import tsx/esm scripts/provider-compatibility.mts",
-    "audit:gemini37": "node --import tsx/esm scripts/audit-gemini-37.mts"
+    "audit:gemini37": "node --import tsx/esm scripts/audit-gemini-37.mts",
+    "archive:gemini37-readiness": "node --import tsx/esm scripts/archive-adapter-readiness.mts"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "4.0.1",
