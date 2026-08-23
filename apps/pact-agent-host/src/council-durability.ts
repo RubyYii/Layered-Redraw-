@@ -211,6 +211,8 @@ export const durableCouncilShard = async (
 ): Promise<DurableCouncilShardReceipt> => {
   let expected: AcceptedCouncilShardContext | undefined;
   try {
+    councilRegistryRecoveryCapability(input.registry)
+      .assertCanonicalShardSession(input.receipt, input.session);
     expected = input.registry.acceptedShardContext(input.receipt);
   } catch {
     incomplete(`council shard ${input.receipt.shardId}`);
@@ -297,6 +299,8 @@ export const durableConductorCommit = async (
 ): Promise<DurableConductorCommitReceipt> => {
   let expected: AcceptedCouncilCommitContext | undefined;
   try {
+    councilRegistryRecoveryCapability(input.registry)
+      .assertCanonicalCommitSession(input.receipt, input.session);
     expected = input.registry.acceptedCommitContext(input.receipt);
   } catch {
     incomplete(`conductor commit ${input.receipt.turnId}`);
@@ -474,12 +478,29 @@ const assertRecoveryScope = (
   if (contexts.length === 0) {
     incomplete(`recovery shard ${input.shard.shardId}`);
   }
+  const recoveryCapability = councilRegistryRecoveryCapability(input.registry);
+  const canonicalSessions = (() => {
+    try {
+      return recoveryCapability.canonicalShardSessions(
+        registeredTurn.snapshot.turnId,
+      );
+    } catch {
+      return incomplete(`recovery shard ${input.shard.shardId}`);
+    }
+  })();
   const expectedSessionIds = new Set(contexts.map((context) => context.sessionId));
   const suppliedSessionIds = new Set(sessionsById.keys());
   if (
     expectedSessionIds.size !== suppliedSessionIds.size ||
     [...expectedSessionIds].some((sessionId) => !suppliedSessionIds.has(sessionId)) ||
     [...suppliedSessionIds].some((sessionId) => !expectedSessionIds.has(sessionId))
+  ) {
+    incomplete(`recovery shard ${input.shard.shardId}`);
+  }
+  if (
+    canonicalSessions.length !== sessionsById.size ||
+    canonicalSessions.some((canonicalSession) =>
+      sessionsById.get(String(canonicalSession.id)) !== canonicalSession)
   ) {
     incomplete(`recovery shard ${input.shard.shardId}`);
   }
@@ -490,6 +511,12 @@ const assertRecoveryScope = (
     try {
       const boundSession = sessionsById.get(context.sessionId);
       if (boundSession === undefined) {
+        incomplete(`recovery shard ${input.shard.shardId}`);
+      }
+      if (
+        recoveryCapability.canonicalShardSession(context.receipt) !==
+        boundSession
+      ) {
         incomplete(`recovery shard ${input.shard.shardId}`);
       }
       const binding = input.registry.submissions.bindingFor(
@@ -513,6 +540,7 @@ const assertRecoveryIdentity = async (
   registeredTurn: FrozenCouncilTurn,
   scope: RecoveryScope,
 ): Promise<AcceptedCouncilShardContext> => {
+  const recoveryCapability = councilRegistryRecoveryCapability(input.registry);
   try {
     validateCouncilShard(input.shard);
   } catch {
@@ -536,6 +564,7 @@ const assertRecoveryIdentity = async (
     computedShardPayloadHash !== input.shardPayloadHash ||
     context.shard.role !== input.shard.role ||
     context.shard.childSessionId !== String(input.session.id) ||
+    recoveryCapability.canonicalShardSession(context.receipt) !== input.session ||
     binding!.role !== context.shard.role ||
     !shardMatchesTurn(input.shard, registeredTurn, String(input.session.id)) ||
     !shardMatchesTurn(context.shard, registeredTurn, context.sessionId) ||

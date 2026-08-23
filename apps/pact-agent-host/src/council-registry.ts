@@ -132,6 +132,7 @@ export interface AcceptedCouncilCommitContext {
 interface AcceptedShard {
   readonly shard: CouncilShard;
   receipt: AcceptedCouncilShardReceipt;
+  readonly session: Session;
   readonly sessionId: string;
   projectionAtMonotonicMs: number | null;
   recoveryReservation: RecoveryTraceReservation | null;
@@ -154,6 +155,16 @@ interface RecoveryTraceReservationState extends RecoveryTraceTarget {
 }
 
 interface CouncilRegistryRecoveryCapability {
+  assertCanonicalShardSession(
+    receipt: AcceptedCouncilShardReceipt,
+    session: Session,
+  ): void;
+  assertCanonicalCommitSession(
+    receipt: AcceptedCouncilCommitReceipt,
+    session: Session,
+  ): void;
+  canonicalShardSession(receipt: AcceptedCouncilShardReceipt): Session;
+  canonicalShardSessions(turnId: string): readonly Session[];
   reserveRecoveryTrace(target: RecoveryTraceTarget): RecoveryTraceReservation;
   recoveryTimestamp(reservation: RecoveryTraceReservation): number;
   commitRecoveryTrace(
@@ -166,6 +177,7 @@ interface CouncilRegistryRecoveryCapability {
 interface AcceptedCommit {
   readonly commit: ConductorDraftCommit;
   readonly receipt: AcceptedCouncilCommitReceipt;
+  readonly session: Session;
   readonly sessionId: string;
   durable: boolean;
 }
@@ -178,6 +190,7 @@ interface TurnState {
   firstTraceAcceptanceSequence: number | null;
   frozenDurableShardIds: ReadonlySet<string> | null;
   frozenDurableCommit: boolean;
+  readonly canonicalSessionsById: Map<string, Session>;
   readonly shards: Map<string, AcceptedShard>;
   commit?: AcceptedCommit;
 }
@@ -272,6 +285,22 @@ export class CouncilRegistry {
   constructor(private readonly options: CouncilRegistryOptions) {
     this.now = options.now ?? defaultMonotonicNow;
     recoveryCapabilities.set(this, Object.freeze({
+      assertCanonicalShardSession: (
+        receipt: AcceptedCouncilShardReceipt,
+        session: Session,
+      ) => {
+        this.#assertCanonicalShardSession(receipt, session);
+      },
+      assertCanonicalCommitSession: (
+        receipt: AcceptedCouncilCommitReceipt,
+        session: Session,
+      ) => {
+        this.#assertCanonicalCommitSession(receipt, session);
+      },
+      canonicalShardSession: (receipt: AcceptedCouncilShardReceipt) =>
+        this.#canonicalShardSession(receipt),
+      canonicalShardSessions: (turnId: string) =>
+        this.#canonicalShardSessions(turnId),
       reserveRecoveryTrace: (target: RecoveryTraceTarget) =>
         this.#reserveRecoveryTrace(target),
       recoveryTimestamp: (reservation: RecoveryTraceReservation) =>
@@ -308,6 +337,7 @@ export class CouncilRegistry {
       firstTraceAcceptanceSequence: null,
       frozenDurableShardIds: null,
       frozenDurableCommit: false,
+      canonicalSessionsById: new Map(),
       shards: new Map(),
     });
   }
@@ -362,6 +392,10 @@ export class CouncilRegistry {
       binding.role !== shard.role ||
       shard.childSessionId !== String(session.id)
     ) {
+      return reject('PACT_COUNCIL_SHARD_ROLE_OR_SESSION_MISMATCH');
+    }
+    const canonicalSession = state.canonicalSessionsById.get(String(session.id));
+    if (canonicalSession !== undefined && canonicalSession !== session) {
       return reject('PACT_COUNCIL_SHARD_ROLE_OR_SESSION_MISMATCH');
     }
     if (shard.caseSessionId !== state.turn.snapshot.caseSessionId) {
@@ -437,12 +471,14 @@ export class CouncilRegistry {
     const accepted: AcceptedShard = {
       shard: snapshot(shard),
       receipt,
+      session,
       sessionId: String(session.id),
       projectionAtMonotonicMs: null,
       recoveryReservation: null,
       durable: false,
     };
     state.shards.set(shard.shardId, accepted);
+    state.canonicalSessionsById.set(String(session.id), session);
     if (projectedTrace) return this.completeFirstTrace(state, accepted, session);
     return accepted.receipt;
   }
@@ -524,6 +560,93 @@ export class CouncilRegistry {
     );
   }
 
+  #acceptedShardForReceipt(
+    receipt: AcceptedCouncilShardReceipt,
+  ): AcceptedShard {
+    const state = this.turns.get(receipt?.turnId);
+    const accepted = state?.shards.get(receipt?.shardId);
+    if (
+      state === undefined ||
+      accepted === undefined ||
+      !acceptedReceiptMatches(accepted.receipt, receipt)
+    ) {
+      throw new Error('PACT_COUNCIL_ACCEPTED_SHARD_RECEIPT_MISMATCH');
+    }
+    return accepted;
+  }
+
+  #assertCanonicalShardSession(
+    receipt: AcceptedCouncilShardReceipt,
+    session: Session,
+  ): AcceptedShard {
+    const accepted = this.#acceptedShardForReceipt(receipt);
+    let binding;
+    try {
+      binding = this.options.submissions.bindingFor(session.id);
+    } catch {
+      throw new Error('PACT_COUNCIL_SHARD_ROLE_OR_SESSION_MISMATCH');
+    }
+    if (
+      accepted.session !== session ||
+      accepted.sessionId !== String(session.id) ||
+      String(binding.sessionId) !== accepted.sessionId ||
+      binding.role !== accepted.shard.role ||
+      accepted.shard.childSessionId !== String(session.id)
+    ) {
+      throw new Error('PACT_COUNCIL_SHARD_ROLE_OR_SESSION_MISMATCH');
+    }
+    return accepted;
+  }
+
+  #canonicalShardSession(receipt: AcceptedCouncilShardReceipt): Session {
+    return this.#acceptedShardForReceipt(receipt).session;
+  }
+
+  #assertCanonicalCommitSession(
+    receipt: AcceptedCouncilCommitReceipt,
+    session: Session,
+  ): AcceptedCommit {
+    const state = this.turns.get(receipt?.turnId);
+    const accepted = state?.commit;
+    if (
+      state === undefined ||
+      accepted === undefined ||
+      accepted.receipt.payloadHash !== receipt?.payloadHash ||
+      accepted.receipt.commitEventSeq !== receipt?.commitEventSeq
+    ) {
+      throw new Error('PACT_COUNCIL_ACCEPTED_COMMIT_RECEIPT_MISMATCH');
+    }
+    let binding;
+    try {
+      binding = this.options.submissions.bindingFor(session.id);
+    } catch {
+      throw new Error('PACT_CONDUCTOR_COMMIT_ROLE_REQUIRED');
+    }
+    if (
+      accepted.session !== session ||
+      accepted.sessionId !== String(session.id) ||
+      String(binding.sessionId) !== accepted.sessionId ||
+      binding.role !== 'CaseConductor'
+    ) {
+      throw new Error('PACT_CONDUCTOR_COMMIT_ROLE_REQUIRED');
+    }
+    return accepted;
+  }
+
+  #canonicalShardSessions(turnId: string): readonly Session[] {
+    const state = this.turns.get(turnId);
+    if (state === undefined) throw new Error('PACT_COUNCIL_TURN_NOT_OPEN');
+    const sessions = new Map<string, Session>();
+    for (const accepted of state.shards.values()) {
+      const existing = sessions.get(accepted.sessionId);
+      if (existing !== undefined && existing !== accepted.session) {
+        throw new Error('PACT_COUNCIL_CANONICAL_SESSION_CONFLICT');
+      }
+      sessions.set(accepted.sessionId, accepted.session);
+    }
+    return Object.freeze([...sessions.values()]);
+  }
+
   frozenTurn(turnId: string): FrozenCouncilTurn {
     const state = this.turns.get(turnId);
     if (state === undefined) throw new Error('PACT_COUNCIL_TURN_NOT_OPEN');
@@ -536,12 +659,22 @@ export class CouncilRegistry {
     const state = this.turns.get(target.turnId);
     const accepted = state?.shards.get(target.shardId);
     const sessionId = String(target.session.id);
+    let binding;
+    try {
+      binding = this.options.submissions.bindingFor(target.session.id);
+    } catch {
+      throw new Error('PACT_COUNCIL_RECOVERY_RESERVATION_MISMATCH');
+    }
     if (
       state === undefined ||
       accepted === undefined ||
       !traceEligible(accepted.shard.role) ||
       !accepted.receipt.projectedTrace ||
+      accepted.session !== target.session ||
       accepted.sessionId !== sessionId ||
+      String(binding.sessionId) !== accepted.sessionId ||
+      binding.role !== accepted.shard.role ||
+      accepted.shard.childSessionId !== sessionId ||
       accepted.receipt.payloadHash !== target.payloadHash ||
       accepted.receipt.acceptanceSequence !== target.acceptanceSequence ||
       accepted.receipt.traceEventSeq !== null ||
@@ -586,12 +719,25 @@ export class CouncilRegistry {
       ? undefined
       : this.turns.get(reservationState.turnId);
     const accepted = state?.shards.get(reservationState?.shardId ?? '');
+    let canonicalSession = false;
+    if (reservationState !== undefined && session !== undefined) {
+      try {
+        this.#assertCanonicalShardSession(
+          accepted?.receipt ?? ({} as AcceptedCouncilShardReceipt),
+          session,
+        );
+        canonicalSession = true;
+      } catch {
+        canonicalSession = false;
+      }
+    }
     if (
       reservationState === undefined ||
       reservationState.committed ||
       state === undefined ||
       accepted === undefined ||
       accepted.recoveryReservation !== reservation ||
+      !canonicalSession ||
       session !== reservationState.session ||
       !Number.isInteger(traceEventSeq) ||
       traceEventSeq < 0 ||
@@ -671,6 +817,10 @@ export class CouncilRegistry {
     if (binding.role !== 'CaseConductor') {
       return reject('PACT_CONDUCTOR_COMMIT_ROLE_REQUIRED');
     }
+    const canonicalSession = state.canonicalSessionsById.get(String(session.id));
+    if (canonicalSession !== undefined && canonicalSession !== session) {
+      return reject('PACT_CONDUCTOR_COMMIT_ROLE_REQUIRED');
+    }
     if (state.commit !== undefined) {
       if (state.commit.receipt.payloadHash === payloadHash) return state.commit.receipt;
       return reject('PACT_CONDUCTOR_COMMIT_ID_CONFLICT');
@@ -696,9 +846,11 @@ export class CouncilRegistry {
     state.commit = {
       commit: snapshot(commit),
       receipt,
+      session,
       sessionId: String(session.id),
       durable: false,
     };
+    state.canonicalSessionsById.set(String(session.id), session);
     return receipt;
   }
 
