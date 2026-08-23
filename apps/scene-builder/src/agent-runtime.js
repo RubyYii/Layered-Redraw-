@@ -1,7 +1,8 @@
 import cp02IntentFixture from "../projects/window-case-cp02/intent-fixtures.json" with { type: "json" };
 import { rotateLocalOffset } from "./interaction-runtime.js";
 import { planGroundPath } from "./navigation-runtime.js";
-import { hashProject, validateScenePatch } from "./scene-patch-runtime.js";
+import { planNavmeshPath } from "./navmesh-runtime.js";
+import { hashCanonicalValue, hashProject, validateScenePatch } from "./scene-patch-runtime.js";
 import { resolveAssetForSlot, validateAssetCatalog, validateSceneSlots } from "./scene-governance.js";
 
 const FORBIDDEN_INTENT_FIELDS = Object.freeze([
@@ -22,6 +23,29 @@ const AGENT_INTENT_FIELDS = new Set([
   "placementTargetId",
   "action",
   "reason",
+]);
+const AGENT_BEHAVIOR_FIELDS = new Set([
+  "schemaVersion",
+  "action",
+  "actorId",
+  "targetId",
+  "recipientId",
+  "placementTargetId",
+  "affordance",
+  "hand",
+  "utterance",
+  "reason",
+  "requestId",
+]);
+
+export const AGENT_SEMANTIC_ACTIONS = Object.freeze([
+  "approach",
+  "look",
+  "reach",
+  "grasp",
+  "transfer",
+  "release",
+  "speak",
 ]);
 
 const round = (value, precision = 3) => Number(value.toFixed(precision));
@@ -66,15 +90,26 @@ export const AGENT_INTENT_CONTRACT = Object.freeze({
   principle: "The model chooses a semantic intent; the deterministic scene runtime owns transforms, paths, collision and animation.",
 });
 
+export const AGENT_BEHAVIOR_CONTRACT = Object.freeze({
+  schemaVersion: 1,
+  allowedActions: AGENT_SEMANTIC_ACTIONS,
+  allowedHands: Object.freeze(["auto", "left", "right", "both"]),
+  forbiddenFields: FORBIDDEN_INTENT_FIELDS,
+  authority: Object.freeze({
+    model: "semantic action selection only",
+    runtime: "transforms, pathfinding, collision, animation, IK and ownership",
+  }),
+});
+
 export function buildAgentObservation(project, frame, actorId) {
   const actor = stateFor(project, frame, actorId);
   if (!actor || actor.source.entity?.role !== "character") throw new Error(`角色不存在：${actorId}`);
 
   const perceivedEntities = project.objects
-    .filter((object) => object.id !== actorId && Object.keys(object.interactionSpec?.affordances ?? {}).length)
+    .filter((object) => object.id !== actorId)
     .map((object) => {
       const target = stateFor(project, frame, object.id);
-      const affordances = Object.entries(object.interactionSpec.affordances).map(([name, affordance]) => {
+      const affordances = Object.entries(object.interactionSpec?.affordances ?? {}).map(([name, affordance]) => {
         const anchorPosition = anchorPositionFor(target, affordance.targetAnchor);
         const distance = groundDistance(actor.position, anchorPosition);
         return {
@@ -114,6 +149,7 @@ export function buildAgentObservation(project, frame, actorId) {
     },
     perceivedEntities,
     intentContract: AGENT_INTENT_CONTRACT,
+    behaviorContract: AGENT_BEHAVIOR_CONTRACT,
   };
 }
 
@@ -269,10 +305,13 @@ export function planAgentIntent(project, frame, rawIntent, navigationOptions = {
     actor.position[1],
     anchor[2] + (dz / length) * standOff,
   ];
-  const navigation = planGroundPath(project, actor.position, approach, {
+  const navigationInput = {
     ...navigationOptions,
     ignoreIds: [...new Set([...(navigationOptions.ignoreIds ?? []), actorId, targetId])],
-  });
+  };
+  const navigation = navigationOptions.backend === "grid"
+    ? { ...planGroundPath(project, actor.position, approach, navigationInput), backend: "grid" }
+    : planNavmeshPath(project, actor.position, approach, navigationInput);
   if (!navigation.ok) {
     return { ok: false, code: navigation.code, recoverable: true, message: "导航系统没有找到安全接近目标的路径。" };
   }
@@ -290,7 +329,7 @@ export function planAgentIntent(project, frame, rawIntent, navigationOptions = {
     ok: true,
     requiresNavigation: true,
     steps: [
-      { kind: "navigate", actorId, path: navigation.path, distance: navigation.distance },
+      { kind: "navigate", actorId, path: navigation.path, distance: navigation.distance, backend: navigation.backend },
       { kind: "interact", intent: atGoal.intent },
     ],
   };
@@ -356,6 +395,318 @@ export async function runAgentTurn({
     plan,
     clips: compileAgentPlan(plan, frame?.time ?? 0, motionOptions),
   };
+}
+
+const interactionOwnershipForBehavior = Object.freeze({
+  grasp: "claim",
+  transfer: "transfer",
+  release: "release",
+});
+
+const interactionAffordanceForBehavior = (target, action, requestedName) => {
+  const affordances = Object.entries(target?.source.interactionSpec?.affordances ?? {});
+  if (requestedName) {
+    const requested = affordances.find(([name]) => name === requestedName);
+    if (!requested) return null;
+    return requested;
+  }
+  const ownershipMode = interactionOwnershipForBehavior[action];
+  return affordances.find(([, affordance]) => affordance.ownershipMode === ownershipMode) ?? null;
+};
+
+export function validateAgentBehaviorCommand(project, frame, rawCommand) {
+  if (!rawCommand || typeof rawCommand !== "object" || Array.isArray(rawCommand)) {
+    return { ok: false, code: "invalid_payload", message: "Agent 语义动作必须是对象。" };
+  }
+  const forbiddenField = findForbiddenIntentField(rawCommand);
+  if (forbiddenField) {
+    return {
+      ok: false,
+      code: "direct_scene_control_forbidden",
+      message: `Agent 不能写入 ${forbiddenField}；变换、路径、碰撞与动画由仿真运行时决定。`,
+    };
+  }
+  if (Object.keys(rawCommand).some((key) => !AGENT_BEHAVIOR_FIELDS.has(key))) {
+    return { ok: false, code: "undeclared_field", message: "Agent 语义动作包含未声明字段。" };
+  }
+  if (rawCommand.schemaVersion !== undefined && Number(rawCommand.schemaVersion) !== AGENT_BEHAVIOR_CONTRACT.schemaVersion) {
+    return { ok: false, code: "unsupported_schema", message: "Agent 语义动作 schemaVersion 不受支持。" };
+  }
+  const action = String(rawCommand.action ?? "");
+  if (!AGENT_SEMANTIC_ACTIONS.includes(action)) {
+    return { ok: false, code: "unsupported_action", message: "Agent 只能选择已声明的七种语义动作。" };
+  }
+  const actor = stateFor(project, frame, String(rawCommand.actorId ?? ""));
+  if (!actor || actor.source.entity?.role !== "character") {
+    return { ok: false, code: "invalid_actor", message: "actorId 必须指向角色根节点。" };
+  }
+  const hand = String(rawCommand.hand ?? "auto");
+  if (!AGENT_BEHAVIOR_CONTRACT.allowedHands.includes(hand)) {
+    return { ok: false, code: "invalid_hand", message: "hand 只能是 auto、left、right 或 both。" };
+  }
+  if (action === "approach" && actor.source.entity?.capabilities?.movable !== true) {
+    return { ok: false, code: "missing_actor_capability", message: "角色没有启用 movable，不能 approach。" };
+  }
+  if (action === "speak" && actor.source.entity?.capabilities?.speakable !== true) {
+    return { ok: false, code: "missing_actor_capability", message: "角色没有启用 speakable，不能 speak。" };
+  }
+  const targetId = rawCommand.targetId == null ? null : String(rawCommand.targetId);
+  const target = targetId ? stateFor(project, frame, targetId) : null;
+  if (["approach", "look", "reach", "grasp", "transfer", "release"].includes(action)) {
+    if (!target || !target.visible || target.source.id === actor.source.id) {
+      return { ok: false, code: "invalid_target", message: `${action} 需要另一个可见场景目标。` };
+    }
+  } else if (targetId && (!target || !target.visible || target.source.id === actor.source.id)) {
+    return { ok: false, code: "invalid_target", message: "speak 的可选目标必须是另一个可见对象。" };
+  }
+  if (action === "reach" && groundDistance(actor.position, target.position) > 1.6) {
+    return {
+      ok: false,
+      code: "out_of_reach",
+      recoverable: true,
+      message: "目标超出手臂约束范围；请先请求 approach。",
+    };
+  }
+
+  const recipientId = rawCommand.recipientId == null ? null : String(rawCommand.recipientId);
+  const placementTargetId = rawCommand.placementTargetId == null ? null : String(rawCommand.placementTargetId);
+  if (action === "transfer") {
+    const recipient = stateFor(project, frame, recipientId);
+    if (!recipient || !recipient.visible || recipient.source.entity?.role !== "character") {
+      return { ok: false, code: "invalid_recipient", message: "transfer 需要可见角色 recipientId。" };
+    }
+    if (placementTargetId) return { ok: false, code: "unexpected_semantic_target", message: "transfer 不接受 placementTargetId。" };
+  } else if (action === "release") {
+    const placementTarget = stateFor(project, frame, placementTargetId);
+    if (!placementTarget || !placementTarget.visible) {
+      return { ok: false, code: "invalid_placement_target", message: "release 需要可见 placementTargetId。" };
+    }
+    if (recipientId) return { ok: false, code: "unexpected_semantic_target", message: "release 不接受 recipientId。" };
+  } else if (recipientId || placementTargetId) {
+    return { ok: false, code: "unexpected_semantic_target", message: `${action} 不接受额外语义目标。` };
+  }
+
+  const utterance = normalizeWhitespace(rawCommand.utterance).slice(0, 500);
+  if (action === "speak" && !utterance) {
+    return { ok: false, code: "missing_utterance", message: "speak 需要非空 utterance。" };
+  }
+  if (action !== "speak" && rawCommand.utterance !== undefined) {
+    return { ok: false, code: "unexpected_utterance", message: `${action} 不接受 utterance。` };
+  }
+
+  let affordance = null;
+  let legacyValidation = null;
+  if (Object.hasOwn(interactionOwnershipForBehavior, action)) {
+    const ownership = frame?.simulation?.ownership?.[target.source.id] ?? null;
+    if (action === "grasp" && ownership?.status === "held") {
+      return { ok: false, code: "ownership_conflict", message: "目标已被角色持有，不能再次 grasp。" };
+    }
+    if (["transfer", "release"].includes(action)
+      && (ownership?.status !== "held" || ownership.holderId !== actor.source.id)) {
+      return { ok: false, code: "ownership_violation", message: `${action} 只能由当前持有者发出。` };
+    }
+    const selected = interactionAffordanceForBehavior(target, action, String(rawCommand.affordance ?? ""));
+    if (!selected || selected[1].ownershipMode !== interactionOwnershipForBehavior[action]) {
+      return { ok: false, code: "missing_semantic_affordance", message: `目标没有声明可用于 ${action} 的所有权 affordance。` };
+    }
+    affordance = selected[0];
+    legacyValidation = validateAgentIntent(project, frame, {
+      kind: "interact",
+      actorId: actor.source.id,
+      targetId: target.source.id,
+      affordance,
+      ...(recipientId ? { recipientId } : {}),
+      ...(placementTargetId ? { placementTargetId } : {}),
+    });
+    if (!legacyValidation.ok && legacyValidation.code !== "out_of_range") return legacyValidation;
+  } else if (rawCommand.affordance !== undefined) {
+    return { ok: false, code: "unexpected_affordance", message: `${action} 不接受 affordance。` };
+  }
+
+  return {
+    ok: true,
+    requiresNavigation: legacyValidation?.code === "out_of_range",
+    command: {
+      schemaVersion: AGENT_BEHAVIOR_CONTRACT.schemaVersion,
+      action,
+      actorId: actor.source.id,
+      targetId,
+      recipientId,
+      placementTargetId,
+      affordance,
+      hand,
+      utterance: action === "speak" ? utterance : null,
+      reason: normalizeWhitespace(rawCommand.reason).slice(0, 240),
+      requestId: normalizeWhitespace(rawCommand.requestId).slice(0, 96) || null,
+    },
+  };
+}
+
+const planApproachBehavior = (project, frame, command, navigationOptions = {}) => {
+  const actor = stateFor(project, frame, command.actorId);
+  const target = stateFor(project, frame, command.targetId);
+  const dx = actor.position[0] - target.position[0];
+  const dz = actor.position[2] - target.position[2];
+  const length = Math.max(0.0001, Math.hypot(dx, dz));
+  const targetDimensions = target.source.dimensions ?? [1, 1, 1];
+  const standOff = Math.max(0.55, Math.max(targetDimensions[0], targetDimensions[2]) * 0.55 + 0.25);
+  const destination = [
+    target.position[0] + (dx / length) * standOff,
+    actor.position[1],
+    target.position[2] + (dz / length) * standOff,
+  ];
+  if (groundDistance(actor.position, destination) < 0.05) {
+    return { ok: true, path: [actor.position, destination], distance: 0, backend: "already-in-range" };
+  }
+  const navigationInput = {
+    ...navigationOptions,
+    ignoreIds: [...new Set([...(navigationOptions.ignoreIds ?? []), command.actorId, command.targetId])],
+  };
+  return navigationOptions.backend === "grid"
+    ? { ...planGroundPath(project, actor.position, destination, navigationInput), backend: "grid" }
+    : planNavmeshPath(project, actor.position, destination, navigationInput);
+};
+
+export function planAgentBehaviorCommand(project, frame, rawCommand, navigationOptions = {}) {
+  const validation = validateAgentBehaviorCommand(project, frame, rawCommand);
+  if (!validation.ok) return validation;
+  const { command } = validation;
+  if (command.action === "approach") {
+    const navigation = planApproachBehavior(project, frame, command, navigationOptions);
+    if (!navigation.ok) {
+      return { ok: false, code: navigation.code, recoverable: true, message: "导航系统没有找到安全接近目标的路径。" };
+    }
+    return {
+      ok: true,
+      command,
+      requiresNavigation: navigation.distance > 0,
+      steps: [{
+        kind: "navigate",
+        actorId: command.actorId,
+        targetId: command.targetId,
+        path: navigation.path,
+        distance: navigation.distance,
+        backend: navigation.backend,
+      }],
+    };
+  }
+  if (["grasp", "transfer", "release"].includes(command.action)) {
+    const legacyPlan = planAgentIntent(project, frame, {
+      kind: "interact",
+      actorId: command.actorId,
+      targetId: command.targetId,
+      affordance: command.affordance,
+      ...(command.recipientId ? { recipientId: command.recipientId } : {}),
+      ...(command.placementTargetId ? { placementTargetId: command.placementTargetId } : {}),
+    }, navigationOptions);
+    if (!legacyPlan.ok) return legacyPlan;
+    return { ...legacyPlan, command };
+  }
+  return {
+    ok: true,
+    command,
+    requiresNavigation: false,
+    steps: [{ kind: command.action === "speak" ? "speak" : "behavior", command }],
+  };
+}
+
+export function compileAgentBehaviorPlan(plan, frameTime = 0, options = {}) {
+  if (!plan?.ok || !plan.command || !Array.isArray(plan.steps)) return [];
+  const speed = Math.max(0.2, Number(options.speed) || 1.4);
+  const interactionDuration = Math.max(0.2, Number(options.interactionDuration) || 1.1);
+  const behaviorDuration = Math.max(0.2, Number(options.behaviorDuration) || 0.9);
+  const command = plan.command;
+  const key = [command.requestId, command.actorId, command.action, command.targetId]
+    .filter(Boolean).join("-").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 96);
+  const timeKey = Math.round(Math.max(0, Number(frameTime) || 0) * 1000);
+  let cursor = Math.max(0, Number(frameTime) || 0);
+  const clips = [];
+  for (const [index, step] of plan.steps.entries()) {
+    const clipId = `agent-behavior-${key}-${timeKey}-${index}`;
+    if (step.kind === "navigate") {
+      const duration = Math.max(0.2, step.distance / speed);
+      clips.push({
+        id: `${clipId}-move`, type: "move", track: "character", label: `Agent · approach`,
+        start: cursor, duration, targetId: command.actorId, secondaryTargetId: command.targetId,
+        from: step.path[0], to: step.path.at(-1), path: step.path,
+        behaviorAction: "approach", hand: command.hand,
+        motion: { easing: "minimumJerk", orientToPath: true, turnPortion: 0.22 },
+      });
+      cursor += duration;
+    } else if (step.kind === "interact") {
+      clips.push({
+        id: `${clipId}-interaction`, type: "interaction", track: "character", label: `Agent · ${command.action}`,
+        start: cursor, duration: interactionDuration,
+        targetId: step.intent.targetId, secondaryTargetId: step.intent.actorId,
+        action: step.intent.action, behaviorAction: command.action, hand: command.hand,
+        actorNode: step.intent.actorNode, targetAnchor: step.intent.targetAnchor,
+        resultingState: step.intent.resultingState, ownershipMode: step.intent.ownershipMode,
+        holderAnchor: step.intent.holderAnchor, recipientId: step.intent.recipientId,
+        recipientAnchor: step.intent.recipientAnchor, placementTargetId: step.intent.placementTargetId,
+        placementAnchor: step.intent.placementAnchor, itemAnchor: step.intent.itemAnchor,
+        actorContactAnchor: step.intent.actorContactAnchor, motion: { easing: "minimumJerk" },
+      });
+      cursor += interactionDuration;
+    } else if (step.kind === "speak") {
+      const duration = Math.max(1, Math.min(8, 1.1 + command.utterance.length * 0.075));
+      clips.push({
+        id: `${clipId}-dialogue`, type: "dialogue", track: "dialogue", label: "Agent · speak",
+        start: cursor, duration, targetId: command.actorId, secondaryTargetId: command.targetId,
+        text: command.utterance, behaviorAction: "speak", hand: command.hand,
+      });
+      cursor += duration;
+    } else if (step.kind === "behavior") {
+      clips.push({
+        id: `${clipId}-${command.action}`, type: "behavior", track: "character", label: `Agent · ${command.action}`,
+        start: cursor, duration: behaviorDuration, targetId: command.actorId, secondaryTargetId: command.targetId,
+        behaviorAction: command.action, hand: command.hand,
+      });
+      cursor += behaviorDuration;
+    }
+  }
+  return clips;
+}
+
+export function compileAgentBehaviorCommand(project, frame, rawCommand, options = {}) {
+  const plan = planAgentBehaviorCommand(project, frame, rawCommand, options.navigationOptions ?? {});
+  return { ...plan, clips: compileAgentBehaviorPlan(plan, frame?.time ?? 0, options.motionOptions ?? {}) };
+}
+
+export async function runAgentBehaviorTurn({
+  project,
+  frame,
+  actorId,
+  decide,
+  navigationOptions = {},
+  motionOptions = {},
+}) {
+  if (typeof decide !== "function") throw new Error("Agent 行为适配器必须提供 decide(observation) 函数。");
+  const observation = buildAgentObservation(project, frame, actorId);
+  const rawCommand = await decide(structuredClone(observation));
+  let plan;
+  if (String(rawCommand?.actorId ?? "") !== actorId) {
+    plan = { ok: false, code: "actor_scope_violation", message: "Agent 只能控制本次 observation 声明的 actor。" };
+  } else {
+    plan = planAgentBehaviorCommand(project, frame, rawCommand, navigationOptions);
+  }
+  const clips = compileAgentBehaviorPlan(plan, frame?.time ?? 0, motionOptions);
+  const commandSha256 = await hashCanonicalValue(rawCommand ?? null);
+  const sceneSha256 = await hashProject(project);
+  const clipsSha256 = await hashCanonicalValue(clips);
+  const receipt = {
+    schemaVersion: 1,
+    receiptId: `behavior-${commandSha256.slice(0, 16)}`,
+    status: plan.ok ? "ACCEPTED" : "REJECTED",
+    code: plan.ok ? "semantic_action_compiled" : plan.code,
+    action: plan.command?.action ?? null,
+    actorId,
+    commandSha256,
+    sceneSha256,
+    clipsSha256,
+    generatedClipIds: clips.map((clip) => clip.id),
+    runtimeAuthority: ["transforms", "pathfinding", "collision", "animation", "IK", "ownership"],
+  };
+  return { observation, plan, clips, receipt };
 }
 
 export function validateAssetIntent(rawIntent, slots) {

@@ -15,6 +15,7 @@ import {
   DirectorRuntime,
   SCREENPLAY_SYNTAX,
   compileScreenplay,
+  evaluateTimeline,
   formatTimecode,
 } from "./director.js";
 import {
@@ -27,23 +28,53 @@ import {
   synchronizePathEndpoints,
 } from "./camera-editor.js";
 import {
+  AGENT_BEHAVIOR_CONTRACT,
+  buildAgentObservation,
+  compileAgentBehaviorCommand,
   decideCp02ReframeIntent,
+  runAgentBehaviorTurn,
   runSceneCompositionTurn,
 } from "./agent-runtime.js";
+import {
+  RIG_SLOT_DEFINITIONS,
+  autoMapRigBones,
+  evaluateRigMapping,
+} from "./character-rig.js";
 import {
   applyScenePatch,
   hashProject,
   undoScenePatch,
 } from "./scene-patch-runtime.js";
 import { loadCasePack } from "./case-pack-runtime.js";
+import { ProjectPersistence, utf8ByteLength } from "./project-persistence.js";
+import {
+  createPortableProjectPackage,
+  filesForPortableBinding,
+  importPortableProjectPackage,
+  persistPortableFile,
+  persistPortableFiles,
+} from "./portable-project-package.js";
+import {
+  applyGuardedInteractionPlan,
+  compileGuardedInteractionPlan,
+} from "./cp03/capability-gate.js";
+import {
+  buildLocalScriptedProposal,
+  createCp03EncounterProject,
+  createLocalEngineeringArchive,
+  createLocalViewerApproval,
+} from "./cp03/audience-runtime.js";
 import cp02AssetCatalog from "../projects/window-case-cp02/asset-catalog.json";
 import cp02SceneSlots from "../projects/window-case-cp02/scene-slots.json";
 
 const STORAGE_KEY = "blockout-studio.project.v3";
 const LEGACY_STORAGE_KEY_V2 = "blockout-studio.project.v2";
 const LEGACY_STORAGE_KEY = "blockout-studio.project.v1";
+const LOCAL_STORAGE_AUTOSAVE_LIMIT = 3_500_000;
 const searchParams = new URLSearchParams(window.location.search);
 const isCp02Case = searchParams.get("case") === "pact-cp02";
+const isCp03Case = searchParams.get("case") === "pact-cp03";
+const projectPersistence = new ProjectPersistence();
 const cp02ProjectUrl = new URL(
   "../projects/window-case-cp02/cp02-mutable-room.blockout.json",
   import.meta.url,
@@ -136,9 +167,16 @@ const lockIcon = (locked) => locked
   ? '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>'
   : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 7.5-2"/></svg>';
 
-const restoreProject = () => {
+const restoreProject = async () => {
   if (isCp02Case) return createEmptyProject("PACT CP02 · 正在载入本地场景");
-  const saved = localStorage.getItem(STORAGE_KEY)
+  if (isCp03Case) return createCp03EncounterProject();
+  let saved = null;
+  try {
+    saved = (await projectPersistence.loadSnapshot(STORAGE_KEY))?.json ?? null;
+  } catch (error) {
+    console.warn("IndexedDB 恢复库不可用，尝试旧版本地保存。", error);
+  }
+  saved ??= localStorage.getItem(STORAGE_KEY)
     ?? localStorage.getItem(LEGACY_STORAGE_KEY_V2)
     ?? localStorage.getItem(LEGACY_STORAGE_KEY);
   if (!saved) return createStarterProject();
@@ -158,7 +196,7 @@ const ensureInitialTimeline = (sourceProject) => {
   return project;
 };
 
-const store = new SceneStore(ensureInitialTimeline(restoreProject()));
+const store = new SceneStore(ensureInitialTimeline(await restoreProject()));
 const editor = new ThreeSceneAdapter($("#viewport"), store);
 
 const elements = {
@@ -183,6 +221,7 @@ const elements = {
   undo: $("#undo"),
   redo: $("#redo"),
   save: $("#save-project"),
+  savePortable: $("#save-portable-project"),
   load: $("#load-project"),
   file: $("#project-file"),
   moreMenuButton: $("#more-menu"),
@@ -244,22 +283,28 @@ const elements = {
   entityMass: $("#entity-mass"),
   entityFriction: $("#entity-friction"),
   entityRestitution: $("#entity-restitution"),
+  physicsRuntimeStatus: $("#physics-runtime-status"),
   chooseAssetFile: $("#choose-asset-file"),
+  chooseAnimationFile: $("#choose-animation-file"),
   chooseSpatialBridge: $("#choose-spatial-bridge"),
   chooseSpatialFiles: $("#choose-spatial-files"),
   clearAssetFile: $("#clear-asset-file"),
   assetFile: $("#asset-file"),
+  animationFile: $("#animation-file"),
   spatialBridgeFolder: $("#spatial-bridge-folder"),
   spatialBridgeFiles: $("#spatial-bridge-files"),
   assetSessionTitle: $("#asset-session-title"),
   assetSessionDetail: $("#asset-session-detail"),
   assetRuntimeControls: $("#asset-runtime-controls"),
+  assetBehaviorState: $("#asset-behavior-state"),
+  assetIkState: $("#asset-ik-state"),
   assetActionPreview: $("#asset-action-preview"),
   playAssetAction: $("#play-asset-action"),
   assetExpressionPreview: $("#asset-expression-preview"),
   assetExpressionWeight: $("#asset-expression-weight"),
   assetExpressionOutput: $("#asset-expression-output"),
   clearAssetExpression: $("#clear-asset-expression"),
+  openRigMapping: $("#open-rig-mapping"),
   assetRigDetails: $("#asset-rig-details"),
   assetDetailSummary: $("#asset-detail-summary"),
   assetRigDetail: $("#asset-rig-detail"),
@@ -336,16 +381,47 @@ const elements = {
   cp02CasePackAssets: $("#cp02-case-pack-assets"),
   cp02PatchPreview: $("#cp02-patch-preview"),
   cp02Phase: $("#cp02-phase"),
+  cp03Panel: $("#cp03-panel"),
+  cp03ViewerInput: $("#cp03-viewer-input"),
+  cp03Propose: $("#cp03-propose"),
+  cp03TraceSource: $("#cp03-trace-source"),
+  cp03PublicTrace: $("#cp03-public-trace"),
+  cp03Guardian: $("#cp03-guardian"),
+  cp03Outcome: $("#cp03-outcome"),
+  cp03DraftHash: $("#cp03-draft-hash"),
+  cp03CopyHash: $("#cp03-copy-hash"),
+  cp03Receipt: $("#cp03-receipt"),
+  cp03Approve: $("#cp03-approve"),
+  cp03Reject: $("#cp03-reject"),
+  cp03GateStatus: $("#cp03-gate-status"),
+  cp03ExportArchive: $("#cp03-export-archive"),
+  cp03Reset: $("#cp03-reset"),
+  cp03Phase: $("#cp03-phase"),
+  rigMappingDialog: $("#rig-mapping-dialog"),
+  closeRigMapping: $("#close-rig-mapping"),
+  rigMappingSubtitle: $("#rig-mapping-subtitle"),
+  rigMappingCoverage: $("#rig-mapping-coverage"),
+  rigMappingConfidence: $("#rig-mapping-confidence"),
+  rigMappingCapability: $("#rig-mapping-capability"),
+  rigMappingSearch: $("#rig-mapping-search"),
+  rigMappingWarning: $("#rig-mapping-warning"),
+  rigMappingList: $("#rig-mapping-list"),
+  resetRigMapping: $("#reset-rig-mapping"),
+  autoMapRig: $("#auto-map-rig"),
+  saveRigMapping: $("#save-rig-mapping"),
   toast: $("#toast"),
 };
 
 let currentState = store.getState();
 let autosaveTimer = 0;
+let autosaveRevision = 0;
+let autosaveWrite = Promise.resolve();
 let toastTimer = 0;
 let libraryMode = "build";
 let inspectorMode = "transform";
 let directorMode = "edit";
 let currentFrame = null;
+let latestPhysicsReport = { status: "IDLE", backend: "deterministic-kinematic" };
 let runtime = null;
 let renderedTimelineKey = "";
 let timelineClipNodes = new Map();
@@ -356,6 +432,15 @@ let lastDialogueClipId = null;
 let cp02LastHashedProject = null;
 let cp02HashSequence = 0;
 let cp02RuntimeCasePack = null;
+const rigMappingSession = {
+  objectId: null,
+  sourceName: null,
+  boneNames: [],
+  saved: {},
+  savedSources: {},
+  draft: {},
+  sources: {},
+};
 
 const cp02Evidence = {
   ready: false,
@@ -386,6 +471,20 @@ const cp02Evidence = {
   latestPerformanceReport: null,
 };
 
+const cp03Session = {
+  selectedAction: "Translate",
+  ordinal: 0,
+  busy: false,
+  outcome: "READY",
+  phase: "本地演练已就绪；尚未调用任何外部模型。",
+  gateStatus: "等待提案",
+  currentProposal: null,
+  proposals: [],
+  approvals: [],
+  receipts: [],
+  effects: [],
+};
+
 const selectedObject = () => currentState.project.objects.find((object) => object.id === currentState.selectionId) ?? null;
 
 const showToast = (message) => {
@@ -395,6 +494,122 @@ const showToast = (message) => {
   toastTimer = window.setTimeout(() => {
     elements.toast.hidden = true;
   }, 2400);
+};
+
+const rigDefinitionBySlot = new Map(RIG_SLOT_DEFINITIONS.map((definition) => [definition.slot, definition]));
+
+const renderRigMappingEditor = () => {
+  if (!rigMappingSession.objectId) return;
+  const report = editor.assetReport(rigMappingSession.objectId);
+  if (!report) return;
+  const diagnostics = evaluateRigMapping(rigMappingSession.draft, rigMappingSession.boneNames, {
+    sources: rigMappingSession.sources,
+  });
+  elements.rigMappingCoverage.textContent = `${diagnostics.mappedCount} / ${diagnostics.slots.length}`;
+  elements.rigMappingConfidence.textContent = `${Math.round(diagnostics.overallConfidence * 100)}%`;
+  elements.rigMappingCapability.textContent = diagnostics.valid ? "可用" : "降级";
+  elements.rigMappingCapability.dataset.status = diagnostics.valid ? "ready" : "warning";
+  elements.rigMappingCapability.title = diagnostics.valid
+    ? "双手、双脚与头颈所需骨骼已映射；运行时可启用全身约束。"
+    : "补齐黄色提示中的必需骨骼，并消除重复映射后即可启用完整全身 IK。";
+  elements.saveRigMapping.disabled = diagnostics.duplicateBones.length > 0;
+  if (diagnostics.duplicateBones.length) {
+    elements.rigMappingWarning.dataset.status = "warning";
+    elements.rigMappingWarning.textContent = `同一骨骼不能占用多个槽位：${diagnostics.duplicateBones.map((entry) => entry.boneName).join("、")}。`;
+  } else if (diagnostics.missingRequired.length) {
+    elements.rigMappingWarning.dataset.status = "warning";
+    elements.rigMappingWarning.textContent = `缺少 ${diagnostics.missingRequired.map((slot) => rigDefinitionBySlot.get(slot)?.label ?? slot).join("、")}；可以保存，但对应 IK 会保持降级。`;
+  } else {
+    elements.rigMappingWarning.dataset.status = "ready";
+    elements.rigMappingWarning.textContent = "必需骨骼映射完整；双手、双脚与头颈约束可由运行时接管。";
+  }
+
+  const query = elements.rigMappingSearch.value.trim().toLowerCase();
+  const visibleSlots = diagnostics.slots.filter((slot) => [
+    slot.slot,
+    slot.label,
+    slot.group,
+    slot.boneName,
+  ].filter(Boolean).some((value) => String(value).toLowerCase().includes(query)));
+  elements.rigMappingList.replaceChildren();
+  let currentGroup = null;
+  for (const slot of visibleSlots) {
+    if (slot.group !== currentGroup) {
+      currentGroup = slot.group;
+      const heading = document.createElement("h3");
+      heading.className = "rig-mapping-group-title";
+      heading.textContent = currentGroup;
+      elements.rigMappingList.appendChild(heading);
+    }
+    const row = document.createElement("label");
+    row.className = "rig-mapping-row";
+    row.dataset.slot = slot.slot;
+    row.dataset.status = slot.duplicate ? "duplicate" : slot.boneName ? "mapped" : "missing";
+    const label = document.createElement("span");
+    label.className = "rig-mapping-label";
+    const strong = document.createElement("strong");
+    strong.textContent = slot.label;
+    const small = document.createElement("small");
+    small.textContent = `${slot.slot}${slot.required ? " · 必需" : " · 可选"}`;
+    label.append(strong, small);
+    const select = document.createElement("select");
+    select.className = "field-control";
+    select.setAttribute("aria-label", `${slot.label}骨骼`);
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "— 未映射 —";
+    select.appendChild(empty);
+    for (const boneName of rigMappingSession.boneNames) {
+      const option = document.createElement("option");
+      option.value = boneName;
+      option.textContent = boneName;
+      select.appendChild(option);
+    }
+    select.value = slot.boneName ?? "";
+    select.addEventListener("change", () => {
+      rigMappingSession.draft[slot.slot] = select.value || null;
+      rigMappingSession.sources[slot.slot] = select.value ? "manual" : "unmapped";
+      renderRigMappingEditor();
+    });
+    const confidence = document.createElement("span");
+    confidence.className = "rig-mapping-confidence";
+    confidence.textContent = slot.boneName ? `${Math.round(slot.confidence * 100)}%` : "缺失";
+    row.append(label, select, confidence);
+    elements.rigMappingList.appendChild(row);
+  }
+  if (!visibleSlots.length) {
+    const empty = document.createElement("p");
+    empty.className = "rig-mapping-warning";
+    empty.textContent = "没有匹配的语义槽位或骨骼名称。";
+    elements.rigMappingList.appendChild(empty);
+  }
+};
+
+const restoreSavedRigRuntime = () => {
+  if (!rigMappingSession.objectId) return;
+  editor.setAssetRigBindings(rigMappingSession.objectId, rigMappingSession.saved);
+  editor.previewAssetRig(rigMappingSession.objectId, "reset");
+};
+
+const openRigMappingEditor = () => {
+  const object = selectedObject();
+  const report = object ? editor.assetReport(object.id) : null;
+  if (!object || !report?.capabilities.skeleton || !report.boneNames.length) {
+    showToast("请先选择并导入带蒙皮骨架的 GLB 角色");
+    return;
+  }
+  rigMappingSession.objectId = object.id;
+  rigMappingSession.sourceName = report.sourceName;
+  rigMappingSession.boneNames = [...report.boneNames].sort((left, right) => left.localeCompare(right));
+  rigMappingSession.saved = Object.fromEntries(RIG_SLOT_DEFINITIONS.map(({ slot }) => [slot, report.bones[slot] ?? null]));
+  rigMappingSession.savedSources = { ...report.boneSources };
+  rigMappingSession.draft = { ...rigMappingSession.saved };
+  rigMappingSession.sources = { ...rigMappingSession.savedSources };
+  elements.rigMappingSubtitle.textContent = `${object.name} · ${report.sourceName} · ${report.boneCount} 根骨骼`;
+  elements.rigMappingSearch.value = "";
+  document.querySelectorAll("[data-rig-test][aria-pressed]").forEach((button) => button.setAttribute("aria-pressed", "false"));
+  renderRigMappingEditor();
+  if (!elements.rigMappingDialog.open) elements.rigMappingDialog.showModal();
 };
 
 const cp02ProtectedObjectIds = (project) => project.objects
@@ -1115,9 +1330,20 @@ const renderInspector = (state) => {
   elements.entityMass.disabled = directorMode === "preview" || object.entity.physics.bodyType === "static";
   elements.entityFriction.disabled = directorMode === "preview";
   elements.entityRestitution.disabled = directorMode === "preview";
+  const physicsCopy = {
+    LOADING: "Rapier WASM 正在载入；载入完成前继续使用确定性运动学后端。",
+    READY: `Rapier 60 Hz 已运行 · 重力 ${latestPhysicsReport.gravity?.join(", ") ?? "0, -9.81, 0"} · 动态体 ${latestPhysicsReport.bodyCounts?.dynamic ?? 0}`,
+    ERROR: `Rapier 启动失败：${latestPhysicsReport.message ?? "未知错误"}；已保持确定性后端。`,
+    DISABLED: "编辑模式不运行刚体；切换到预览后按需载入 Rapier。",
+    IDLE: object.entity.physics.bodyType === "dynamic"
+      ? "切换到预览后将按需载入 Rapier 60 Hz 重力与刚体碰撞。"
+      : "当前物体由静态／运动学权威控制；动态物体存在时预览会按需载入 Rapier。",
+  }[latestPhysicsReport.status] ?? "物理运行时等待预览。";
+  elements.physicsRuntimeStatus.textContent = physicsCopy;
   const assetReport = editor.assetReport(object.id);
   const spatialReport = assetReport?.spatialBridge ?? null;
   elements.chooseAssetFile.disabled = directorMode === "preview";
+  elements.chooseAnimationFile.disabled = directorMode === "preview";
   elements.chooseSpatialBridge.disabled = directorMode === "preview";
   elements.chooseSpatialFiles.disabled = directorMode === "preview";
   elements.clearAssetFile.disabled = directorMode === "preview";
@@ -1130,9 +1356,16 @@ const renderInspector = (state) => {
       : `${assetReport.format} · ${assetReport.meshCount} 网格 · ${assetReport.skinnedMeshCount} 蒙皮 · ${assetReport.boneCount} 骨骼 · ${assetReport.clipNames.length} 动作 · ${assetReport.morphTargetNames.length} Morph`
     : "选择 OBJ／GLB 模型，或导入含 spatial-bridge.json 的 RGB-D 工程。";
   elements.assetRuntimeControls.hidden = !assetReport || Boolean(spatialReport);
+  elements.chooseAnimationFile.hidden = !assetReport?.capabilities.animationRetargeting || Boolean(spatialReport);
   elements.assetRigDetails.hidden = !assetReport;
   elements.assetDetailSummary.textContent = spatialReport ? "空间合同与边界" : "骨架与控制接口";
   if (assetReport) {
+    elements.assetBehaviorState.textContent = assetReport.runtime.behavior?.state ?? "idle";
+    elements.assetIkState.textContent = assetReport.capabilities.fullBodyIk
+      ? `全身 IK · 双手 · 脚锁`
+      : assetReport.capabilities.handIk || assetReport.capabilities.footIk
+        ? `部分 IK · ${assetReport.ikChains.length} 条链`
+        : "IK 未就绪";
     const assetKey = `${object.id}:${assetReport.sourceName}`;
     const mappedActions = Object.entries(assetReport.animations).filter(([, name]) => name);
     const mappedActionNames = new Set(mappedActions.map(([, name]) => name));
@@ -1173,6 +1406,7 @@ const renderInspector = (state) => {
     elements.assetExpressionPreview.disabled = locked || !assetReport.capabilities.expressions;
     elements.assetExpressionWeight.disabled = locked || !assetReport.capabilities.expressions;
     elements.clearAssetExpression.disabled = locked || !assetReport.capabilities.expressions;
+    elements.openRigMapping.disabled = locked || !assetReport.capabilities.skeleton;
     const boneBindings = Object.entries(assetReport.bones).filter(([, name]) => name)
       .map(([slot, name]) => `${slot}→${name}`).join("、") || "无";
     const expressionBindings = mappedExpressions.map(([slot, name]) => `${slot}→${name}`).join("、") || "无";
@@ -1180,7 +1414,7 @@ const renderInspector = (state) => {
       ? `已校验 RGB 与深度预览 2 个工件；合同指纹 ${spatialReport.contractSha256.slice(0, 12)}…。近白值沿表面法线向前，但仍是相对深度，不是米制重建。载体负责位置、旋转和尺寸；表面不会自动变成碰撞体。`
       : assetReport.format === "OBJ"
         ? "静态 OBJ：没有骨骼、蒙皮权重、动画或 Morph；如需角色控制请导出为 GLB。"
-        : `骨架映射：${boneBindings}。表情映射：${expressionBindings}。运行时接口：playAction、setExpression、setBonePose。`;
+        : `骨架映射：${boneBindings}。表情映射：${expressionBindings}。运行时接口：setBehaviorState、setRigBindings、setBonePose、setLimbIk、setFootLock、setLookTarget、retargetAnimationsFrom；角色状态机负责双手、双脚与头颈约束。`;
     elements.assetRigDetail.textContent = `${rigSummary}${assetReport.warnings.length ? ` 提示：${assetReport.warnings.join("；")}` : ""}`;
   }
   elements.interactionTrigger.value = object.entity.interaction.trigger;
@@ -1503,12 +1737,16 @@ const renderSimulationStatus = (frame) => {
   const collisionLabel = collision
     ? ` · 防穿透 ${collision.resolvedCount ?? 0} 处 · 残余 ${Number(collision.residualPenetration ?? 0).toFixed(3)}m`
     : "";
+  const physics = simulation.physics;
+  const physicsLabel = physics
+    ? ` · Rapier 动态体 ${physics.bodyCounts?.dynamic ?? 0}`
+    : "";
   const interaction = frame.interactions?.find((item) => item.ownershipMode && item.ownershipMode !== "none")
     ?? frame.interactions?.[0];
   const names = new Map(currentState.project.objects.map((object) => [object.id, object.name]));
   let state = "idle";
   let phase = "等待交互";
-  let detail = "确定性运动学后端 · 尚未接入刚体动力学";
+  let detail = physics ? `Rapier 重力／刚体已接入${physicsLabel}` : "确定性运动学后端 · 无活动动态刚体";
 
   if (violation) {
     state = "error";
@@ -1526,20 +1764,20 @@ const renderSimulationStatus = (frame) => {
     const targetName = names.get(interaction.targetId) ?? interaction.targetId;
     const error = Number(interaction.constraintError);
     const errorLabel = Number.isFinite(error) ? ` · 剩余行程 ${error.toFixed(3)}m` : "";
-    detail = `${mode} · ${actorName} → ${targetName}${errorLabel}${collisionLabel}`;
+    detail = `${mode} · ${actorName} → ${targetName}${errorLabel}${collisionLabel}${physicsLabel}`;
   } else {
     const heldEntry = Object.entries(simulation.ownership ?? {}).find(([, value]) => value.status === "held");
     const placedEntry = Object.entries(simulation.ownership ?? {}).find(([, value]) => value.status === "placed");
     if (heldEntry) {
       state = "held";
       phase = "持续持有";
-      detail = `${names.get(heldEntry[0]) ?? heldEntry[0]} · 持有者 ${names.get(heldEntry[1].holderId) ?? heldEntry[1].holderId}${collisionLabel}`;
+      detail = `${names.get(heldEntry[0]) ?? heldEntry[0]} · 持有者 ${names.get(heldEntry[1].holderId) ?? heldEntry[1].holderId}${collisionLabel}${physicsLabel}`;
     } else if (placedEntry) {
       state = "placed";
       phase = "放置完成";
-      detail = `${names.get(placedEntry[0]) ?? placedEntry[0]} · 接触面 ${names.get(placedEntry[1].placementTargetId) ?? placedEntry[1].placementTargetId}${collisionLabel}`;
+      detail = `${names.get(placedEntry[0]) ?? placedEntry[0]} · 接触面 ${names.get(placedEntry[1].placementTargetId) ?? placedEntry[1].placementTargetId}${collisionLabel}${physicsLabel}`;
     } else if (collision) {
-      detail = `确定性运动学后端${collisionLabel}`;
+      detail = `确定性运动学后端${collisionLabel}${physicsLabel}`;
     }
   }
 
@@ -1749,25 +1987,38 @@ const togglePlayback = () => {
 };
 
 const scheduleAutosave = (project) => {
-  if (isCp02Case) {
-    elements.autosaveStatus.textContent = "CP02 临时会话 · 不写入默认项目";
+  if (isCp02Case || isCp03Case) {
+    elements.autosaveStatus.textContent = `${isCp02Case ? "CP02" : "CP03"} 临时会话 · 不写入默认项目`;
     return;
   }
   window.clearTimeout(autosaveTimer);
+  const revision = ++autosaveRevision;
   elements.autosaveStatus.textContent = "保存中…";
   autosaveTimer = window.setTimeout(() => {
-    try {
-      const json = serializeProject(project);
-      if (json.length > 3_500_000) throw new Error("项目过大，已停止本地自动保存");
-      localStorage.setItem(STORAGE_KEY, json);
-      localStorage.removeItem(LEGACY_STORAGE_KEY_V2);
-      localStorage.removeItem(LEGACY_STORAGE_KEY);
-      const time = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(new Date());
-      elements.autosaveStatus.textContent = `已自动保存 ${time}`;
-    } catch (error) {
-      elements.autosaveStatus.textContent = "自动保存失败";
-      console.warn(error);
-    }
+    const json = serializeProject(project);
+    autosaveWrite = autosaveWrite.then(async () => {
+      if (revision !== autosaveRevision) return;
+      const bytes = utf8ByteLength(json);
+      try {
+        await projectPersistence.saveSnapshot(STORAGE_KEY, json);
+        if (bytes <= LOCAL_STORAGE_AUTOSAVE_LIMIT) localStorage.setItem(STORAGE_KEY, json);
+        else localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(LEGACY_STORAGE_KEY_V2);
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+        if (revision !== autosaveRevision) return;
+        const time = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(new Date());
+        elements.autosaveStatus.textContent = `恢复库已保存 ${time} · ${(bytes / 1_000_000).toFixed(1)} MB`;
+      } catch (error) {
+        try {
+          if (bytes > LOCAL_STORAGE_AUTOSAVE_LIMIT) throw error;
+          localStorage.setItem(STORAGE_KEY, json);
+          elements.autosaveStatus.textContent = "已降级保存到浏览器本地";
+        } catch {
+          elements.autosaveStatus.textContent = "恢复保存失败 · 请导出工程包";
+        }
+        console.warn(error);
+      }
+    });
   }, 280);
 };
 
@@ -1793,6 +2044,10 @@ editor.setPerformanceHandler((report) => {
   const quality = adaptationEnabled ? qualityScale : 1;
   elements.performanceQuality.textContent = `画质 ${Math.round(quality * 100)}% · ${effectsLabel} · P95 ${p95Ms.toFixed(1)}ms`;
   elements.performanceIndicator.classList.toggle("is-slow", fps < 45 || p95Ms > 30);
+});
+editor.setPhysicsHandler((report) => {
+  latestPhysicsReport = report;
+  renderInspector(currentState);
 });
 editor.setPreviewInteractionHandler((id) => {
   const object = currentState.project.objects.find((candidate) => candidate.id === id);
@@ -1949,6 +2204,188 @@ const setupCp02Case = () => {
   renderCp02Surface();
   void loadCp02LocalProject();
   void loadCp02LocalCasePack();
+};
+
+const renderCp03Surface = () => {
+  if (!isCp03Case) return;
+  const proposed = cp03Session.outcome === "PROPOSED" && Boolean(cp03Session.currentProposal);
+  elements.cp03Panel.dataset.outcome = cp03Session.outcome;
+  document.querySelectorAll("[data-cp03-action]").forEach((button) => {
+    const active = button.dataset.cp03Action === cp03Session.selectedAction;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+    button.disabled = cp03Session.busy || proposed || cp03Session.outcome === "APPLIED";
+  });
+  elements.cp03Propose.disabled = cp03Session.busy || proposed || cp03Session.outcome === "APPLIED";
+  elements.cp03ViewerInput.disabled = cp03Session.busy || proposed || cp03Session.outcome === "APPLIED";
+  elements.cp03Approve.disabled = cp03Session.busy || !proposed;
+  elements.cp03Reject.disabled = cp03Session.busy || !proposed;
+  elements.cp03CopyHash.disabled = !cp03Session.currentProposal?.draftHash;
+  elements.cp03ExportArchive.disabled = cp03Session.busy || cp03Session.proposals.length === 0;
+  elements.cp03Reset.hidden = !["APPLIED", "REJECTED", "ERROR"].includes(cp03Session.outcome);
+  elements.cp03Guardian.textContent = cp03Session.currentProposal?.guardianDisposition ?? "WAITING";
+  elements.cp03Outcome.textContent = cp03Session.outcome;
+  elements.cp03Outcome.dataset.outcome = cp03Session.outcome;
+  elements.cp03DraftHash.textContent = cp03Session.currentProposal?.draftHash ?? "尚未生成";
+  elements.cp03DraftHash.title = cp03Session.currentProposal?.draftHash ?? "";
+  elements.cp03TraceSource.textContent = cp03Session.currentProposal ? "SCRIPTED · 0 CALLS" : "WAITING";
+  elements.cp03PublicTrace.textContent = cp03Session.currentProposal?.publicTrace ?? "等待观众输入与动作选择。";
+  elements.cp03Receipt.textContent = cp03Session.receipts.at(-1)?.receiptId ?? "尚未执行";
+  elements.cp03GateStatus.textContent = cp03Session.gateStatus;
+  elements.cp03Phase.textContent = cp03Session.phase;
+};
+
+const runCp03LocalAction = async (status, action) => {
+  if (cp03Session.busy) return;
+  cp03Session.busy = true;
+  cp03Session.phase = status;
+  renderCp03Surface();
+  try {
+    await action();
+  } catch (error) {
+    cp03Session.outcome = "ERROR";
+    cp03Session.gateStatus = "FAIL CLOSED";
+    cp03Session.phase = error.message;
+  } finally {
+    cp03Session.busy = false;
+    renderCp03Surface();
+  }
+};
+
+const proposeCp03LocalDraft = () => runCp03LocalAction("正在构造零调用本地提案并计算规范哈希…", async () => {
+  const proposal = await buildLocalScriptedProposal({
+    action: cp03Session.selectedAction,
+    project: currentState.project,
+    viewerText: elements.cp03ViewerInput.value,
+    ordinal: ++cp03Session.ordinal,
+  });
+  cp03Session.currentProposal = proposal;
+  cp03Session.proposals.push(structuredClone(proposal));
+  cp03Session.outcome = "PROPOSED";
+  cp03Session.gateStatus = "等待观众批准精确哈希";
+  cp03Session.phase = "提案已冻结；批准或拒绝只作用于当前显示的 64 位哈希。";
+});
+
+const decideCp03LocalDraft = (decision) => runCp03LocalAction(
+  decision === "APPROVE" ? "正在验证观众批准与 Capability Gate…" : "正在记录观众拒绝…",
+  async () => {
+    const proposal = cp03Session.currentProposal;
+    if (!proposal) throw new Error("当前没有可审批提案。");
+    const approval = await createLocalViewerApproval(proposal, decision);
+    cp03Session.approvals.push(structuredClone(approval));
+    if (decision === "REJECT") {
+      cp03Session.outcome = "REJECTED";
+      cp03Session.gateStatus = "REJECTED · NO MUTATION";
+      cp03Session.phase = "观众已拒绝；场景与时间线未改变。";
+      return;
+    }
+
+    const plan = await compileGuardedInteractionPlan({
+      draft: proposal.draft,
+      approval,
+      project: currentState.project,
+      frame: evaluateTimeline(currentState.project, 0),
+    });
+    const result = await applyGuardedInteractionPlan({ project: currentState.project, plan });
+    store.replaceProject(result.project);
+    const effect = editor.showCp03ActionEffect(
+      proposal.draft.decision.actionSequence[0],
+      result.receipt.changedObjectIds,
+      { durationMs: 3200 },
+    );
+    cp03Session.receipts.push(structuredClone(result.receipt));
+    cp03Session.effects.push({
+      ...effect,
+      draftHash: proposal.draftHash,
+      receiptId: result.receipt.receiptId,
+    });
+    cp03Session.outcome = "APPLIED";
+    cp03Session.gateStatus = "PASS · HASH LINKED";
+    cp03Session.phase = `${effect.label}已进入真实 Three.js 视口；运行时回执与提案哈希连续。重置后可演练下一动作。`;
+    if (setDirectorMode("preview")) {
+      runtime?.seek(0);
+      runtime?.play();
+    }
+  },
+);
+
+const resetCp03Encounter = () => {
+  runtime?.stop();
+  setDirectorMode("edit");
+  editor.clearCp03ActionEffects();
+  clearRuntimeAssets();
+  store.replaceProject(createCp03EncounterProject());
+  editor.setCameraPreset("perspective");
+  cp03Session.currentProposal = null;
+  cp03Session.outcome = "READY";
+  cp03Session.gateStatus = "等待提案";
+  cp03Session.phase = "场景已恢复到本地演练基线；历史工程证据仍保留在本次会话。";
+  renderCp03Surface();
+};
+
+const exportCp03EngineeringArchive = () => {
+  const archive = createLocalEngineeringArchive({
+    proposals: cp03Session.proposals,
+    approvals: cp03Session.approvals,
+    receipts: cp03Session.receipts,
+    effects: cp03Session.effects,
+  });
+  const blob = new Blob([`${JSON.stringify(archive, null, 2)}\n`], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `cp03-local-engineering-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+  cp03Session.phase = "本地工程证据已导出；文件内明确标记 NOT_CHECKPOINT。";
+  renderCp03Surface();
+};
+
+const setupCp03Case = () => {
+  if (!isCp03Case) return;
+  document.body.classList.add("is-cp03-case");
+  elements.cp03Panel.hidden = false;
+  elements.projectName.disabled = true;
+  editor.setGovernanceOverlay(false);
+  document.querySelectorAll("[data-cp03-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      cp03Session.selectedAction = button.dataset.cp03Action;
+      renderCp03Surface();
+    });
+  });
+  elements.cp03Propose.addEventListener("click", () => void proposeCp03LocalDraft());
+  elements.cp03Approve.addEventListener("click", () => void decideCp03LocalDraft("APPROVE"));
+  elements.cp03Reject.addEventListener("click", () => void decideCp03LocalDraft("REJECT"));
+  elements.cp03CopyHash.addEventListener("click", async () => {
+    const hash = cp03Session.currentProposal?.draftHash;
+    if (!hash) return;
+    try {
+      await navigator.clipboard.writeText(hash);
+      showToast("Draft Hash 已复制");
+    } catch {
+      showToast("浏览器未允许剪贴板；可直接选择哈希文本复制");
+    }
+  });
+  elements.cp03ExportArchive.addEventListener("click", exportCp03EngineeringArchive);
+  elements.cp03Reset.addEventListener("click", resetCp03Encounter);
+  window.__PACT_CP03_EVIDENCE__ = Object.freeze({
+    snapshot: () => structuredClone({
+      schemaVersion: 1,
+      mode: "local-scripted-engineering",
+      providerKind: "scripted-local",
+      providerRequestsMade: 0,
+      selectedAction: cp03Session.selectedAction,
+      outcome: cp03Session.outcome,
+      gateStatus: cp03Session.gateStatus,
+      currentDraftHash: cp03Session.currentProposal?.draftHash ?? null,
+      proposalCount: cp03Session.proposals.length,
+      approvalCount: cp03Session.approvals.length,
+      receiptCount: cp03Session.receipts.length,
+      visualActions: cp03Session.effects.map((effect) => effect.action),
+      checkpointEligible: false,
+    }),
+  });
+  renderCp03Surface();
 };
 
 SCREENPLAY_SYNTAX.forEach((syntax) => {
@@ -2165,11 +2602,42 @@ elements.assetFile.addEventListener("change", async () => {
   elements.assetSessionDetail.textContent = "检查网格、比例、骨架、动作与表情 Morph，请稍候。";
   try {
     const report = await editor.loadAssetFile(object.id, file);
-    showToast(`已替换“${object.name}”：${report.format} · ${report.meshCount} 网格 · ${report.boneCount} 骨骼 · ${report.clipNames.length} 动作`);
+    const portable = await persistPortableFiles(projectPersistence, "model", [{ role: "model", file }]);
+    const latest = store.getState().project.objects.find((candidate) => candidate.id === object.id);
+    if (!latest) throw new Error("模型载入后目标物体已被移除。");
+    store.updateObject(object.id, { asset: { ...(latest.asset ?? {}), portable } });
+    showToast(`已替换并持久化“${object.name}”：${report.format} · ${report.boneCount} 骨骼 · ${report.clipNames.length} 动作`);
   } catch (error) {
     showToast(error.message);
   } finally {
     elements.assetFile.value = "";
+    renderInspector(currentState);
+  }
+});
+
+elements.chooseAnimationFile.addEventListener("click", () => elements.animationFile.click());
+elements.animationFile.addEventListener("change", async () => {
+  const object = selectedObject();
+  const file = elements.animationFile.files?.[0];
+  if (!object || !file) return;
+  elements.chooseAnimationFile.disabled = true;
+  elements.assetSessionDetail.textContent = "正在把动作骨架重定向到当前角色…";
+  try {
+    const result = await editor.loadRetargetAnimationFile(object.id, file);
+    const animationEntry = await persistPortableFile(projectPersistence, "animation", file);
+    const latest = store.getState().project.objects.find((candidate) => candidate.id === object.id);
+    const portable = latest?.asset?.portable;
+    if (!latest || portable?.kind !== "model") throw new Error("目标模型没有可更新的可移植资产绑定。");
+    const entries = [
+      ...portable.entries.filter((entry) => entry.role !== "animation"),
+      animationEntry,
+    ].sort((left, right) => left.role.localeCompare(right.role));
+    store.updateObject(object.id, { asset: { ...(latest.asset ?? {}), portable: { ...portable, entries } } });
+    showToast(`已重定向并打包 ${result.imported.length} 个动作：${result.imported.join("、")}`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    elements.animationFile.value = "";
     renderInspector(currentState);
   }
 });
@@ -2186,9 +2654,19 @@ const importSpatialSelection = async (input) => {
   elements.assetSessionTitle.textContent = "正在校验 RGB-D 工程…";
   elements.assetSessionDetail.textContent = "匹配桥接合同、RGB 与深度预览，并逐一校验 SHA-256。";
   try {
-    const report = await editor.loadSpatialBridgeFiles(object.id, files);
+    const { resolveSpatialBridgeFiles } = await import("./spatial-bridge-runtime.js");
+    const resolved = await resolveSpatialBridgeFiles(files);
+    const report = await editor.loadSpatialBridgeFiles(object.id, [resolved.bridgeFile, resolved.rgbFile, resolved.depthFile]);
+    const portable = await persistPortableFiles(projectPersistence, "spatial-bridge", [
+      { role: "bridge", file: resolved.bridgeFile },
+      { role: "rgb", file: resolved.rgbFile },
+      { role: "depth", file: resolved.depthFile },
+    ]);
+    const latest = store.getState().project.objects.find((candidate) => candidate.id === object.id);
+    if (!latest) throw new Error("RGB-D 载入后目标物体已被移除。");
+    store.updateObject(object.id, { asset: { ...(latest.asset ?? {}), portable } });
     const spatial = report.spatialBridge;
-    showToast(`已导入“${object.name}”的 RGB-D 表面：${spatial.imageSize.join("×")} · ${spatial.vertexCount} 顶点 · 2 个哈希已验证`);
+    showToast(`已导入并持久化“${object.name}”的 RGB-D 表面：${spatial.vertexCount} 顶点 · 3 个文件已打包`);
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -2202,6 +2680,7 @@ elements.spatialBridgeFiles.addEventListener("change", () => importSpatialSelect
 elements.clearAssetFile.addEventListener("click", () => {
   const object = selectedObject();
   if (!object || !editor.clearAsset(object.id)) return;
+  store.updateObject(object.id, { asset: object.asset ? { ...object.asset, portable: null } : null });
   renderInspector(currentState);
   showToast(`“${object.name}”已恢复为灰模`);
 });
@@ -2247,6 +2726,69 @@ elements.clearAssetExpression.addEventListener("click", () => {
   setControlValue(elements.assetExpressionWeight, 0);
   elements.assetExpressionOutput.textContent = "0%";
   showToast("已清除表情覆盖");
+});
+
+elements.openRigMapping.addEventListener("click", openRigMappingEditor);
+elements.closeRigMapping.addEventListener("click", () => elements.rigMappingDialog.close());
+elements.rigMappingDialog.addEventListener("click", (event) => {
+  if (event.target === elements.rigMappingDialog) elements.rigMappingDialog.close();
+});
+elements.rigMappingDialog.addEventListener("close", () => {
+  restoreSavedRigRuntime();
+  rigMappingSession.objectId = null;
+  renderInspector(currentState);
+});
+elements.rigMappingSearch.addEventListener("input", renderRigMappingEditor);
+elements.resetRigMapping.addEventListener("click", () => {
+  rigMappingSession.draft = { ...rigMappingSession.saved };
+  rigMappingSession.sources = { ...rigMappingSession.savedSources };
+  restoreSavedRigRuntime();
+  renderRigMappingEditor();
+  showToast("已恢复当前工程中保存的骨架映射");
+});
+elements.autoMapRig.addEventListener("click", () => {
+  const inferred = autoMapRigBones(rigMappingSession.boneNames);
+  rigMappingSession.draft = { ...inferred.bones };
+  rigMappingSession.sources = Object.fromEntries(RIG_SLOT_DEFINITIONS.map(({ slot }) => [
+    slot,
+    inferred.bones[slot] ? "auto" : "missing",
+  ]));
+  renderRigMappingEditor();
+  showToast("已按 Mixamo／通用 GLB 命名重新推断骨架");
+});
+elements.saveRigMapping.addEventListener("click", () => {
+  const object = currentState.project.objects.find((candidate) => candidate.id === rigMappingSession.objectId);
+  if (!object) return;
+  const bones = Object.fromEntries(RIG_SLOT_DEFINITIONS.map(({ slot }) => [slot, rigMappingSession.draft[slot] ?? null]));
+  const diagnostics = evaluateRigMapping(bones, rigMappingSession.boneNames, { sources: rigMappingSession.sources });
+  if (diagnostics.duplicateBones.length) {
+    showToast("请先解决重复骨骼映射");
+    return;
+  }
+  editor.setAssetRigBindings(object.id, bones);
+  const latest = currentState.project.objects.find((candidate) => candidate.id === object.id);
+  store.updateObject(object.id, { asset: { ...(latest.asset ?? {}), bones } });
+  rigMappingSession.saved = { ...bones };
+  rigMappingSession.savedSources = Object.fromEntries(RIG_SLOT_DEFINITIONS.map(({ slot }) => [
+    slot,
+    bones[slot] ? "manual" : "unmapped",
+  ]));
+  showToast(diagnostics.missingRequired.length
+    ? `映射已保存；${diagnostics.missingRequired.length} 个必需槽位保持降级`
+    : "骨架映射已保存；替换 GLB 时无需修改代码");
+  elements.rigMappingDialog.close();
+});
+document.querySelectorAll("[data-rig-test]").forEach((button) => {
+  button.addEventListener("click", () => {
+    if (!rigMappingSession.objectId) return;
+    editor.setAssetRigBindings(rigMappingSession.objectId, rigMappingSession.draft);
+    const ok = editor.previewAssetRig(rigMappingSession.objectId, button.dataset.rigTest);
+    document.querySelectorAll("[data-rig-test][aria-pressed]").forEach((candidate) => {
+      candidate.setAttribute("aria-pressed", String(ok && candidate === button && button.dataset.rigTest !== "reset"));
+    });
+    renderRigMappingEditor();
+    showToast(ok ? `骨架测试：${button.textContent}` : "当前映射不支持这个测试");
+  });
 });
 
 elements.referenceVisible.addEventListener("change", () => {
@@ -2408,6 +2950,45 @@ elements.delete.addEventListener("click", () => {
 
 const safeFilename = (name) => name.replace(/[\\/:*?"<>|]+/g, "-").trim() || "blockout-scene";
 
+const clearRuntimeAssets = () => {
+  for (const object of currentState.project.objects) editor.clearAsset(object.id, { resync: false });
+};
+
+const restorePortableAssets = async (project, { announce = true } = {}) => {
+  const bindings = project.objects.filter((object) => object.asset?.portable);
+  const report = { requested: bindings.length, restored: 0, failures: [] };
+  for (const object of bindings) {
+    try {
+      const descriptors = await filesForPortableBinding(projectPersistence, object.asset.portable);
+      if (object.asset.portable.kind === "model") {
+        await editor.loadAssetFile(object.id, descriptors.find((entry) => entry.role === "model").file);
+        const animation = descriptors.find((entry) => entry.role === "animation");
+        if (animation) await editor.loadRetargetAnimationFile(object.id, animation.file);
+      } else {
+        await editor.loadSpatialBridgeFiles(object.id, descriptors.map((entry) => entry.file));
+      }
+      report.restored += 1;
+    } catch (error) {
+      report.failures.push({ objectId: object.id, message: error.message });
+    }
+  }
+  if (announce && report.requested) {
+    showToast(report.failures.length
+      ? `已恢复 ${report.restored}/${report.requested} 个资产；缺失项请重新导入工程包`
+      : `已从内容库恢复 ${report.restored} 个模型／RGB-D 资产`);
+  }
+  window.__BLOCKOUT_PORTABLE_ASSETS__ = Object.freeze({ snapshot: () => structuredClone(report) });
+  renderInspector(currentState);
+  return report;
+};
+
+const replaceProjectAndRestoreAssets = async (project, { announce = true } = {}) => {
+  clearRuntimeAssets();
+  store.replaceProject(ensureInitialTimeline(project));
+  editor.setCameraPreset("perspective");
+  return restorePortableAssets(store.getState().project, { announce });
+};
+
 const saveProject = () => {
   const json = serializeProject(currentState.project);
   const blob = new Blob([json], { type: "application/json" });
@@ -2420,7 +3001,29 @@ const saveProject = () => {
   showToast("项目 JSON 已保存");
 };
 
+const savePortableProject = async () => {
+  elements.savePortable.disabled = true;
+  elements.savePortable.textContent = "正在打包…";
+  try {
+    await navigator.storage?.persist?.();
+    const result = await createPortableProjectPackage(currentState.project, projectPersistence, serializeProject);
+    const url = URL.createObjectURL(result.blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${safeFilename(currentState.project.name)}.blockout.zip`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    showToast(`可移植工程包已保存：${result.manifest.assets.length} 个内容寻址资产`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    elements.savePortable.disabled = false;
+    elements.savePortable.textContent = "保存可移植工程包";
+  }
+};
+
 elements.save.addEventListener("click", saveProject);
+elements.savePortable.addEventListener("click", () => void savePortableProject());
 elements.load.addEventListener("click", () => elements.file.click());
 elements.file.addEventListener("change", async () => {
   const file = elements.file.files?.[0];
@@ -2428,8 +3031,12 @@ elements.file.addEventListener("change", async () => {
   try {
     setDirectorMode("edit");
     runtime?.stop();
-    store.replaceProject(ensureInitialTimeline(parseProject(await file.text())));
-    editor.setCameraPreset("perspective");
+    if (/\.(?:blockout\.)?zip$/i.test(file.name) || file.type === "application/zip") {
+      const imported = await importPortableProjectPackage(file, projectPersistence, parseProject);
+      await replaceProjectAndRestoreAssets(imported.project);
+    } else {
+      await replaceProjectAndRestoreAssets(parseProject(await file.text()));
+    }
     showToast(`已载入“${store.getState().project.name}”`);
   } catch (error) {
     showToast(error.message);
@@ -2456,6 +3063,7 @@ elements.newProject.addEventListener("click", () => {
   elements.projectMenu.hidden = true;
   setDirectorMode("edit");
   runtime?.stop();
+  clearRuntimeAssets();
   store.replaceProject(createEmptyProject());
   editor.setCameraPreset("perspective");
   showToast("已创建空场景");
@@ -2465,6 +3073,7 @@ elements.loadDemo.addEventListener("click", () => {
   elements.projectMenu.hidden = true;
   setDirectorMode("edit");
   runtime?.stop();
+  clearRuntimeAssets();
   store.replaceProject(ensureInitialTimeline(createStarterProject()));
   editor.setCameraPreset("perspective");
   showToast("示例灰模已恢复");
@@ -2475,6 +3084,7 @@ elements.loadInteractionDemo.addEventListener("click", () => {
   elements.moreMenuButton.setAttribute("aria-expanded", "false");
   setDirectorMode("edit");
   runtime?.stop();
+  clearRuntimeAssets();
   store.replaceProject(createInteractionDemoProject());
   editor.setCameraPreset("perspective");
   setLibraryMode("screenplay");
@@ -2512,9 +3122,15 @@ document.addEventListener("keydown", (event) => {
   const isEditing = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
   const modifier = event.ctrlKey || event.metaKey;
   const isCp02Control = event.target instanceof Element && Boolean(event.target.closest("#cp02-panel"));
+  const isCp03Control = event.target instanceof Element && Boolean(event.target.closest("#cp03-panel"));
 
   if (isCp02Case && isCp02Control) return;
   if (isCp02Case) {
+    event.preventDefault();
+    return;
+  }
+  if (isCp03Case && isCp03Control) return;
+  if (isCp03Case) {
     event.preventDefault();
     return;
   }
@@ -2571,10 +3187,35 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+window.__BLOCKOUT_AGENT_BEHAVIOR__ = Object.freeze({
+  contract: AGENT_BEHAVIOR_CONTRACT,
+  actorIds: () => currentState.project.objects
+    .filter((object) => object.entity?.role === "character")
+    .map((object) => object.id),
+  observe: (actorId) => buildAgentObservation(
+    currentState.project,
+    currentFrame ?? evaluateTimeline(currentState.project, runtime?.time ?? 0),
+    actorId,
+  ),
+  compile: (command) => compileAgentBehaviorCommand(
+    currentState.project,
+    currentFrame ?? evaluateTimeline(currentState.project, runtime?.time ?? 0),
+    structuredClone(command),
+  ),
+  submit: (actorId, command) => runAgentBehaviorTurn({
+    project: currentState.project,
+    frame: currentFrame ?? evaluateTimeline(currentState.project, runtime?.time ?? 0),
+    actorId: String(actorId ?? ""),
+    decide: async () => structuredClone(command),
+  }),
+});
+
 window.addEventListener("beforeunload", () => {
   runtime?.dispose();
   editor.dispose();
 }, { once: true });
 
 setupCp02Case();
+setupCp03Case();
 editor.setCameraPreset("perspective");
+if (!isCp02Case) void restorePortableAssets(currentState.project, { announce: false });

@@ -76,11 +76,12 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>
           </button>
           <div id="project-menu" class="project-menu" hidden>
+            <button id="save-portable-project" type="button">保存可移植工程包</button>
             <button id="new-project" type="button">新建空场景</button>
             <button id="load-demo" type="button">恢复示例场景</button>
             <button id="load-interaction-demo" type="button">载入十秒交互仿真</button>
           </div>
-          <input id="project-file" type="file" accept="application/json,.json" hidden />
+          <input id="project-file" type="file" accept="application/json,application/zip,.json,.zip,.blockout.zip" hidden />
         </div>
       </header>
 
@@ -313,6 +314,65 @@
             </details>
 
             <p id="cp02-phase" class="cp02-phase" aria-live="polite">本地确定性运行时已就绪。</p>
+          </aside>
+
+          <aside id="cp03-panel" class="cp03-panel" aria-label="PACT CP03 五动作观众交互" hidden>
+            <header class="cp03-heading">
+              <div>
+                <span class="cp03-kicker">PACT · CP03</span>
+                <h2>五动作观众台</h2>
+              </div>
+              <span class="cp03-local-badge">0-CALL LOCAL HARNESS</span>
+            </header>
+
+            <p class="cp03-boundary">本地脚本工程验收，不是 Gemini／DeepSeek 成功证明，也不是正式 checkpoint。</p>
+
+            <label class="cp03-prompt" for="cp03-viewer-input">
+              <span>观众输入</span>
+              <textarea id="cp03-viewer-input" rows="3" maxlength="500" spellcheck="false">我记得杯子被拿起，但不确定是谁的手。</textarea>
+            </label>
+
+            <fieldset class="cp03-actions">
+              <legend>选择本轮动作</legend>
+              <button type="button" data-cp03-action="Translate" aria-pressed="true" class="is-active" title="转译对象之间的空间关系，并显示青色关系回声。"><strong>Translate</strong><span>转译关系 · 青色回声</span></button>
+              <button type="button" data-cp03-action="Reframe" aria-pressed="false" title="改变观看框架与光线重点，并保留原始场景依据。"><strong>Reframe</strong><span>重构观看 · 琥珀取景</span></button>
+              <button type="button" data-cp03-action="Merge" aria-pressed="false" title="合并两个关系但显式保留接缝，不抹平证据差异。"><strong>Merge</strong><span>保留接缝 · 紫色联结</span></button>
+              <button type="button" data-cp03-action="Continue" aria-pressed="false" title="把本轮状态作为可继续的终点，以绿色涟漪确认。"><strong>Continue</strong><span>结束并延续 · 绿色涟漪</span></button>
+              <button type="button" data-cp03-action="KeepOpaque" aria-pressed="false" title="拒绝替不确定内容下结论，以暗色遮罩保持不透明。"><strong>Keep Opaque</strong><span>保持不透明 · 暗色遮罩</span></button>
+            </fieldset>
+
+            <button id="cp03-propose" class="cp03-primary" type="button">生成本地哈希提案</button>
+
+            <section class="cp03-trace-card" aria-labelledby="cp03-trace-title">
+              <header><span id="cp03-trace-title">ROLE-ATTRIBUTED TRACE</span><b id="cp03-trace-source">WAITING</b></header>
+              <p id="cp03-public-trace" aria-live="polite">等待观众输入与动作选择。</p>
+            </section>
+
+            <dl class="cp03-proposal-facts">
+              <div><dt>Guardian</dt><dd id="cp03-guardian">WAITING</dd></div>
+              <div><dt>提案状态</dt><dd id="cp03-outcome" data-outcome="READY">READY</dd></div>
+              <div class="is-hash"><dt>不可变 Draft Hash</dt><dd><code id="cp03-draft-hash">尚未生成</code><button id="cp03-copy-hash" type="button" disabled>复制</button></dd></div>
+              <div><dt>执行回执</dt><dd id="cp03-receipt">尚未执行</dd></div>
+            </dl>
+
+            <div class="cp03-approval" role="group" aria-label="观众提案审批">
+              <button id="cp03-approve" type="button" disabled>批准这个哈希</button>
+              <button id="cp03-reject" type="button" disabled>拒绝</button>
+            </div>
+
+            <button id="cp03-reset" class="cp03-reset" type="button" hidden>恢复基线并演练下一动作</button>
+
+            <details class="cp03-diagnostics">
+              <summary>操作员诊断与归档</summary>
+              <dl>
+                <div><dt>Provider</dt><dd>scripted-local · 0 calls</dd></div>
+                <div><dt>Capability Gate</dt><dd id="cp03-gate-status">等待提案</dd></div>
+                <div><dt>归档资格</dt><dd>ENGINEERING ONLY</dd></div>
+              </dl>
+              <button id="cp03-export-archive" type="button">导出本地工程证据</button>
+            </details>
+
+            <p id="cp03-phase" class="cp03-phase" aria-live="polite">本地演练已就绪；尚未调用任何外部模型。</p>
           </aside>
 
           <aside id="camera-editor-panel" class="camera-editor-panel" aria-label="电影镜头编辑器" hidden>
@@ -590,7 +650,7 @@
                   <label for="entity-friction"><span>摩擦</span><input id="entity-friction" class="field-control" type="number" min="0" max="1" step="0.05" /></label>
                   <label for="entity-restitution"><span>弹性</span><input id="entity-restitution" class="field-control" type="number" min="0" max="1" step="0.05" /></label>
                 </div>
-                <p>当前保存为可导出的物理属性；动力学求解器将在物理阶段接入。</p>
+                <p id="physics-runtime-status">预览时自动启用：动态刚体由 Rapier 60 Hz 重力／碰撞求解；时间线与抓取中的对象保持运动学权威。</p>
               </details>
 
               <fieldset class="asset-fieldset">
@@ -601,14 +661,21 @@
                 </div>
                 <div class="asset-import-actions">
                   <button id="choose-asset-file" class="text-button is-primary" type="button">OBJ / GLB</button>
+                  <button id="choose-animation-file" class="text-button" type="button" hidden>动作 GLB</button>
                   <button id="choose-spatial-bridge" class="text-button" type="button">RGB-D 工程</button>
                   <button id="choose-spatial-files" class="text-button asset-spatial-fallback" type="button">改选桥接 + RGB + 深度</button>
                   <button id="clear-asset-file" class="text-button" type="button" hidden>恢复灰模</button>
                 </div>
                 <input id="asset-file" type="file" accept="model/gltf-binary,model/obj,.glb,.obj" hidden />
+                <input id="animation-file" type="file" accept="model/gltf-binary,.glb" hidden />
                 <input id="spatial-bridge-folder" type="file" accept="application/json,image/png,.json,.png" webkitdirectory multiple hidden />
                 <input id="spatial-bridge-files" type="file" accept="application/json,image/png,.json,.png" multiple hidden />
                 <div id="asset-runtime-controls" class="asset-runtime-controls" hidden>
+                  <div class="asset-behavior-readout" aria-label="角色动作运行时状态">
+                    <span>状态机</span>
+                    <strong id="asset-behavior-state">idle</strong>
+                    <small id="asset-ik-state">IK 未就绪</small>
+                  </div>
                   <label for="asset-action-preview"><span>动作预览</span><select id="asset-action-preview" class="field-control"></select></label>
                   <label for="asset-expression-preview"><span>表情／Morph</span><select id="asset-expression-preview" class="field-control"></select></label>
                   <label class="asset-expression-weight" for="asset-expression-weight">
@@ -617,12 +684,13 @@
                   </label>
                   <button id="play-asset-action" class="text-button" type="button">播放／重播动作</button>
                   <button id="clear-asset-expression" class="text-button" type="button">清除表情</button>
+                  <button id="open-rig-mapping" class="text-button rig-mapping-trigger" type="button">骨架映射编辑器</button>
                 </div>
                 <details id="asset-rig-details" class="asset-rig-details" hidden>
                   <summary id="asset-detail-summary">骨架与控制接口</summary>
                   <p id="asset-rig-detail"></p>
                 </details>
-                <small>模型导入会识别骨架与动作；RGB-D 优先选择 Layered Redraw 工程文件夹，目录选择不可用时可改选合同、RGB 和深度预览。两者都是会话级资产，不写入项目 JSON。</small>
+                <small>模型与 RGB-D 会写入浏览器内容寻址资产库；使用“保存可移植工程包”可连同二进制和 SHA-256 清单跨机器迁移。</small>
               </fieldset>
 
               <fieldset class="interaction-fieldset">
@@ -791,6 +859,53 @@
           </section>
         </div>
       </div>
+    </dialog>
+    <dialog id="rig-mapping-dialog" class="rig-mapping-dialog" aria-labelledby="rig-mapping-title">
+      <form method="dialog" class="rig-mapping-shell">
+        <header class="rig-mapping-header">
+          <div>
+            <span class="eyebrow">CHARACTER RIG</span>
+            <h2 id="rig-mapping-title">骨架映射编辑器</h2>
+            <p id="rig-mapping-subtitle">把 GLB 骨骼绑定到稳定语义槽位；替换模型后无需改代码。</p>
+          </div>
+          <button id="close-rig-mapping" class="icon-button" type="button" aria-label="关闭骨架映射编辑器" title="关闭">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
+        </header>
+
+        <section class="rig-mapping-overview" aria-label="骨架映射诊断">
+          <div><span>完整度</span><strong id="rig-mapping-coverage">0 / 0</strong></div>
+          <div><span>置信度</span><strong id="rig-mapping-confidence">0%</strong></div>
+          <div><span>全身 IK</span><strong id="rig-mapping-capability">未就绪</strong></div>
+        </section>
+
+        <label class="rig-mapping-search" for="rig-mapping-search">
+          <span>搜索语义槽位或骨骼名称</span>
+          <input id="rig-mapping-search" class="field-control" type="search" autocomplete="off" placeholder="例如：左手 / Hand.L" />
+        </label>
+
+        <div id="rig-mapping-warning" class="rig-mapping-warning" role="status" aria-live="polite"></div>
+        <div id="rig-mapping-list" class="rig-mapping-list" aria-label="骨架槽位映射"></div>
+
+        <section class="rig-test-panel" aria-label="实时骨架测试">
+          <div>
+            <strong>实时测试</strong>
+            <span>仅改变当前预览，不写入模型文件。</span>
+          </div>
+          <div class="rig-test-actions" role="group" aria-label="骨架测试动作">
+            <button type="button" class="text-button" data-rig-test="pose" aria-pressed="false" title="检查头部与左右上臂映射是否正确">姿势</button>
+            <button type="button" class="text-button" data-rig-test="hands" aria-pressed="false" title="让左右手同时追踪两个世界空间目标">双手 IK</button>
+            <button type="button" class="text-button" data-rig-test="feet" aria-pressed="false" title="在当前世界位置锁定左右脚底">脚底锁定</button>
+            <button type="button" class="text-button" data-rig-test="reset" title="清除测试姿势与 IK 目标">复位</button>
+          </div>
+        </section>
+
+        <footer class="rig-mapping-footer">
+          <button id="reset-rig-mapping" class="text-button" type="button">恢复已保存</button>
+          <button id="auto-map-rig" class="text-button" type="button">自动映射</button>
+          <button id="save-rig-mapping" class="text-button is-primary" type="button">保存映射</button>
+        </footer>
+      </form>
     </dialog>
     <input id="reference-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden />
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

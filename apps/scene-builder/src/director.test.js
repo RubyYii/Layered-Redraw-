@@ -225,6 +225,65 @@ describe("timeline evaluation", () => {
     expect(completed.objects.recorder.semanticState).toBe("muted");
   });
 
+  it("evaluates controlled behavior clips into character state-machine input", () => {
+    const project = normalizeProject({
+      objects: [
+        { id: "actor", type: "group", entity: createEntityConfig("character") },
+        { id: "target", type: "box" },
+      ],
+      director: {
+        timeline: {
+          duration: 1,
+          clips: [{
+            id: "two-hand-reach", type: "behavior", track: "character", start: 0, duration: 1,
+            targetId: "actor", secondaryTargetId: "target", behaviorAction: "reach", hand: "both",
+          }],
+        },
+      },
+    });
+
+    const frame = evaluateTimeline(project, 0.5);
+
+    expect(frame.objects.actor).toMatchObject({
+      behaviorState: "reach",
+      behaviorContext: { targetId: "target", hand: "both", clipId: "two-hand-reach" },
+    });
+    expect(frame.characterBehaviors).toContainEqual(expect.objectContaining({
+      actorId: "actor", state: "reach", targetId: "target", hand: "both",
+    }));
+  });
+
+  it("gives both participants explicit state-machine poses during transfer", () => {
+    const project = normalizeProject({
+      objects: [
+        { id: "giver", type: "group", entity: createEntityConfig("character") },
+        { id: "receiver", type: "group", entity: createEntityConfig("character") },
+        { id: "item", type: "box" },
+      ],
+      director: {
+        timeline: {
+          duration: 1,
+          clips: [{
+            id: "handoff", type: "interaction", track: "character", start: 0, duration: 1,
+            targetId: "item", secondaryTargetId: "giver", recipientId: "receiver",
+            action: "hand_over", behaviorAction: "transfer", ownershipMode: "transfer", hand: "right",
+          }],
+        },
+      },
+    });
+
+    const contact = evaluateTimeline(project, 0.6);
+
+    expect(contact.objects.giver).toMatchObject({
+      behaviorState: "transfer",
+      behaviorContext: { targetId: "item", recipientId: "receiver" },
+    });
+    expect(contact.objects.receiver).toMatchObject({
+      behaviorState: "grasp",
+      behaviorContext: { targetId: "item", hand: "right", source: "timeline-recipient" },
+    });
+  });
+
   it("formats 24fps editor timecodes", () => {
     expect(formatTimecode(62.5)).toBe("01:02:12");
   });

@@ -27,6 +27,51 @@ const glbWithDocument = (document) => {
   return output;
 };
 
+const createFullBodyRig = () => {
+  const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+  const vertexCount = geometry.attributes.position.count;
+  geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(new Uint16Array(vertexCount * 4), 4));
+  const weights = new Float32Array(vertexCount * 4);
+  for (let index = 0; index < vertexCount; index += 1) weights[index * 4] = 1;
+  geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(weights, 4));
+  const bone = (name, position) => {
+    const value = new THREE.Bone();
+    value.name = name;
+    value.position.fromArray(position);
+    return value;
+  };
+  const hips = bone("Hips", [0, 0, 0]);
+  const spine = bone("Spine", [0, 0.45, 0]);
+  const chest = bone("Chest", [0, 0.42, 0]);
+  const neck = bone("Neck", [0, 0.28, 0]);
+  const head = bone("Head", [0, 0.25, 0]);
+  hips.add(spine); spine.add(chest); chest.add(neck); neck.add(head);
+  const limbs = {};
+  for (const side of ["Left", "Right"]) {
+    const sign = side === "Left" ? -1 : 1;
+    const upperArm = bone(`${side}UpperArm`, [sign * 0.18, 0.16, 0]);
+    const lowerArm = bone(`${side}ForeArm`, [sign * 0.48, 0, 0]);
+    const hand = bone(`${side}Hand`, [sign * 0.42, 0, 0]);
+    chest.add(upperArm); upperArm.add(lowerArm); lowerArm.add(hand);
+    const upperLeg = bone(`${side}UpLeg`, [sign * 0.18, -0.08, 0]);
+    const lowerLeg = bone(`${side}Leg`, [0, -0.58, 0]);
+    const foot = bone(`${side}Foot`, [0, -0.55, 0.12]);
+    hips.add(upperLeg); upperLeg.add(lowerLeg); lowerLeg.add(foot);
+    Object.assign(limbs, {
+      [`${side.toLowerCase()}Hand`]: hand,
+      [`${side.toLowerCase()}Foot`]: foot,
+    });
+  }
+  const allBones = [];
+  hips.traverse((node) => { if (node.isBone) allBones.push(node); });
+  const mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+  mesh.add(hips);
+  mesh.bind(new THREE.Skeleton(allBones));
+  const scene = new THREE.Group();
+  scene.add(mesh);
+  return { scene, ...limbs };
+};
+
 describe("replaceable OBJ/GLB asset bindings", () => {
   it("infers common rig nodes and animation slots", () => {
     const bindings = inferSemanticBindings(
@@ -206,6 +251,145 @@ describe("replaceable OBJ/GLB asset bindings", () => {
       capabilities: { skeleton: true },
     });
     expect(controller.boneFor("hips")).toBe(rootBone);
+    controller.dispose();
+  });
+
+  it("solves a real two-bone hand IK chain in world space", () => {
+    const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+    const vertexCount = geometry.attributes.position.count;
+    geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(new Uint16Array(vertexCount * 4), 4));
+    const weights = new Float32Array(vertexCount * 4);
+    for (let index = 0; index < vertexCount; index += 1) weights[index * 4] = 1;
+    geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(weights, 4));
+    const upper = new THREE.Bone();
+    upper.name = "RightUpperArm";
+    const lower = new THREE.Bone();
+    lower.name = "RightForeArm";
+    lower.position.x = 1;
+    const hand = new THREE.Bone();
+    hand.name = "RightHand";
+    hand.position.x = 1;
+    upper.add(lower);
+    lower.add(hand);
+    const mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+    mesh.add(upper);
+    mesh.bind(new THREE.Skeleton([upper, lower, hand]));
+    const scene = new THREE.Group();
+    scene.add(mesh);
+    const host = new THREE.Scene();
+    const controller = createAssetController({ scene, animations: [] }, {}, "arm.glb");
+    host.add(controller.root);
+    host.updateMatrixWorld(true);
+    const before = hand.getWorldPosition(new THREE.Vector3());
+    const target = before.clone().add(new THREE.Vector3(-0.35, 0.55, 0));
+    const beforeDistance = before.distanceTo(target);
+
+    expect(controller.report.capabilities.handIk).toBe(true);
+    expect(controller.setHandIk("rightHand", target, { iterations: 8 })).toBe(true);
+    host.updateMatrixWorld(true);
+    expect(hand.getWorldPosition(new THREE.Vector3()).distanceTo(target)).toBeLessThan(beforeDistance);
+    expect(controller.getState().ikTargets).toEqual(["rightHand"]);
+    controller.clearIkTargets();
+    controller.dispose();
+  });
+
+  it("solves both hands, locks both feet, and follows a head look target", () => {
+    const rig = createFullBodyRig();
+    const host = new THREE.Scene();
+    const controller = createAssetController({ scene: rig.scene, animations: [] }, {}, "full-body.glb");
+    host.add(controller.root);
+    host.updateMatrixWorld(true);
+    const leftBefore = rig.leftHand.getWorldPosition(new THREE.Vector3());
+    const rightBefore = rig.rightHand.getWorldPosition(new THREE.Vector3());
+    const leftTarget = leftBefore.clone().add(new THREE.Vector3(0.12, 0.16, 0.08));
+    const rightTarget = rightBefore.clone().add(new THREE.Vector3(-0.12, 0.16, 0.08));
+
+    expect(controller.report.capabilities).toMatchObject({
+      twoHandIk: true,
+      footLock: true,
+      lookIk: true,
+      fullBodyIk: true,
+    });
+    expect(controller.setHandIk("leftHand", leftTarget, { iterations: 8 })).toBe(true);
+    expect(controller.setHandIk("rightHand", rightTarget, { iterations: 8 })).toBe(true);
+    expect(controller.setLookTarget([0, 1.4, 2])).toBe(true);
+    host.updateMatrixWorld(true);
+    expect(rig.leftHand.getWorldPosition(new THREE.Vector3()).distanceTo(leftTarget))
+      .toBeLessThan(leftBefore.distanceTo(leftTarget));
+    expect(rig.rightHand.getWorldPosition(new THREE.Vector3()).distanceTo(rightTarget))
+      .toBeLessThan(rightBefore.distanceTo(rightTarget));
+
+    expect(controller.setBehaviorState("idle", {}, { recaptureFootLocks: true }).ok).toBe(true);
+    expect(controller.getState().footLocks).toEqual(["leftFoot", "rightFoot"]);
+    expect(controller.setBehaviorState("approach", { targetId: "destination" }).ok).toBe(true);
+    expect(controller.getState().footLocks).toEqual([]);
+    controller.dispose();
+  });
+
+  it("rebuilds IK capabilities immediately after a saved bone-map change", () => {
+    const rig = createFullBodyRig();
+    const controller = createAssetController({ scene: rig.scene, animations: [] }, {}, "remap.glb");
+    const mapping = { ...controller.report.bones, rightUpperArm: null };
+
+    const diagnostics = controller.setRigBindings(mapping);
+
+    expect(diagnostics.missingRequired).toContain("rightUpperArm");
+    expect(controller.report.capabilities.twoHandIk).toBe(false);
+    expect(controller.report.ikChains.map((chain) => chain.slot)).not.toContain("rightHand");
+    controller.dispose();
+  });
+
+  it("rejects duplicate runtime bone mappings without mutating the active rig", () => {
+    const rig = createFullBodyRig();
+    const controller = createAssetController({ scene: rig.scene, animations: [] }, {}, "duplicate.glb");
+    const before = { ...controller.report.bones };
+
+    const diagnostics = controller.setRigBindings({ ...before, leftHand: before.rightHand });
+
+    expect(diagnostics).toMatchObject({ applied: false });
+    expect(diagnostics.duplicateBones).toHaveLength(1);
+    expect(controller.report.bones).toEqual(before);
+    expect(controller.report.capabilities.twoHandIk).toBe(true);
+    controller.dispose();
+  });
+
+  it("retargets compatible source clips onto the loaded skeleton", async () => {
+    const makeRig = () => {
+      const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+      const vertexCount = geometry.attributes.position.count;
+      geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(new Uint16Array(vertexCount * 4), 4));
+      const weights = new Float32Array(vertexCount * 4);
+      for (let index = 0; index < vertexCount; index += 1) weights[index * 4] = 1;
+      geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(weights, 4));
+      const hips = new THREE.Bone();
+      hips.name = "Hips";
+      const arm = new THREE.Bone();
+      arm.name = "RightUpperArm";
+      arm.position.y = 1;
+      hips.add(arm);
+      const mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+      mesh.add(hips);
+      mesh.bind(new THREE.Skeleton([hips, arm]));
+      const scene = new THREE.Group();
+      scene.add(mesh);
+      return { scene, arm };
+    };
+    const target = makeRig();
+    const source = makeRig();
+    const clip = new THREE.AnimationClip("Wave", 1, [
+      new THREE.QuaternionKeyframeTrack(
+        ".bones[RightUpperArm].quaternion",
+        [0, 1],
+        [0, 0, 0, 1, 0, 0.3826834, 0, 0.9238795],
+      ),
+    ]);
+    const controller = createAssetController({ scene: target.scene, animations: [] }, {}, "target.glb");
+    const report = await controller.retargetAnimationsFrom({ scene: source.scene, animations: [clip] }, { sourceName: "wave.glb" });
+
+    expect(report.imported).toEqual(["Wave"]);
+    expect(controller.report.clipNames).toContain("Wave");
+    expect(controller.report.capabilities.actions).toBe(true);
+    expect(controller.playAction("Wave")).toBe(true);
     controller.dispose();
   });
 });

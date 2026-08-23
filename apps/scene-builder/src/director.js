@@ -485,6 +485,8 @@ export function evaluateTimeline(project, rawTime) {
     color: object.color,
     semanticState: object.entity?.state ?? "默认",
     animationState: "idle",
+    behaviorState: "idle",
+    behaviorContext: {},
   }]));
   const attachments = new Map();
   const interactions = [];
@@ -520,7 +522,15 @@ export function evaluateTimeline(project, rawTime) {
         target.rotation[0] += Math.sin(progress * Math.PI * 2) * (clip.motion.leanDegrees || 0);
         target.rotation[2] += Math.sin(progress * Math.PI) * (clip.motion.bankDegrees || 0);
       }
-      if (progress < 1) target.animationState = "move";
+      if (progress < 1) {
+        target.animationState = "move";
+        target.behaviorState = clip.behaviorAction || "approach";
+        target.behaviorContext = {
+          targetId: clip.secondaryTargetId || clip.targetId,
+          clipId: clip.id,
+          source: "timeline",
+        };
+      }
     }
     else if (clip.type === "rotate" && target) target.rotation = lerpVector(clip.from, clip.to, eased);
     else if (clip.type === "scale" && target) target.scale = lerpVector(clip.from, clip.to, eased);
@@ -530,7 +540,45 @@ export function evaluateTimeline(project, rawTime) {
     } else if (clip.type === "interaction" && target && clip.secondaryTargetId) {
       if (progress < 1) {
         const actor = objects[clip.secondaryTargetId];
-        if (actor) actor.animationState = "interact";
+        const phase = interactionPhaseForProgress(progress);
+        const contactBehavior = clip.behaviorAction || (
+          clip.ownershipMode === "claim" ? "grasp"
+            : clip.ownershipMode === "transfer" ? "transfer"
+              : clip.ownershipMode === "release" ? "release"
+                : "reach"
+        );
+        const behaviorState = phase.name === "contact"
+          ? contactBehavior
+          : phase.name === "recovery"
+            ? clip.ownershipMode === "claim" ? "carry" : "idle"
+            : "reach";
+        if (actor) {
+          actor.animationState = "interact";
+          actor.behaviorState = behaviorState;
+          actor.behaviorContext = {
+            targetId: clip.targetId,
+            recipientId: clip.recipientId,
+            placementTargetId: clip.placementTargetId,
+            hand: clip.hand,
+            clipId: clip.id,
+            source: "timeline",
+          };
+        }
+        if (clip.ownershipMode === "transfer" && clip.recipientId) {
+          const recipient = objects[clip.recipientId];
+          if (recipient) {
+            recipient.animationState = "interact";
+            recipient.behaviorState = phase.name === "contact"
+              ? "grasp"
+              : phase.name === "recovery" ? "carry" : "reach";
+            recipient.behaviorContext = {
+              targetId: clip.targetId,
+              hand: clip.hand,
+              clipId: clip.id,
+              source: "timeline-recipient",
+            };
+          }
+        }
         target.animationState = "react";
         interactions.push({
           id: clip.id,
@@ -540,7 +588,9 @@ export function evaluateTimeline(project, rawTime) {
           targetAnchor: clip.targetAnchor,
           actorNode: clip.actorNode,
           progress: eased,
-          phase: interactionPhaseForProgress(progress),
+          phase,
+          behaviorAction: behaviorState,
+          hand: clip.hand,
           ownershipMode: clip.ownershipMode,
           recipientId: clip.recipientId,
           placementTargetId: clip.placementTargetId,
@@ -555,6 +605,26 @@ export function evaluateTimeline(project, rawTime) {
     } else if (clip.type === "dialogue" && progress < 1) {
       const speaker = sourceById.get(clip.targetId);
       dialogue = { speaker: speaker?.name ?? "角色", text: clip.text, clipId: clip.id };
+      if (target) {
+        target.behaviorState = "speak";
+        target.behaviorContext = {
+          targetId: clip.secondaryTargetId,
+          utterance: clip.text,
+          clipId: clip.id,
+          source: "timeline",
+        };
+      }
+    } else if (clip.type === "behavior" && target && progress < 1 && clip.behaviorAction) {
+      target.behaviorState = clip.behaviorAction;
+      target.behaviorContext = {
+        targetId: clip.secondaryTargetId,
+        recipientId: clip.recipientId,
+        placementTargetId: clip.placementTargetId,
+        hand: clip.hand,
+        utterance: clip.text,
+        clipId: clip.id,
+        source: "timeline",
+      };
     }
   }
 
@@ -612,6 +682,13 @@ export function evaluateTimeline(project, rawTime) {
       };
     });
 
+  for (const hold of persistentHolds) {
+    const holder = objects[hold.actorId];
+    if (!holder || holder.behaviorState !== "idle") continue;
+    holder.behaviorState = "carry";
+    holder.behaviorContext = { targetId: hold.targetId, clipId: hold.id, source: "simulation" };
+  }
+
   return {
     time,
     duration: timeline.duration || 0,
@@ -620,6 +697,9 @@ export function evaluateTimeline(project, rawTime) {
     dialogue,
     interactions,
     interactionPoses: [...interactions, ...persistentHolds],
+    characterBehaviors: Object.entries(objects)
+      .filter(([id]) => sourceById.get(id)?.entity?.role === "character")
+      .map(([actorId, object]) => ({ actorId, state: object.behaviorState, ...object.behaviorContext })),
     simulation,
     activeClipIds,
   };

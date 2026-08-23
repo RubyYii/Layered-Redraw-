@@ -10,10 +10,13 @@
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "test:ui": "node scripts/smoke-test.mjs",
+    "test:rig-editor": "node scripts/smoke-test-rig-editor.mjs",
     "test:camera-editor": "node scripts/smoke-test-camera-editor.mjs",
     "test:cp02": "node scripts/smoke-test-cp02.mjs",
     "test:simulation-replay": "node scripts/smoke-test-delivery-replay.mjs --package artifacts/interaction-simulation/interaction-simulation-30fps.simulation-package --screenshot artifacts/interaction-simulation/replay-smoke.png --seek 6",
     "test:cp03:foundation": "node scripts/smoke-test-cp03-foundation.mjs",
+    "test:cp03:audience": "node scripts/smoke-test-cp03-audience.mjs",
+    "test:large-autosave": "node scripts/smoke-test-large-autosave.mjs",
     "build:interaction-demo": "node scripts/build-interaction-demo-project.mjs",
     "build:window-case": "node scripts/build-window-case-sandbox-project.mjs",
     "build:window-case:cp02": "node scripts/derive-window-case-cp02.mjs",
@@ -26,7 +29,9 @@
     "render:window-case:video30": "npm run build:window-case && node scripts/render-window-case-video-30fps.mjs"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.20.0",
     "@layered-redraw/pact-cp03-contracts": "file:../../packages/pact-cp03-contracts",
+    "fflate": "^0.8.3",
     "three": "^0.185.1"
   },
   "devDependencies": {

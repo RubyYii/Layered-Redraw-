@@ -8,6 +8,10 @@
 
 **Implementation range:** `888db07..90b7edd` (`22` commits)
 
+**Collaboration merge gate:** local council evidence tip `3ddd70e` reconciled
+with Ruby remote tip `b334db0`; final merge commit and remote verification are
+pending below.
+
 ## Claim ceiling
 
 ```text
@@ -101,6 +105,33 @@ npm_config_offline=true npx vitest run \
 
 Result: `4/4` test files, `38/38` tests passed. This proves the archived eight-probe contract and its failure-evidence handling did not drift; it does not rerun or upgrade Live Run 03.
 
+## Collaboration merge gate
+
+After fetching the shared branch, Git showed a real divergence at `dd9c31b`:
+Ruby had four remote-only commits (`dc86bf1`, `0c2b585`, `3d13bb5`,
+`b334db0`) while the local branch carried the council-v2 implementation. The
+history-preserving merge retained both sets. Two text conflicts were resolved
+by exporting both council APIs under distinct type names and by separating
+agent authority from Ruby 3D/UI responsibility in the roadmap.
+
+The combined worktree passed:
+
+- shared contracts: `25/25`;
+- Agent Host: `346/346`, typecheck, and build;
+- Scene Builder: `217/217` and build;
+- CP03 audience browser smoke: five proposals, five receipts, all five visual
+  actions, seven screenshots, `0` non-local requests, and
+  `checkpointEligible: false`;
+- large-project smoke: `4,446,054` bytes, 19 camera clips, and the complete
+  `02:46:00` timeline restored through IndexedDB;
+- rig-editor smoke: 25 semantic slots, 17 persisted mappings, and the exact
+  seven-action Agent boundary.
+
+Installing the two versions already pinned by Ruby's lockfile (`fflate 0.8.3`
+and `@dimforge/rapier3d-compat 0.20.0`) contacted the public npm registry. It
+made no Gemini/DeepSeek request, sent no artwork or repository content to a
+model provider, and did not alter the committed dependency declarations.
+
 ## Controlled local outcomes
 
 ### Timing and orchestration
@@ -149,8 +180,8 @@ This is evidence/archive hygiene, not a network-security audit. Local scripted u
 
 | Required evidence class | Current label | What exists | What is still missing |
 |---|---|---|---|
-| Interaction proof | `PARTIAL_LOCAL_SCRIPTED` | typed council → deterministic draft → viewer hash approval → Capability Gate → Ruby receipt → durable CaseSession | real free-input encounter, audience UI, repeated six-turn interaction |
-| Visual proof | `NOT_CAPTURED` | existing Ruby interaction demo is exercised by tests | CP03 stills, checkpoint video, five visually distinct effects, visual QA |
+| Interaction proof | `PARTIAL_LOCAL_SCRIPTED` | typed council → deterministic draft → viewer hash approval → Capability Gate → Ruby receipt → durable CaseSession; Ruby's local audience UI exercises five actions | real-provider free-input encounter and repeated formal six-turn interaction |
+| Visual proof | `PARTIAL_ENGINEERING_SMOKE` | five distinct Three.js effects and seven ignored smoke screenshots | curated CP03 stills, continuous checkpoint video, visual QA and human artistic decision |
 | Engineering proof | `LOCAL_SCRIPTED` | contracts, DSH lifecycle, real local JSONL durability, timing/failure tests, Ruby integration | final model bake-off, fresh preflight, real-provider pass, loopback host |
 | Provenance proof | `MANIFEST_FIXTURE_ONLY` | fixed fictional routing/rights/asset references and fail-closed registries | cleared production manifests, retrieval records, audience-input provenance |
 | Artistic/curatorial proof | `PENDING_HUMAN` | Guardian dissent and claim ceilings are preserved structurally | human technical decision, artistic KEEP/REPAIR/REJECT, curatorial text review |
@@ -162,12 +193,15 @@ These labels are archival boundaries. They do not accept CP03 as a checkpoint.
 - fixed-input model bake-off and final model IDs;
 - a new zero-call preflight and separate exact authorization before any Live Run 04;
 - successful real-provider completion within the approved timing/dispatch envelope;
-- loopback host and audience text/image/audio proposal interface;
-- all five action-specific visual effects;
+- production loopback host and cleared text/image/audio proposal interface;
+- formal visual QA and checkpoint capture of the five implemented effects;
 - formal encounters, screenshot/video/copy/receipt package, and five-class archive;
 - human technical ruling and human artistic `KEEP`;
 - deployment, public release, or exhibition operation.
 
 ## Repository synchronization state
 
-At the time this record was written, all implementation and release-gate checks were local. No final fetch, push, or remote-SHA verification had been performed for this evidence milestone. Remote synchronization remains a separate explicit gate; no force push is permitted.
+The shared branch was fetched and Ruby's `b334db0` tip was reconciled with the
+local `3ddd70e` tip. All combined release-gate checks above remain local at
+this point in the record. The merge commit, normal push, and final remote-SHA
+verification are still pending; no force push is permitted.

@@ -38,7 +38,7 @@ The viewer does not directly drive a character with keyboard/game controls in th
 | CP00 Reference Grammar | visual/theoretical grammar and checkpoint media | `ARCHIVED`; human visual direction recorded | preserve as source, not final 3D proof |
 | CP01 Asset Bake-off | compare public and generated 3D candidates | `PARTIAL`; preflight and fixed public candidates exist, formal model bake-off incomplete | decide whether a generated challenger is still needed |
 | CP02 Mutable Room / One Reframe | source-locked room, governed add/move/undo/reject, real local assets | `CHECKPOINT_ARCHIVED`, runtime tested, artistic `R2 KEEP`, public release false | frozen; do not rewrite its evidence |
-| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `CRITICAL_PATH_IMPLEMENTED_LOCAL_SCRIPTED + THREE_FAILED_LIVE_RUNS`; the separate council-v2 path now proves five typed shards, one minimal commit, deterministic assembly, exact viewer approval, Ruby interaction/rollback receipt and durable CaseSession locally; no new provider or visual checkpoint was run | final model bake-off and separately authorised preflight/real-provider gate; then audience UI, five visually distinct effects, formal encounters, five-class archive and human decisions |
+| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `MERGED_LOCAL_SCRIPTED_VERIFIED + RUBY_FIVE_EFFECT_UI_ENGINEERING_VERIFIED + THREE_FAILED_LIVE_RUNS`; the combined tree passes council, exact viewer approval, Ruby interaction/rollback, audience UI, five Three.js effects, rig, physics, persistence and archive-contract gates; no new provider call or formal checkpoint capture occurred | remote-verify the merge, then complete the separately gated model/preflight/provider/human decisions and formal five-class encounter archive |
 | CP04 Rights-aware Retrieval | local semantic search over cleared asset registry | `NOT_STARTED`; three fixed Case Pack assets are not a vector database | source records, embeddings, retrieval/Guardian UI |
 | CP05 Generated Gap Asset | one approved offline generated asset | `NOT_STARTED` | separately authorised model/API or local generation bake-off |
 | CP06 Four Positions | 0/1/4-person role and takeover behaviour | `NOT_STARTED` | participant protocol and role runtime |
@@ -58,7 +58,10 @@ The viewer does not directly drive a character with keyboard/game controls in th
 | `e831acb` | CP03 integration and Case Pack validation repair | retained in the current shared branch |
 | `b8a5833` | reproducible interaction-simulation delivery packages | locally packaged and replay-smoke tested |
 | `1657e87` | cinematic camera editor | 19-shot / 720-clip browser smoke tested |
-| `e539ba1` | explicit large-project save behaviour | retained; large projects require explicit JSON save |
+| `e539ba1` | explicit large-project save behaviour | superseded safely: 4.40 MB / 166-second projects now use IndexedDB recovery; explicit JSON remains a version export |
+| `dc86bf1`–`0c2b585` | CP03 dependency installation and full-stack GitHub Actions checks | remote CI workflow retained; a workflow definition is not proof that a GitHub run passed |
+| `3d13bb5` | portable 3D simulation, audience/effects, checkpoint archive, navmesh/Rapier and persistence | retained; combined unit/build/browser gate passes locally |
+| `b334db0` | constrained character rig and seven-action Agent behaviour boundary | retained; combined unit/build/rig-editor gate passes locally |
 
 Ruby owns the 3D execution primitives and authored stage. New CP03 code should call these interfaces rather than duplicate them.
 
@@ -85,7 +88,7 @@ Ruby owns the 3D execution primitives and authored stage. New CP03 code should c
 | `2538a4a` | author-approved 12-second graph spec and plan | freezes option A, evidence ceiling and the new approval boundary |
 | `3bdf13f` | fixed 8 planned / 10 maximum provider contract | removes receipt-consumption streams and lowers the conservative cost ceiling |
 | `1558a01` | parallel representative wave and settlement isolation | verifies one-stream tool probes, parked settlement sinks, 2.5/8/12 timing facts and fail-fast late quarantine with scripted providers |
-| `0941cbb`–`90b7edd` | approved council critical-path redesign | five typed durable shards, one minimal Conductor commit, deterministic fail-closed assembly, fixed 6/8 routing/evidence and viewer-approved Ruby vertical slice; local scripted only |
+| `0941cbb`–`3ddd70e` | approved council critical-path redesign and local evidence | five typed durable shards, one minimal Conductor commit, deterministic fail-closed assembly, fixed 6/8 routing/evidence and viewer-approved Ruby vertical slice; local scripted only |
 
 Haorui/Codex owns viewer approval, governance, agent/session contracts, deterministic authority checks, evidence and checkpoint integration. It does not own Ruby's 3D authorship.
 
@@ -97,7 +100,7 @@ Haorui/Codex owns viewer approval, governance, agent/session contracts, determin
 CP00  ██████████  archived
 CP01  ████░░░░░░  partial
 CP02  ██████████  archived / R2 KEEP
-CP03  █████░░░░░  council critical path implemented locally; visual/live encounter incomplete
+CP03  ███████░░░  merged council + Ruby audience/effects pass locally; live encounter/formal archive incomplete
 CP04  ░░░░░░░░░░  not started
 CP05  ░░░░░░░░░░  not started
 CP06  ░░░░░░░░░░  not started
@@ -114,13 +117,13 @@ This is roughly the first third of the full CP00-CP08 production route. It is no
 | A. Ruby + CP02 governed runtime | `COMPLETE` | history-preserving merge and combined tests |
 | B1. Shared compatibility contracts | `COMPLETE` | schemas and unit tests |
 | B2. DSH root/continuable + CaseSession durability | `COMPLETE` | scripted adapter, bounded case transition, flush and cold JSONL read |
-| B3. Real provider compatibility | `LOCAL GRAPH VERIFIED / THREE FAILED LIVE RUNS / LIVE NOT PASSED` | Run 01 sent 3 and exposed stale DeepSeek auth plus lifecycle masking; Run 02 sent 10 on the old graph and failed before draft; Live Run 03 sent 6 on the replacement 8/10 graph, preserved exact selection and settlement isolation, accepted the first five probes, then quarantined the draft 2.215 seconds beyond the shared 12-second cutoff; probes 07/08 were not sent |
-| B4. Council critical path redesign | `CRITICAL_PATH_IMPLEMENTED_LOCAL_SCRIPTED` | immutable turn; five typed shard calls plus one minimal commit; 6 planned / 8 maximum; durable trace; Guardian constraints; deterministic assembler; no hidden provider stream; controlled 2.5/8/12 timing and failure outcomes; independent evidence verifier |
-| C1. Draft/approval/Gate to Ruby role interaction | `LOCAL_SLICE_TESTED + COUNCIL_SLICE_TESTED` | historical real DSH root scripted-provider slice remains green; new fictional five-shard council slice crosses real local JSONL durability → exact viewer approval → Gate → Ruby navigation/ownership/rollback receipt → durable CaseSession transition with zero adapter requests |
-| C2. Five-action effect runtime | `STATE_RULES_TESTED / EFFECTS NOT_STARTED` | cumulative and terminal mechanics are unit-tested; five visually distinct runtime effects are not implemented |
-| C3. Loopback host, privacy and evidence API | `NOT_STARTED` | follows provider contract validation |
-| C4. Audience UI and proposal viewer | `NOT_STARTED` | follows host/Gate |
-| D. Formal encounters and checkpoint archive | `NOT_STARTED` | requires separate provider/capture approvals and human review |
+| B3. Real provider compatibility | `THREE FAILED LIVE RUNS / LIVE NOT PASSED` | Run 01 sent 3; Run 02 sent 10 on the old graph; Run 03 sent 6 on the replacement graph and quarantined a draft 2.215 seconds beyond the shared 12-second cutoff. The redesigned 6/8 path remains local scripted evidence; Live Run 04 is not authorised here. |
+| B4. Council critical path redesign | `CRITICAL_PATH_IMPLEMENTED_LOCAL_SCRIPTED` | immutable turn; five typed shard calls plus one minimal commit; 6 planned / 8 maximum; durable trace; Guardian constraints; deterministic assembler; no hidden provider stream; controlled 2.5/8/12 outcomes; independent evidence verifier |
+| C1. Draft/approval/Gate to Ruby role interaction | `LOCAL_SLICE_TESTED + COUNCIL_SLICE_TESTED` | historical real DSH root scripted-provider slice plus the fictional five-shard council slice cross exact viewer approval → Gate → Ruby navigation/ownership/rollback receipt → durable CaseSession transition with zero adapter requests |
+| C2. Five-action effect runtime | `MERGED LOCAL IMPLEMENTED / BROWSER VERIFIED` | Translate cyan relation, Reframe amber frame, Merge purple seam, Continue green ripples and KeepOpaque dark veil execute in the Three.js viewport and link to Ruby receipts; this remains engineering, not artistic acceptance |
+| C3. Loopback host, privacy and evidence API | `PARTIAL` | routing and formal-evidence contracts are fail-closed; a production loopback host and cleared audience media policy remain absent |
+| C4. Audience UI and proposal viewer | `LOCAL SCRIPTED VERIFIED` | desktop and 390×844 UI drove five proposal hashes, approvals, Gate results, effects and receipts with zero external requests; visibly marked 0-CALL / NOT CHECKPOINT |
+| D. Formal encounters and checkpoint archive | `CONTRACT IMPLEMENTED / ARCHIVE NOT RUN` | archive builder refuses missing interaction, visual, engineering, provenance, discourse, real-provider, rollback, technical or artistic evidence; no candidate archive has been manufactured |
 
 ## Technology Feasibility and Current Test Boundary
 
@@ -132,18 +135,18 @@ The architecture is technically feasible with current components:
 - DSH can maintain continuable child sessions and durable event evidence, including one bounded CaseSession transition;
 - the compatibility runner can isolate DSH's automatic child-settlement wake in five parked local sinks, while the active Case Conductor receives only its two explicitly budgeted route/draft turns;
 - the new council-v2 runtime instead opens five typed role shards in parallel, keeps the same Case Conductor to one intent shard plus one minimal commit, assembles locally without a model-authored full draft, and exposes no undeclared provider stream in the scripted gate;
-- Scene Builder can already validate semantic affordances and compile navigation plus interaction clips;
-- Ruby's deterministic 60 Hz runtime can execute claim/transfer/release and collision-corrected motion;
+- Scene Builder validates semantic affordances and compiles triangulated-navmesh approach plus interaction clips;
+- Ruby's deterministic 60 Hz runtime executes claim/transfer/release and collision-corrected motion; unconstrained dynamic objects can additionally enter the lazy Rapier world;
 - the first hash-bound executable draft and Capability Gate seam between DSH and Scene Builder is now locally tested for one registered interaction call, whose exact Ruby receipt and scene hashes become a durable root-session CaseSession transition.
+- the new provider-neutral critical path starts five typed shards concurrently, preserves exact durable trace/dissent, and deterministically assembles only before the strict deadline;
+- a 4.40 MB 166-second project survives reload through IndexedDB, and portable model/animation/RGB-D ZIP round trips are hash-tested.
 
-Current successful tests prove local contracts, cumulative/terminal CaseSession mechanics, real DSH session/tool/event plumbing, the historical eight-probe graph, the separate 6/8 council-v2 critical path, deterministic assembly and Gate checks, real local JSONL durability, Ruby navigation/ownership/rollback execution, and local scripted council → approval → Ruby execution → CaseSession durability. They do not yet prove:
+The combined merge proves local contracts, cumulative/terminal CaseSession mechanics, real DSH session/tool/event plumbing, the 6/8 council-v2 critical path, deterministic assembly and Gate checks, Ruby navigation/ownership/rollback, five viewport effects, portable assets, IK/retargeting, triangulated navigation, Rapier gravity/contact and large-project recovery. These results do not yet prove:
 
 - complete mixed-provider reliability: Live Run 03 reached both providers on the replacement graph and accepted the first five probes, but its draft was late/quarantined and the final two probes were not sent;
 - real multimodal interpretation quality beyond one generated checkerboard schema probe;
 - real-provider satisfaction of the 2.5-second public-trace target, 8-second draft target, or 12-second hard deadline: Live Run 03 measured a 5.762-second first trace, no accepted draft, and draft completion 2.215 seconds after the hard cutoff on the replacement graph;
-- an audience-facing proposal/approval UI;
 - six real free-text turns covering all five actions;
-- five visually distinct runtime effects;
 - a formal encounter suite, CP03 checkpoint archive, or CP03 visual/artistic completion.
 
 The real-provider command now verifies the exact in-memory archive before it is
@@ -162,24 +165,17 @@ not written; non-secret but inconsistent or partial evidence is retained with
 Run 02 and verifies only the generated raw archive, not every byte under the DSH
 session directory.
 
-### Verification snapshot — 2026-08-23 local refresh
-
-The first four rows were rerun on 2026-08-23. Rows explicitly marked
-`HISTORICAL 2026-08-22` are retained evidence and were not refreshed through
-browser, Keychain, provider, or capture operations in this gate.
+### Verification snapshot — 2026-08-23 merged local refresh
 
 | Layer | Result | Scope |
 |---|---|---|
-| Shared CP03 contracts | `25/25 PASS` | historical execution/approval schemas plus council shards, minimal commit and fixed routing manifest |
-| PACT DSH host | `typecheck PASS`, `build PASS`, `332/332 PASS` | historical provider path plus immutable council turn, registry/durability, Guardian/assembler, 6/8 runtime/routing/evidence and assembled-council → approval → Ruby → durable transition |
-| Ruby Scene Builder | `170/170 PASS`, `build PASS` | combined runtime after Ruby's latest merge; Capability Gate, navigation and interaction regressions remain green |
-| Historical provider-path non-drift | `38/38 PASS` | compatibility, real-runner command contract and evidence tests only; no live request and no upgrade of the three archived failures |
-| Browser engineering smoke | `HISTORICAL 2026-08-22: PASS` | CP02 59.88 median FPS; CP03 source-lock/RGB-D; 19-shot camera editor; 300-frame simulation package and replay; not rerun in this gate |
-| Provider graph local | `HISTORICAL 2026-08-22: 8/8 SCRIPTED PASS` | eight historical local-adapter streams, separate from the new 6/8 council path; not rerun as a standalone command in this gate |
-| Provider preflight | `HISTORICAL 2026-08-22: 8/8 ELIGIBLE, 0 SENT` | named Keychain/catalog facts and the `0.36655104 USD` conservative estimate were not reread; they do not authorize or prove a new live run |
-| Provider network | `HISTORICAL 2026-08-22: FAILED_ARCHIVED, 6 SENT` | Live Run 03 facts retained unchanged; no network call in this gate |
-| Provider run archive | `HISTORICAL 2026-08-22: THREE FAILURE REPORTS` | retained raw-local failure/preflight evidence; current non-drift tests passed, but historical files were not reclassified |
-| CP03 visual/archive gate | `FOUNDATION SMOKE ONLY / FORMAL NOT RUN` | ignored engineering video/stills exist; no formal checkpoint copy package or human CP03 decision |
+| Shared CP03 contracts | `25/25 PASS` | merged council schemas and historical execution/approval contracts |
+| PACT DSH host | `typecheck PASS`, `build PASS`, `346/346 PASS` | both council implementations, historical provider path, exact approval, Ruby integration and checkpoint archive contract coexist |
+| Ruby Scene Builder | `217/217 PASS`, `build PASS` | portable assets, character rig/action boundary, navmesh/Rapier, audience effects, persistence and existing runtime |
+| Historical provider-path non-drift | `INCLUDED IN 346/346 PASS` | no live request and no upgrade of the three archived failures |
+| Browser engineering smoke | `PASS` | five actions/5 receipts/0 external requests/7 screenshots; 4,446,054-byte project and 19 shots restored; 25 rig slots, 17 mappings and seven Agent actions |
+| Provider network | `HISTORICAL FAILED_ARCHIVED` | no provider request in this merge |
+| CP03 visual/archive gate | `FORMAL NOT RUN` | local engineering captures are not a formal checkpoint or human CP03 decision |
 
 Remote truth was fetched immediately before Live Run 03; the local branch and
 its remote were exact at `8cc4733cacc827e1f35cc5fb168a65010eff8fcb`,
@@ -195,11 +191,12 @@ facts only.
 
 1. Keep Ruby's merged 3D/camera/delivery work and the viewer approval → Gate → Ruby seam frozen as the integration baseline.
 2. Preserve Live Run 01 as `FAILED_PARTIAL`, Live Run 02 as `FAILED_RECONSTRUCTED`, and Live Run 03 as `FAILED_ARCHIVED`; none is a compatibility pass or CP03 acceptance.
-3. Preserve the new council-v2 critical path as `CRITICAL_PATH_IMPLEMENTED_LOCAL_SCRIPTED`; do not describe controlled local timing or fictional role fixtures as model quality.
-4. Run the separately approved fixed-input model bake-off before replacing the `pending-bakeoff` manifest identifiers.
-5. Any zero-call preflight or Live Run 04 requires new exact provider/model/input/Keychain/budget authorization; no previous approval carries forward.
-6. Only after a real-provider `GO`, implement the loopback host, audience proposal UI and five visually distinct action effects without duplicating Ruby's backend.
-7. Add cleared image/audio ingestion paths, run formal encounters, archive videos/stills/copy/receipts, and request separate human technical and artistic decisions.
+3. Commit the verified collaboration merge, push normally, and require `git ls-remote` to equal local `HEAD`; never force push.
+4. Preserve the council-v2 critical path as `LOCAL_SCRIPTED`; do not describe fictional fixtures or controlled timing as model quality.
+5. Run the separately approved fixed-input model bake-off before replacing `pending-bakeoff` manifest identifiers.
+6. Any zero-call 6/8 preflight or Live Run 04 requires a fresh exact scope; Live Run 04 is not authorised by this merge.
+7. After a passing archived provider run and human quality review, harden the production loopback/privacy boundary and cleared image/audio ingestion around Ruby's existing audience/effect runtime.
+8. Run formal encounters, capture continuous 3D mutation/rollback, fill all five archive classes, then request separate technical `PASS` and artistic `KEEP` decisions.
 
 ## Evidence Vocabulary
 

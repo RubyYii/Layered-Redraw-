@@ -10,15 +10,17 @@
 
 **Spec:** `/Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/docs/superpowers/specs/2026-08-22-pact-cp03-critical-path-redesign-design.md`
 
-**Plan status:** `local_scripted_verified_pending_remote_sync`
+**Plan status:** `merged_local_scripted_verified_pending_remote_sync`
 
 **Local verification boundary (2026-08-23):** Tasks 1–7 and Task 8 local
-steps are implemented and verified at implementation source HEAD `90b7edd`.
-Contracts passed `25/25`, Agent Host passed `332/332` plus typecheck/build,
-Scene Builder passed `170/170` plus build, and the historical provider-path
-non-drift selection passed `38/38`. Provider calls remained `0`; Live Run 04,
-visual capture, human decisions, public release, and final fetch/push/SHA
-verification remain unperformed.
+steps are implemented. A final fetch found Ruby's remote tip `b334db0`
+diverged from local council-evidence tip `3ddd70e`; the resolved collaboration
+merge preserves both parents. On that combined worktree, contracts passed
+`25/25`, Agent Host passed `346/346` plus typecheck/build, and Scene Builder
+passed `217/217` plus build. Ruby's CP03 audience, 4.446 MB autosave recovery,
+and rig-editor browser smokes also passed. Provider calls remained `0`;
+Live Run 04, formal checkpoint capture, human decisions, public release, and
+the final merge commit/push/remote-SHA verification remain unperformed.
 
 ## Global Constraints
 
@@ -1313,4 +1315,4 @@ Expected: fetch confirms a fast-forward push; the final `ls-remote` SHA equals l
 
 Implementation is complete only when Tasks 1–8 are checked, all zero-network suites pass, each task has a coherent commit, the collaboration branch is verified at the same SHA, and the evidence record preserves its claim ceiling.
 
-Even then, the result may be described only as a locally scripted implementation of the approved council critical path. It is not real-provider compatibility, model selection, audience UI completion, five-effect visual completion, a captured CP03 checkpoint, human artistic `KEEP`, deployment, or public release. Any fixed-input model bake-off or Live Run 04 requires a new preflight and exact approval specifying models, inputs, planned/maximum dispatches, data exposure, Keychain routes, and USD ceiling.
+Even then, the result may be described only as a locally scripted implementation of the approved council critical path plus Ruby's locally engineered audience/effect runtime. Browser smokes do not establish real-provider compatibility, model selection, a captured CP03 checkpoint, human artistic `KEEP`, deployment, or public release. Any fixed-input model bake-off or Live Run 04 requires a new preflight and exact approval specifying models, inputs, planned/maximum dispatches, data exposure, Keychain routes, and USD ceiling.

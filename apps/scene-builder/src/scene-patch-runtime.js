@@ -100,6 +100,10 @@ export async function hashProject(project) {
   return sha256Text(await serializeProjectForHash(project));
 }
 
+export async function hashCanonicalValue(value) {
+  return sha256Text(await serializeValueForHash(value, { sortKeys: true }));
+}
+
 export async function hashGovernedObjects(project, objectIds) {
   const ids = [...new Set(objectIds)].sort();
   const objectsById = new Map(project.objects.map((object) => [object.id, object]));

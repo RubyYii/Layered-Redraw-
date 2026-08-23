@@ -7,6 +7,7 @@ import {
   proceduralInteractionPose,
   surfaceContactPosition,
 } from "./interaction-runtime.js";
+import { Cp03VisualEffects } from "./cp03/visual-effects.js";
 
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
@@ -93,6 +94,11 @@ export class ThreeSceneAdapter {
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, 1.75);
     this.framePacing = new FramePacingMonitor();
     this.performanceHandler = null;
+    this.physicsHandler = null;
+    this.physicsRuntime = null;
+    this.physicsLoadToken = 0;
+    this.physicsProject = null;
+    this.lastPhysicsReportAt = 0;
     this.lastPerformanceReportAt = 0;
     this.lastAnimationTimestamp = null;
     this.previewShadowsEnabled = true;
@@ -104,6 +110,7 @@ export class ThreeSceneAdapter {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x070909);
     this.scene.fog = new THREE.FogExp2(0x070909, 0.026);
+    this.cp03VisualEffects = new Cp03VisualEffects(this.scene, (id) => this.meshes.get(id) ?? null);
     this.cp02ProposalRoot = new THREE.Group();
     this.cp02ProposalRoot.name = "CP02_PROPOSAL_PREVIEW";
     this.cp02ProposalRoot.userData.ephemeral = true;
@@ -344,6 +351,10 @@ export class ThreeSceneAdapter {
 
   sync(state) {
     this.lastState = state;
+    if (this.physicsRuntime && this.physicsProject !== state.project) {
+      this.disposePhysicsRuntime("PROJECT_CHANGED");
+      if (this.mode === "preview") void this.preparePhysicsRuntime();
+    }
     const activeIds = new Set(state.project.objects.map((object) => object.id));
     for (const [id, mesh] of this.meshes) {
       if (!activeIds.has(id)) {
@@ -913,6 +924,24 @@ export class ThreeSceneAdapter {
     }, "模型");
   }
 
+  async loadRetargetAnimationFile(id, file) {
+    const controller = this.assetControllers.get(id);
+    if (!controller) throw new Error("请先为这个载体载入带骨架的 GLB 模型。");
+    const { parseGlbAssetFile } = await import("./asset-runtime.js");
+    const sourceAsset = await parseGlbAssetFile(file);
+    try {
+      const result = await controller.retargetAnimationsFrom(sourceAsset, { sourceName: file.name });
+      this.scene.updateMatrixWorld(true);
+      return { ...result, report: this.assetReport(id) };
+    } finally {
+      sourceAsset.scene?.traverse?.((node) => {
+        node.geometry?.dispose?.();
+        const materials = Array.isArray(node.material) ? node.material : [node.material];
+        materials.filter(Boolean).forEach((material) => material.dispose?.());
+      });
+    }
+  }
+
   async loadSpatialBridgeFiles(id, files) {
     const selectedFiles = [...(files ?? [])];
     return this.attachRuntimeAsset(id, async (object) => {
@@ -965,6 +994,56 @@ export class ThreeSceneAdapter {
 
   setAssetBonePose(id, boneName, pose) {
     return this.assetControllers.get(id)?.setBonePose(boneName, pose) ?? false;
+  }
+
+  setAssetHandIk(id, handName, targetWorld, options = {}) {
+    return this.assetControllers.get(id)?.setHandIk(handName, targetWorld, options) ?? false;
+  }
+
+  clearAssetHandIk(id, handName) {
+    return this.assetControllers.get(id)?.clearHandIk(handName) ?? false;
+  }
+
+  setAssetRigBindings(id, bones) {
+    return this.assetControllers.get(id)?.setRigBindings(bones) ?? null;
+  }
+
+  previewAssetRig(id, mode = "pose") {
+    const controller = this.assetControllers.get(id);
+    if (!controller) return false;
+    const poseSlots = ["head", "leftUpperArm", "rightUpperArm"];
+    poseSlots.forEach((slot) => controller.clearBonePose?.(slot));
+    controller.clearTransientIkTargets?.();
+    if (mode === "reset") {
+      controller.clearIkTargets?.();
+      controller.setBehaviorState?.("idle", {}, { recaptureFootLocks: true });
+      return true;
+    }
+    if (mode === "pose") {
+      controller.setBonePose?.("head", { rotationDegrees: [0, 18, 0] });
+      controller.setBonePose?.("leftUpperArm", { rotationDegrees: [0, 0, -24] });
+      controller.setBonePose?.("rightUpperArm", { rotationDegrees: [0, 0, 24] });
+      return true;
+    }
+    if (mode === "hands") {
+      const left = controller.boneFor?.("leftHand")?.getWorldPosition(new THREE.Vector3());
+      const right = controller.boneFor?.("rightHand")?.getWorldPosition(new THREE.Vector3());
+      if (left) controller.setHandIk?.("leftHand", left.add(new THREE.Vector3(0.1, 0.16, 0.18)), { iterations: 8 });
+      if (right) controller.setHandIk?.("rightHand", right.add(new THREE.Vector3(-0.1, 0.16, 0.18)), { iterations: 8 });
+      return Boolean(left || right);
+    }
+    if (mode === "feet") {
+      return controller.setBehaviorState?.("idle", {}, { recaptureFootLocks: true }).ok ?? false;
+    }
+    return false;
+  }
+
+  showCp03ActionEffect(action, objectIds, options = {}) {
+    return this.cp03VisualEffects.play(action, objectIds, options);
+  }
+
+  clearCp03ActionEffects() {
+    this.cp03VisualEffects.clear();
   }
 
   clearAssetBonePose(id, boneName) {
@@ -1037,6 +1116,7 @@ export class ThreeSceneAdapter {
       this.renderer.setPixelRatio(this.basePixelRatio);
       this.setPreviewEffects(true);
       if (this.lastState) this.sync(this.lastState);
+      void this.preparePhysicsRuntime();
       return;
     }
 
@@ -1046,6 +1126,7 @@ export class ThreeSceneAdapter {
     this.directorFrame = null;
     this.interactionEffects.clear();
     this.interactionVisibility.clear();
+    this.disposePhysicsRuntime("EDIT_MODE");
     this.renderer.domElement.classList.remove("is-director-preview");
     const snapshot = this.previewSnapshot;
     if (snapshot) {
@@ -1181,11 +1262,13 @@ export class ThreeSceneAdapter {
     if (this.mode !== "preview" || !this.lastState) return;
     this.directorFrame = frame;
     this.resetTimelineInteractionPoses();
+    const transformedAssetIds = new Set();
     for (const object of this.lastState.project.objects) {
       const mesh = this.meshes.get(object.id);
       if (!mesh) continue;
       const override = frame.objects?.[object.id];
       const transformChanged = this.syncPreviewMesh(mesh, override ?? object, object);
+      if (transformChanged && this.assetControllers.has(object.id)) transformedAssetIds.add(object.id);
       if (this.interactionVisibility.has(object.id)) {
         mesh.visible = this.interactionVisibility.get(object.id);
       }
@@ -1206,8 +1289,11 @@ export class ThreeSceneAdapter {
     }
     this.applyAssetReplacements();
     this.scene.updateMatrixWorld(true);
+    this.applyCharacterBehaviors(frame.characterBehaviors, transformedAssetIds);
+    this.scene.updateMatrixWorld(true);
     this.applyTimelineInteractionPoses(frame.interactionPoses ?? frame.interactions);
     this.scene.updateMatrixWorld(true);
+    this.applyPhysicsFrame(frame);
     this.applyDirectorCamera(frame.camera);
     this.applyInteractionEffects(performance.now());
   }
@@ -1250,6 +1336,7 @@ export class ThreeSceneAdapter {
   }
 
   resetTimelineInteractionPoses() {
+    for (const controller of this.assetControllers.values()) controller.clearTransientIkTargets?.();
     for (const id of this.timelineInteractionObjectIds) {
       const mesh = this.meshes.get(id);
       const base = mesh?.userData.previewBase;
@@ -1259,6 +1346,41 @@ export class ThreeSceneAdapter {
       mesh.scale.copy(base.scale);
     }
     this.timelineInteractionObjectIds.clear();
+  }
+
+  applyCharacterBehaviors(behaviors = [], transformedAssetIds = new Set()) {
+    if (!Array.isArray(behaviors)) return;
+    for (const behavior of behaviors) {
+      const controller = this.assetControllers.get(behavior.actorId);
+      const actorMesh = this.meshes.get(behavior.actorId);
+      if (!controller || !actorMesh) continue;
+      controller.setBehaviorState?.(behavior.state ?? "idle", behavior, {
+        synchronize: true,
+        recaptureFootLocks: transformedAssetIds.has(behavior.actorId),
+      });
+      const targetMesh = behavior.targetId && behavior.targetId !== behavior.actorId
+        ? this.meshes.get(behavior.targetId)
+        : null;
+      if (!targetMesh || !["look", "reach", "grasp", "transfer", "release"].includes(behavior.state)) continue;
+      const targetBounds = new THREE.Box3().setFromObject(targetMesh);
+      const targetWorld = targetBounds.isEmpty()
+        ? targetMesh.getWorldPosition(new THREE.Vector3())
+        : targetBounds.getCenter(new THREE.Vector3());
+      controller.setLookTarget?.(targetWorld, { weight: behavior.state === "look" ? 1 : 0.72 });
+      if (behavior.state !== "reach") continue;
+      const hand = behavior.hand ?? "auto";
+      if (hand === "both") {
+        const width = Math.max(0.08, targetBounds.getSize(new THREE.Vector3()).x * 0.24);
+        const actorRight = new THREE.Vector3(1, 0, 0)
+          .applyQuaternion(actorMesh.getWorldQuaternion(new THREE.Quaternion()))
+          .normalize()
+          .multiplyScalar(width);
+        controller.setHandIk?.("leftHand", targetWorld.clone().sub(actorRight), { iterations: 8 });
+        controller.setHandIk?.("rightHand", targetWorld.clone().add(actorRight), { iterations: 8 });
+      } else {
+        controller.setHandIk?.(hand === "left" ? "leftHand" : "rightHand", targetWorld, { iterations: 8 });
+      }
+    }
   }
 
   applyTimelineInteractionPoses(interactions = []) {
@@ -1313,17 +1435,29 @@ export class ThreeSceneAdapter {
       this.timelineInteractionObjectIds.add(armSource.id);
     };
     const moveEffector = (rootSource, anchorWorld, nodeRole, weight, contactMesh) => {
-      if (!rootSource || this.assetControllers.has(rootSource.id) || weight <= 0) return;
-      const effectorSource = descendantForRole(rootSource, nodeRole);
-      const effectorMesh = effectorSource ? this.meshes.get(effectorSource.id) : null;
-      const effectorBase = effectorMesh?.userData.previewBase;
+      if (!rootSource || weight <= 0) return;
       const rootMesh = this.meshes.get(rootSource.id);
-      if (!effectorMesh || !effectorBase || !rootMesh) return;
-
+      if (!rootMesh) return;
       const targetBounds = contactMesh
         ? new THREE.Box3().setFromObject(contactMesh)
         : new THREE.Box3(anchorWorld.clone(), anchorWorld.clone());
       const targetSize = targetBounds.getSize(new THREE.Vector3());
+      const runtimeController = this.assetControllers.get(rootSource.id);
+      if (runtimeController) {
+        const contactWorld = new THREE.Vector3().fromArray(surfaceContactPosition(
+          rootMesh.getWorldPosition(new THREE.Vector3()).toArray(),
+          anchorWorld.toArray(),
+          [targetSize.x / 2, targetSize.y / 2, targetSize.z / 2],
+          0.035,
+        ));
+        runtimeController.setHandIk?.(nodeRole, contactWorld, { weight, iterations: 6 });
+        return;
+      }
+      const effectorSource = descendantForRole(rootSource, nodeRole);
+      const effectorMesh = effectorSource ? this.meshes.get(effectorSource.id) : null;
+      const effectorBase = effectorMesh?.userData.previewBase;
+      if (!effectorMesh || !effectorBase || !rootMesh) return;
+
       const effectorSize = new THREE.Box3().setFromObject(effectorMesh).getSize(new THREE.Vector3());
       const contactWorld = new THREE.Vector3().fromArray(surfaceContactPosition(
         rootMesh.getWorldPosition(new THREE.Vector3()).toArray(),
@@ -1455,6 +1589,7 @@ export class ThreeSceneAdapter {
       : Math.min(0.1, Math.max(0, (timestamp - this.lastAnimationTimestamp) / 1000));
     this.lastAnimationTimestamp = Number.isFinite(timestamp) ? timestamp : this.lastAnimationTimestamp;
     this.assetControllers.forEach((controller) => controller.update(deltaSeconds));
+    this.cp03VisualEffects.update(timestamp);
     const report = this.framePacing.sample(timestamp);
     if (report?.qualityChanged && this.mode === "preview" && this.performanceAdaptationEnabled) {
       const pixelRatio = Math.max(0.5, this.basePixelRatio * report.qualityScale);
@@ -1494,11 +1629,97 @@ export class ThreeSceneAdapter {
     }));
   }
 
+  setPhysicsHandler(handler) {
+    this.physicsHandler = typeof handler === "function" ? handler : null;
+  }
+
+  notifyPhysics(report) {
+    this.physicsHandler?.(structuredClone(report));
+  }
+
+  async preparePhysicsRuntime() {
+    const project = this.lastState?.project;
+    const token = ++this.physicsLoadToken;
+    this.physicsRuntime?.dispose();
+    this.physicsRuntime = null;
+    this.physicsProject = null;
+    const { projectNeedsRapier } = await import("./rapier-runtime.js");
+    if (token !== this.physicsLoadToken || this.mode !== "preview") return;
+    if (!projectNeedsRapier(project)) {
+      this.notifyPhysics({ status: "IDLE", backend: "deterministic-kinematic", reason: "NO_DYNAMIC_BODIES" });
+      return;
+    }
+    this.notifyPhysics({ status: "LOADING", backend: "rapier3d-compat-0.20" });
+    try {
+      const { createRapierProjectRuntime } = await import("./rapier-runtime.js");
+      const runtime = await createRapierProjectRuntime(project);
+      if (token !== this.physicsLoadToken || this.mode !== "preview" || this.lastState?.project !== project) {
+        runtime.dispose();
+        return;
+      }
+      this.physicsRuntime = runtime;
+      this.physicsProject = project;
+      this.notifyPhysics({ status: "READY", ...runtime.snapshot() });
+      if (this.directorFrame) this.applyPhysicsFrame(this.directorFrame);
+    } catch (error) {
+      if (token !== this.physicsLoadToken) return;
+      this.notifyPhysics({ status: "ERROR", backend: "rapier3d-compat-0.20", message: error.message });
+    }
+  }
+
+  controlledPhysicsObjectIds(frame) {
+    const controlled = new Set();
+    for (const [objectId, ownership] of Object.entries(frame.simulation?.ownership ?? {})) {
+      if (ownership.status && ownership.status !== "free") controlled.add(objectId);
+    }
+    const time = Number(frame.time) || 0;
+    for (const clip of this.lastState?.project.director?.timeline?.clips ?? []) {
+      if (time < clip.start || time > clip.start + clip.duration) continue;
+      for (const id of [clip.targetId, clip.secondaryTargetId, clip.recipientId, clip.placementTargetId]) {
+        if (id) controlled.add(id);
+      }
+    }
+    return controlled;
+  }
+
+  applyPhysicsFrame(frame) {
+    if (!this.physicsRuntime || !frame?.objects) return null;
+    const report = this.physicsRuntime.advanceTo(
+      frame.time,
+      frame.objects,
+      this.controlledPhysicsObjectIds(frame),
+    );
+    for (const [objectId, state] of Object.entries(report.objects)) {
+      const mesh = this.meshes.get(objectId);
+      if (!mesh) continue;
+      mesh.position.fromArray(state.position);
+      mesh.quaternion.fromArray(state.quaternion);
+      mesh.updateMatrixWorld(true);
+    }
+    frame.simulation.physics = report;
+    const now = performance.now();
+    if (now - this.lastPhysicsReportAt > 250 || report.reset) {
+      this.lastPhysicsReportAt = now;
+      this.notifyPhysics({ status: "READY", ...report });
+    }
+    return report;
+  }
+
+  disposePhysicsRuntime(reason = "DISPOSED") {
+    this.physicsLoadToken += 1;
+    this.physicsRuntime?.dispose();
+    this.physicsRuntime = null;
+    this.physicsProject = null;
+    this.notifyPhysics({ status: "DISABLED", backend: "rapier3d-compat-0.20", reason });
+  }
+
   dispose() {
     this.disposed = true;
     cancelAnimationFrame(this.animationFrame);
     this.assetControllers.forEach((controller) => controller.dispose());
     this.assetControllers.clear();
+    this.cp03VisualEffects.clear();
+    this.disposePhysicsRuntime();
     this.casePackControllerCache.forEach((controller) => controller.dispose());
     this.casePackControllerCache.clear();
     this.casePackAssetIdByCarrier.clear();

@@ -72,9 +72,10 @@ const ROLE_DEFAULTS = Object.freeze({
   },
 });
 
-const TIMELINE_TYPES = new Set(["move", "rotate", "scale", "visibility", "dialogue", "camera", "attach", "interaction"]);
+const TIMELINE_TYPES = new Set(["move", "rotate", "scale", "visibility", "dialogue", "camera", "attach", "interaction", "behavior"]);
 const TIMELINE_TRACKS = new Set(["camera", "character", "prop", "environment", "dialogue"]);
 const OWNERSHIP_MODES = new Set(["none", "claim", "transfer", "release"]);
+const BEHAVIOR_ACTIONS = new Set(["idle", "approach", "look", "reach", "grasp", "carry", "transfer", "release", "speak"]);
 const COLLISION_PROXY_SHAPES = new Set(["box", "sphere", "cylinder", "capsule"]);
 
 const clone = (value) => structuredClone(value);
@@ -164,18 +165,61 @@ const normalizeStringMap = (value, limit = 32) => {
     .filter(([key, entry]) => key && entry));
 };
 
+const normalizeNullableStringMap = (value, limit = 32) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value)
+    .slice(0, limit)
+    .map(([key, entry]) => [cleanText(key, 48), entry == null || entry === "" ? null : cleanText(entry, 96)])
+    .filter(([key, entry]) => key && (entry === null || entry)));
+};
+
+const PORTABLE_ASSET_ROLES = new Set(["model", "animation", "bridge", "rgb", "depth"]);
+const PORTABLE_ASSET_KINDS = new Set(["model", "spatial-bridge"]);
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+
+const normalizePortableAsset = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const kind = PORTABLE_ASSET_KINDS.has(value.kind) ? value.kind : null;
+  if (!kind) return null;
+  const seenRoles = new Set();
+  const entries = (Array.isArray(value.entries) ? value.entries : [])
+    .slice(0, 4)
+    .map((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+      const role = PORTABLE_ASSET_ROLES.has(entry.role) ? entry.role : null;
+      const sha256 = String(entry.sha256 ?? "").toLowerCase();
+      const filename = cleanText(entry.filename, 160).replaceAll("\\", "/").split("/").at(-1);
+      const bytes = Math.max(1, Math.round(finite(entry.bytes, 0)));
+      const mimeType = cleanText(entry.mimeType, 96) || "application/octet-stream";
+      if (!role || seenRoles.has(role) || !SHA256_PATTERN.test(sha256) || !filename || bytes > 160_000_000) {
+        return null;
+      }
+      seenRoles.add(role);
+      return { role, sha256, filename, bytes, mimeType };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.role.localeCompare(right.role));
+  const requiredRoles = kind === "model" ? ["model"] : ["bridge", "depth", "rgb"];
+  if (requiredRoles.some((role) => !seenRoles.has(role))) return null;
+  if (kind === "model" && entries.some((entry) => !["model", "animation"].includes(entry.role))) return null;
+  if (kind === "spatial-bridge" && entries.length !== requiredRoles.length) return null;
+  return { schemaVersion: 1, kind, entries };
+};
+
 const normalizeAsset = (value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const rawUrl = cleanText(value.url, 512).replaceAll("\\", "/");
   const url = rawUrl && !/^(?:data|javascript):/i.test(rawUrl) ? rawUrl : null;
+  const portable = normalizePortableAsset(value.portable);
   return {
     url,
     scale: clamp(finite(value.scale, 1), 0.001, 1_000),
     forwardAxis: ["-Z", "+Z", "-X", "+X"].includes(value.forwardAxis) ? value.forwardAxis : "-Z",
     nodes: normalizeStringMap(value.nodes),
     animations: normalizeStringMap(value.animations),
-    bones: normalizeStringMap(value.bones),
+    bones: normalizeNullableStringMap(value.bones),
     expressions: normalizeStringMap(value.expressions),
+    ...(portable ? { portable } : {}),
   };
 };
 
@@ -406,6 +450,8 @@ const normalizeClip = (value, objectIds) => {
     offset: normalizeVector(value.offset, [0.65, 0.8, 0]),
     text: cleanText(value.text, 500),
     action: cleanText(value.action, 64),
+    behaviorAction: BEHAVIOR_ACTIONS.has(value.behaviorAction) ? value.behaviorAction : null,
+    hand: ["auto", "left", "right", "both"].includes(value.hand) ? value.hand : "auto",
     targetAnchor: cleanText(value.targetAnchor, 48) || null,
     actorNode: cleanText(value.actorNode, 48) || null,
     resultingState: cleanText(value.resultingState, 96) || null,

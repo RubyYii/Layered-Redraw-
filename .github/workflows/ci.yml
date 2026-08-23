@@ -17,13 +17,13 @@ jobs:
         os: [ubuntu-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
 
@@ -67,13 +67,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: apps/scene-builder/package-lock.json
+          cache-dependency-path: |
+            packages/pact-cp03-contracts/package-lock.json
+            apps/scene-builder/package-lock.json
+
+      - name: Install CP03 contract dependencies
+        working-directory: packages/pact-cp03-contracts
+        run: npm ci
 
       - name: Install 3D application dependencies
         working-directory: apps/scene-builder
@@ -95,4 +101,67 @@ jobs:
 
       - name: Build the production 3D application
         working-directory: apps/scene-builder
+        run: npm run build
+
+      - name: Verify CP03 audience UI and large-project recovery
+        working-directory: apps/scene-builder
+        shell: bash
+        run: |
+          npm run dev -- --port 5173 > "$RUNNER_TEMP/scene-builder-vite.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:5173/ > /dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:5173/ > /dev/null
+          npm run test:cp03:audience -- --url http://127.0.0.1:5173/
+          npm run test:large-autosave -- --url http://127.0.0.1:5173/
+
+  cp03-agent:
+    name: CP03 Contracts and Agent Host
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            packages/pact-cp03-contracts/package-lock.json
+            apps/scene-builder/package-lock.json
+            apps/pact-agent-host/package-lock.json
+
+      - name: Install CP03 contract dependencies
+        working-directory: packages/pact-cp03-contracts
+        run: npm ci
+
+      - name: Test CP03 contracts
+        working-directory: packages/pact-cp03-contracts
+        run: npm test
+
+      # The DSH-to-Ruby integration suite imports Scene Builder source directly,
+      # so its local contract link must exist in a clean checkout as well.
+      - name: Install Scene Builder integration dependencies
+        working-directory: apps/scene-builder
+        run: npm ci
+
+      - name: Install Agent Host dependencies
+        working-directory: apps/pact-agent-host
+        run: npm ci
+
+      - name: Test Agent Host
+        working-directory: apps/pact-agent-host
+        run: npm test
+
+      - name: Type-check Agent Host
+        working-directory: apps/pact-agent-host
+        run: npm run typecheck
+
+      - name: Build Agent Host
+        working-directory: apps/pact-agent-host
         run: npm run build
