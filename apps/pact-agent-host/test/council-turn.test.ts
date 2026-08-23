@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   COUNCIL_TIMING_LIMITS,
@@ -8,15 +8,13 @@ import {
   type FreezeCouncilTurnInput,
 } from '../src/council-turn.js';
 import {
-  fullCouncilShards,
-  fullCouncilSnapshot,
   fullCouncilTurnInput,
   fullTurnScope,
-  proposedCouncilCommit,
+  fullCouncilFixture,
   roleOrder,
   scriptedDualProviderManifest,
   textOnlyTurnScope,
-  withheldGuardianShard,
+  createFullCouncilFixtures,
 } from './council-fixtures.js';
 
 type TurnFacts = Omit<FreezeCouncilTurnInput, 'now'>;
@@ -56,12 +54,38 @@ describe('council turn snapshot and required-role policy', () => {
   });
 
   it('freezes a representative multimodal turn with locally derived roles', async () => {
-    const turn = await freezeAt();
+    const fixtures = await fullCouncilFixture;
+    const turn = fixtures.turn;
 
     expect(turn.snapshot).toMatchObject({
-      ...fullCouncilSnapshot,
+      schemaVersion: 'cp03-council-turn/0.1',
+      caseSessionId: 'case_council01',
+      turnId: 'turn_council01',
+      parentSceneHash: 'b'.repeat(64),
+      sourceLockIds: ['source-plane'],
+      inputRefs: [
+        { refId: 'input_text01', inputClass: 'text' },
+        { refId: 'input_image01', inputClass: 'image' },
+      ],
+      registryVersion: 'cp03-registry/0.1',
+      registeredAssetIds: ['asset-cup01'],
+      registeredSpatialBridgeIds: ['bridge-window01'],
+      registeredRightsIds: ['rights-local-scene'],
+      supportedRollbackCapabilityIds: ['rollback-transient-overlay'],
+      allowedSemanticCapabilityIds: ['performRegisteredInteraction'],
+      caseActionState: {
+        status: 'OPEN',
+        currentSceneHash: 'b'.repeat(64),
+        accumulatedActions: ['Reframe'],
+        terminalAction: null,
+      },
+      turnScope: fullTurnScope,
+      requiredRoles: roleOrder,
+      routingManifestVersion: 'cp03-council-routing/manifest-0.1',
+      deadlineId: 'deadline_council01',
       deadlineMs: 12_000,
     });
+    expect(fixtures.snapshot).toBe(turn.snapshot);
     expect(turn.snapshot.requiredRoles).toEqual(roleOrder);
     expect(turn.requiredRoles).toBe(turn.snapshot.requiredRoles);
     expect(turn.startedAtMonotonicMs).toBe(1_000);
@@ -80,10 +104,38 @@ describe('council turn snapshot and required-role policy', () => {
     expect(Object.isFrozen(turn.snapshot.caseActionState)).toBe(true);
     expect(Object.isFrozen(turn.snapshot.turnScope)).toBe(true);
 
-    expect(Object.keys(fullCouncilShards)).toEqual(roleOrder);
-    expect(proposedCouncilCommit.status).toBe('PROPOSED');
-    expect(withheldGuardianShard.content.disposition).toBe('WITHHOLD');
+    expect(Object.keys(fixtures.shards)).toEqual(roleOrder);
+    expect(fixtures.proposedCommit.status).toBe('PROPOSED');
+    expect(fixtures.withheldGuardianShard.content.disposition).toBe('WITHHOLD');
     expect(Object.keys(scriptedDualProviderManifest.assignments)).toEqual(roleOrder);
+  });
+
+  it('binds every role shard to the computed frozen turn hash and identity', async () => {
+    const fixtures = await createFullCouncilFixtures();
+
+    expect(fixtures.snapshot).toBe(fixtures.turn.snapshot);
+    for (const role of roleOrder) {
+      const shard = fixtures.shards[role];
+      expect(shard.snapshotHash, role).toBe(fixtures.turn.snapshotHash);
+      expect(shard.caseSessionId, role).toBe(fixtures.snapshot.caseSessionId);
+      expect(shard.turnId, role).toBe(fixtures.snapshot.turnId);
+      expect(shard.parentSceneHash, role).toBe(fixtures.snapshot.parentSceneHash);
+      expect(shard.registryVersion, role).toBe(fixtures.snapshot.registryVersion);
+      expect(shard.routingManifestVersion, role)
+        .toBe(fixtures.snapshot.routingManifestVersion);
+      expect(shard.deadlineId, role).toBe(fixtures.snapshot.deadlineId);
+    }
+  });
+
+  it('reads the monotonic epoch once and derives the deadline from the first value', async () => {
+    const now = vi.fn(() => 4_000);
+    now.mockReturnValueOnce(4_000).mockReturnValueOnce(99_000);
+
+    const turn = await freezeCouncilTurn({ ...fullCouncilTurnInput, now });
+
+    expect(now).toHaveBeenCalledTimes(1);
+    expect(turn.startedAtMonotonicMs).toBe(4_000);
+    expect(turn.deadlineAtMonotonicMs).toBe(16_000);
   });
 
   it('hashes identical JSON inputs identically and binds scene and routing versions', async () => {
@@ -168,6 +220,30 @@ describe('council turn snapshot and required-role policy', () => {
           ...fullCouncilTurnInput.inputRefs,
           { refId: 'input_text02', inputClass: 'text' as const },
         ],
+      }],
+      ['case session id', {
+        ...fullCouncilTurnInput,
+        caseSessionId: 'case_council02',
+      }],
+      ['turn id', {
+        ...fullCouncilTurnInput,
+        turnId: 'turn_council02',
+      }],
+      ['registry version', {
+        ...fullCouncilTurnInput,
+        registryVersion: 'cp03-registry/0.2',
+      }],
+      ['deadline id', {
+        ...fullCouncilTurnInput,
+        deadlineId: 'deadline_council02',
+      }],
+      ['same-class input reference id', {
+        ...fullCouncilTurnInput,
+        inputRefs: fullCouncilTurnInput.inputRefs.map((inputRef, index) =>
+          index === 0
+            ? { ...inputRef, refId: 'input_text02' }
+            : inputRef
+        ),
       }],
       ['case action state', {
         ...fullCouncilTurnInput,

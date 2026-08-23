@@ -2,13 +2,17 @@ import type {
   CouncilRole,
   CouncilShard,
   ConductorDraftCommit,
+  GuardianShard,
   ProviderRoutingAssignment,
   ProviderRoutingManifest,
 } from '../src/contract-types.js';
 import type {
+  CouncilTurnSnapshot,
   CouncilTurnScope,
   FreezeCouncilTurnInput,
+  FrozenCouncilTurn,
 } from '../src/council-turn.js';
+import { freezeCouncilTurn } from '../src/council-turn.js';
 
 const deepFreeze = <T>(value: T): T => {
   if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -127,58 +131,29 @@ export const fullCouncilTurnInput: Omit<FreezeCouncilTurnInput, 'now'> = deepFre
   deadlineId: 'deadline_council01',
 });
 
-export const fullCouncilSnapshot = deepFreeze({
-  schemaVersion: 'cp03-council-turn/0.1',
-  caseSessionId: 'case_council01',
-  turnId: 'turn_council01',
-  parentSceneHash: 'b'.repeat(64),
-  sourceLockIds: ['source-plane'],
-  inputRefs: [
-    { refId: 'input_text01', inputClass: 'text' },
-    { refId: 'input_image01', inputClass: 'image' },
-  ],
-  registryVersion: 'cp03-registry/0.1',
-  registeredAssetIds: ['asset-cup01'],
-  registeredSpatialBridgeIds: ['bridge-window01'],
-  registeredRightsIds: ['rights-local-scene'],
-  supportedRollbackCapabilityIds: ['rollback-transient-overlay'],
-  allowedSemanticCapabilityIds: ['performRegisteredInteraction'],
-  caseActionState: {
-    status: 'OPEN',
-    currentSceneHash: 'b'.repeat(64),
-    accumulatedActions: ['Reframe'],
-    terminalAction: null,
-  },
-  turnScope: fullTurnScope,
-  requiredRoles: [
-    'CaseConductor',
-    'Witness',
-    'Archivist',
-    'Rewriter',
-    'Guardian',
-  ],
-  routingManifestVersion: 'cp03-council-routing/manifest-0.1',
-  deadlineId: 'deadline_council01',
-  deadlineMs: 12_000,
-});
-
-const councilShardBase = {
+const councilShardBase = (
+  snapshot: CouncilTurnSnapshot,
+  snapshotHash: string,
+) => ({
   schemaVersion: 'cp03-council/0.2' as const,
-  caseSessionId: 'case_council01',
-  turnId: 'turn_council01',
-  snapshotHash: 'a'.repeat(64),
-  parentSceneHash: 'b'.repeat(64),
-  registryVersion: 'cp03-registry/0.1',
-  routingManifestVersion: 'cp03-council-routing/manifest-0.1',
-  deadlineId: 'deadline_council01',
+  caseSessionId: snapshot.caseSessionId,
+  turnId: snapshot.turnId,
+  snapshotHash,
+  parentSceneHash: snapshot.parentSceneHash,
+  registryVersion: snapshot.registryVersion,
+  routingManifestVersion: snapshot.routingManifestVersion,
+  deadlineId: snapshot.deadlineId,
   publicTrace: 'A bounded synthetic council contribution.',
   uncertainties: ['The spatial relation remains interpretive.'],
   evidenceAnchors: ['input_image01', 'input_text01'],
-};
+});
 
-export const fullCouncilShards = deepFreeze({
+const buildCouncilShards = (
+  snapshot: CouncilTurnSnapshot,
+  snapshotHash: string,
+) => deepFreeze({
   CaseConductor: {
-    ...councilShardBase,
+    ...councilShardBase(snapshot, snapshotHash),
     shardId: 'shard_conductor01',
     kind: 'CONDUCTOR_INTENT',
     role: 'CaseConductor',
@@ -197,7 +172,7 @@ export const fullCouncilShards = deepFreeze({
     },
   },
   Witness: {
-    ...councilShardBase,
+    ...councilShardBase(snapshot, snapshotHash),
     shardId: 'shard_witness01',
     kind: 'WITNESS',
     role: 'Witness',
@@ -211,7 +186,7 @@ export const fullCouncilShards = deepFreeze({
     },
   },
   Archivist: {
-    ...councilShardBase,
+    ...councilShardBase(snapshot, snapshotHash),
     shardId: 'shard_archivist01',
     kind: 'ARCHIVIST',
     role: 'Archivist',
@@ -225,7 +200,7 @@ export const fullCouncilShards = deepFreeze({
     },
   },
   Rewriter: {
-    ...councilShardBase,
+    ...councilShardBase(snapshot, snapshotHash),
     shardId: 'shard_rewriter01',
     kind: 'REWRITER',
     role: 'Rewriter',
@@ -252,7 +227,7 @@ export const fullCouncilShards = deepFreeze({
     },
   },
   Guardian: {
-    ...councilShardBase,
+    ...councilShardBase(snapshot, snapshotHash),
     shardId: 'shard_guardian01',
     kind: 'GUARDIAN',
     role: 'Guardian',
@@ -274,15 +249,15 @@ export const fullCouncilShards = deepFreeze({
   },
 } satisfies Record<CouncilRole, CouncilShard>);
 
-export const withheldGuardianShard = deepFreeze({
-  ...fullCouncilShards.Guardian,
+const buildWithheldGuardianShard = (guardian: GuardianShard): GuardianShard => deepFreeze({
+  ...guardian,
   shardId: 'shard_guardian_withheld01',
   content: {
-    ...fullCouncilShards.Guardian.content,
+    ...guardian.content,
     disposition: 'WITHHOLD' as const,
     guardianChallenge: 'Withhold because the synthetic rights fixture is not cleared for mutation.',
   },
-} satisfies CouncilShard);
+} satisfies GuardianShard);
 
 export const proposedCouncilCommit = deepFreeze({
   schemaVersion: 'cp03-council/0.2',
@@ -301,3 +276,30 @@ export const roleOrder = deepFreeze([
   'Rewriter',
   'Guardian',
 ] as const);
+
+export interface FullCouncilFixtures {
+  readonly turn: FrozenCouncilTurn;
+  readonly snapshot: CouncilTurnSnapshot;
+  readonly shards: Readonly<Record<CouncilRole, CouncilShard>>;
+  readonly proposedCommit: ConductorDraftCommit;
+  readonly withheldGuardianShard: GuardianShard;
+  readonly routingManifest: ProviderRoutingManifest;
+}
+
+export const createFullCouncilFixtures = async (
+  now: () => number = () => 1_000,
+): Promise<FullCouncilFixtures> => {
+  const turn = await freezeCouncilTurn({ ...fullCouncilTurnInput, now });
+  const shards = buildCouncilShards(turn.snapshot, turn.snapshotHash);
+  const withheldGuardianShard = buildWithheldGuardianShard(shards.Guardian);
+  return deepFreeze({
+    turn,
+    snapshot: turn.snapshot,
+    shards,
+    proposedCommit: proposedCouncilCommit,
+    withheldGuardianShard,
+    routingManifest: scriptedDualProviderManifest,
+  });
+};
+
+export const fullCouncilFixture = createFullCouncilFixtures();
