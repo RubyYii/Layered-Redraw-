@@ -67,6 +67,9 @@
     "typescript": "6.0.3",
     "vitest": "4.1.10"
   },
+  "overrides": {
+    "@earendil-works/pi-ai": "0.84.2"
+  },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
   },
