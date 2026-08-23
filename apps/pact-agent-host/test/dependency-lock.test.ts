@@ -41,8 +41,7 @@ describe('dependency lock', () => {
     const directGeminiSdks = directPackages.filter((name) =>
       name === '@earendil-works/pi-ai'
       || name === '@google/generative-ai'
-      || name.toLowerCase().includes('gemini')
-      || name.toLowerCase().includes('generative-ai')
+      || /(^|[/@-])(gemini|generative-ai|genai|vertexai)([/@-]|$)/i.test(name)
     );
 
     expect(directGeminiSdks).toEqual([]);
