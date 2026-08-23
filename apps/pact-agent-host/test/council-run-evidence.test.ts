@@ -269,7 +269,7 @@ const durableShardReceipts = (): DurableCouncilShardReceipt[] => [
     status: 'DURABLE' as const,
     sessionId: '00000000-0000-4000-8000-000000000002',
     shardId: 'shard_witness01',
-    lastSeq: 1,
+    lastSeq: 3,
     turnId: 'turn_council01',
     payloadHash: defaultWitnessShardHash,
     acceptanceSequence: 2,
@@ -284,7 +284,7 @@ const durableShardReceipts = (): DurableCouncilShardReceipt[] => [
     status: 'DURABLE' as const,
     sessionId: '00000000-0000-4000-8000-000000000003',
     shardId: 'shard_archivist01',
-    lastSeq: 1,
+    lastSeq: 4,
     turnId: 'turn_council01',
     payloadHash: 'a'.repeat(64),
     acceptanceSequence: 3,
@@ -299,7 +299,7 @@ const durableShardReceipts = (): DurableCouncilShardReceipt[] => [
     status: 'DURABLE' as const,
     sessionId: '00000000-0000-4000-8000-000000000004',
     shardId: 'shard_rewriter01',
-    lastSeq: 1,
+    lastSeq: 5,
     turnId: 'turn_council01',
     payloadHash: 'e'.repeat(64),
     acceptanceSequence: 4,
@@ -314,7 +314,7 @@ const durableShardReceipts = (): DurableCouncilShardReceipt[] => [
     status: 'DURABLE' as const,
     sessionId: '00000000-0000-4000-8000-000000000005',
     shardId: 'shard_guardian01',
-    lastSeq: 1,
+    lastSeq: 6,
     turnId: 'turn_council01',
     payloadHash: '5'.repeat(64),
     acceptanceSequence: 5,
@@ -330,7 +330,7 @@ const durableConductorCommitReceipt = (): DurableConductorCommitReceipt => ({
   accepted: true,
   status: 'DURABLE' as const,
   sessionId: '00000000-0000-4000-8000-000000000001',
-  lastSeq: 2,
+  lastSeq: 7,
   turnId: 'turn_council01',
   payloadHash: 'b'.repeat(64),
   commitEventSeq: 7,
@@ -755,6 +755,123 @@ describe('verifyCouncilRunEvidence', () => {
     });
   });
 
+  it('rejects a completed archive whose logical final slot stops without its accepted council tool', () => {
+    const archive = validCouncilRunArchive();
+    const stopped = archive.result.attemptRecords.map((record, index) =>
+      index === 0
+        ? {
+            ...record,
+            expectedOutcome: 'terminal-after-tool-result' as const,
+            expectedTools: [],
+            contract: {
+              ...record.contract,
+              finish: { kind: 'stop' as const },
+              toolCalls: [],
+            },
+          }
+        : record
+    );
+    const report = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: { ...archive.result, attemptRecords: stopped },
+    }), []);
+
+    expect(report.status).toBe('FAIL');
+    expect(report.findings).toEqual(expect.arrayContaining([
+      {
+        code: 'COUNCIL_FINAL_EXPECTED_OUTCOME_INVALID',
+        path: 'result.attemptRecords[0].expectedOutcome',
+      },
+      {
+        code: 'COUNCIL_FINAL_EXPECTED_TOOLS_INVALID',
+        path: 'result.attemptRecords[0].expectedTools',
+      },
+      {
+        code: 'COUNCIL_FINAL_FINISH_INVALID',
+        path: 'result.attemptRecords[0].contract.finish',
+      },
+      {
+        code: 'COUNCIL_FINAL_TOOL_RECEIPT_INVALID',
+        path: 'result.attemptRecords[0].contract.toolCalls',
+      },
+    ]));
+  });
+
+  it('rejects observed/unaccepted or self-declared wrong tools on a completed final slot', () => {
+    const archive = validCouncilRunArchive();
+    const observed = archive.result.attemptRecords.map((record, index) =>
+      index === 1
+        ? {
+            ...record,
+            contract: {
+              ...record.contract,
+              toolCalls: record.contract.toolCalls.map((receipt) => ({
+                ...receipt,
+                status: 'observed' as const,
+              })),
+            },
+          }
+        : record
+    );
+    const observedReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: { ...archive.result, attemptRecords: observed },
+    }), []);
+    expect(observedReport.findings).toContainEqual({
+      code: 'COUNCIL_FINAL_TOOL_RECEIPT_INVALID',
+      path: 'result.attemptRecords[1].contract.toolCalls',
+    });
+
+    const wrongTool = archive.result.attemptRecords.map((record, index) =>
+      index === 1
+        ? {
+            ...record,
+            expectedTools: ['pact_submit_conductor_commit'] as const,
+            contract: {
+              ...record.contract,
+              toolCalls: record.contract.toolCalls.map((receipt) => ({
+                ...receipt,
+                name: 'pact_submit_conductor_commit',
+              })),
+            },
+          }
+        : record
+    );
+    const wrongToolReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: { ...archive.result, attemptRecords: wrongTool },
+    }), []);
+    expect(wrongToolReport.findings).toEqual(expect.arrayContaining([
+      {
+        code: 'COUNCIL_FINAL_EXPECTED_TOOLS_INVALID',
+        path: 'result.attemptRecords[1].expectedTools',
+      },
+      {
+        code: 'COUNCIL_FINAL_TOOL_RECEIPT_INVALID',
+        path: 'result.attemptRecords[1].contract.toolCalls',
+      },
+    ]));
+  });
+
+  it('returns FAIL instead of throwing when expectedTools is not an array', () => {
+    const archive = validCouncilRunArchive();
+    const malformed = archive.result.attemptRecords.map((record, index) =>
+      index === 0
+        ? { ...record, expectedTools: null as unknown as [] }
+        : record
+    );
+
+    const report = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: { ...archive.result, attemptRecords: malformed },
+    }), []);
+    expect(report.status).toBe('FAIL');
+    expect(report.findings).toContainEqual({
+      code: 'ATTEMPT_RECORD_INVALID',
+      path: 'result.attemptRecords[0]',
+    });
+  });
+
   it('rejects undeclared hidden settlement streams or invalid orchestration turns', () => {
     const archive = validCouncilRunArchive();
     const report = verifyCouncilRunEvidence(JSON.stringify({
@@ -935,10 +1052,10 @@ describe('verifyCouncilRunEvidence', () => {
     const sevenAttempts = [
       initialAttempts[0]!,
       failedWitnessAttempt,
+      retryWitnessAttempt,
       initialAttempts[2]!,
       initialAttempts[3]!,
       initialAttempts[4]!,
-      retryWitnessAttempt,
       shiftedCommit,
     ];
     const sevenArchive = {
@@ -953,6 +1070,25 @@ describe('verifyCouncilRunEvidence', () => {
     expect(report.status).toBe('PASS');
     expect(report.counts.sentDispatches).toBe(7);
     expect(report.counts.attemptRecords).toBe(7);
+
+    const retryBeforePrior = [
+      initialAttempts[0]!,
+      retryWitnessAttempt,
+      failedWitnessAttempt,
+      initialAttempts[2]!,
+      initialAttempts[3]!,
+      initialAttempts[4]!,
+      shiftedCommit,
+    ];
+    const reorderedReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: {
+        ...archive.result,
+        providerRequestsMade: 7,
+        attemptRecords: retryBeforePrior,
+      },
+    }), []);
+    expect(reorderedReport.status).toBe('PASS');
   });
 
   it('rejects unsupported role and phase pairs', () => {
@@ -1481,6 +1617,86 @@ describe('verifyCouncilRunEvidence', () => {
     });
   });
 
+  it('requires canonical receipt numbering, monotonic acceptance times, and bounded event sequences', () => {
+    const archive = validCouncilRunArchive();
+    if (archive.result.status !== 'COMPLETED') {
+      throw new Error('fixture must be completed');
+    }
+    const receiptVariants = [
+      {
+        code: 'DURABLE_SHARD_ACCEPTANCE_SEQUENCE_INVALID',
+        path: 'result.durableShardReceipts',
+        receipts: archive.result.durableShardReceipts.map((receipt, index) =>
+          index === 4 ? { ...receipt, acceptanceSequence: 6 } : receipt
+        ),
+      },
+      {
+        code: 'DURABLE_SHARD_ACCEPTED_AT_ORDER_INVALID',
+        path: 'result.durableShardReceipts',
+        receipts: archive.result.durableShardReceipts.map((receipt, index) =>
+          index === 2 ? { ...receipt, acceptedAtMonotonicMs: 1_900 } : receipt
+        ),
+      },
+      {
+        code: 'DURABLE_SHARD_EVENT_SEQUENCE_INVALID',
+        path: 'result.durableShardReceipts[2].shardEventSeq',
+        receipts: archive.result.durableShardReceipts.map((receipt, index) =>
+          index === 2 ? { ...receipt, shardEventSeq: receipt.lastSeq + 1 } : receipt
+        ),
+      },
+      {
+        code: 'DURABLE_TRACE_EVENT_SEQUENCE_INVALID',
+        path: 'result.durableShardReceipts[1].traceEventSeq',
+        receipts: archive.result.durableShardReceipts.map((receipt, index) =>
+          index === 1 ? { ...receipt, traceEventSeq: receipt.shardEventSeq } : receipt
+        ),
+      },
+      {
+        code: 'DURABLE_TRACE_EVENT_SEQUENCE_INVALID',
+        path: 'result.durableShardReceipts[1].traceEventSeq',
+        receipts: archive.result.durableShardReceipts.map((receipt, index) =>
+          index === 1 ? { ...receipt, traceEventSeq: receipt.lastSeq + 1 } : receipt
+        ),
+      },
+      {
+        code: 'DURABLE_TRACE_EVENT_SEQUENCE_INVALID',
+        path: 'result.durableShardReceipts[2].traceEventSeq',
+        receipts: archive.result.durableShardReceipts.map((receipt, index) =>
+          index === 2 ? { ...receipt, traceEventSeq: receipt.lastSeq } : receipt
+        ),
+      },
+    ];
+
+    for (const variant of receiptVariants) {
+      const report = verifyCouncilRunEvidence(JSON.stringify({
+        ...archive,
+        result: {
+          ...archive.result,
+          durableShardReceipts: variant.receipts,
+        },
+      }), []);
+      expect(report.findings).toContainEqual({
+        code: variant.code,
+        path: variant.path,
+      });
+    }
+
+    const commitReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: {
+        ...archive.result,
+        durableConductorCommitReceipt: {
+          ...archive.result.durableConductorCommitReceipt,
+          commitEventSeq: archive.result.durableConductorCommitReceipt.lastSeq + 1,
+        },
+      },
+    }), []);
+    expect(commitReport.findings).toContainEqual({
+      code: 'DURABLE_COMMIT_EVENT_SEQUENCE_INVALID',
+      path: 'result.durableConductorCommitReceipt.commitEventSeq',
+    });
+  });
+
   it('binds receipt, trace, and completed draft turn and case identities', () => {
     const archive = validCouncilRunArchive();
     if (archive.result.status !== 'COMPLETED') {
@@ -1745,6 +1961,23 @@ describe('verifyCouncilRunEvidence', () => {
       path: 'diagnostics.info',
     });
     expect(JSON.stringify(report)).not.toContain(escapedSecret);
+  });
+
+  it('detects supplied secrets in decoded object keys without echoing the key in a finding path', () => {
+    const escapedSecretKey = 'fictional"key\\secret';
+    const archive = {
+      ...validCouncilRunArchive(),
+      diagnostics: { [escapedSecretKey]: 'synthetic local value' },
+    };
+    const serialized = JSON.stringify(archive);
+    expect(serialized).not.toContain(escapedSecretKey);
+
+    const report = verifyCouncilRunEvidence(serialized, [escapedSecretKey]);
+    expect(report.findings).toContainEqual({
+      code: 'SECRET_VALUE_PRESENT',
+      path: '$decoded-key',
+    });
+    expect(JSON.stringify(report)).not.toContain(escapedSecretKey);
   });
 
   it('redacts runId when it contains an exact supplied secret value', () => {

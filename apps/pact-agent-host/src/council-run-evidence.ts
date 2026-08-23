@@ -135,23 +135,28 @@ const normalizedField = (value: string): string =>
 const scanSecretFields = (
   value: unknown,
   path: string,
+  secretValues: readonly string[],
   add: (code: string, path: string) => void,
 ): void => {
   if (Array.isArray(value)) {
     value.forEach((item, index) => scanSecretFields(
       item,
       `${path}[${index}]`,
+      secretValues,
       add,
     ));
     return;
   }
   if (!isRecord(value)) return;
   for (const [key, child] of Object.entries(value)) {
-    const childPath = path.length === 0 ? key : `${path}.${key}`;
+    const secretKey = secretValues.some((secret) => key.includes(secret));
+    const childPath = secretKey
+      ? '$decoded-key'
+      : path.length === 0 ? key : `${path}.${key}`;
     if (forbiddenSecretFields.has(normalizedField(key))) {
       add('SECRET_FIELD_PRESENT', childPath);
     }
-    scanSecretFields(child, childPath, add);
+    scanSecretFields(child, childPath, secretValues, add);
   }
 };
 
@@ -178,7 +183,13 @@ const scanSecretValues = (
   }
   if (!isRecord(value)) return;
   for (const [key, child] of Object.entries(value)) {
-    const childPath = path.length === 0 ? key : `${path}.${key}`;
+    const secretKey = secretValues.some((secret) => key.includes(secret));
+    if (secretKey) {
+      add('SECRET_VALUE_PRESENT', '$decoded-key');
+    }
+    const childPath = secretKey
+      ? '$decoded-key'
+      : path.length === 0 ? key : `${path}.${key}`;
     scanSecretValues(child, childPath, secretValues, add);
   }
 };
@@ -268,7 +279,7 @@ export const verifyCouncilRunEvidence = (
     };
   }
 
-  scanSecretFields(parsed, '', (code, path) => {
+  scanSecretFields(parsed, '', materialSecrets, (code, path) => {
     add('secretScan', code, path);
   });
   scanSecretValues(parsed, '', materialSecrets, (code, path) => {
@@ -359,6 +370,9 @@ export const verifyCouncilRunEvidence = (
       (value.provider !== 'deepseek' && value.provider !== 'gemini') ||
       typeof value.purpose !== 'string' ||
       !['structured-tool', 'terminal-after-tool-result', 'hard-timeout-cancel', 'cancel-after-first-chunk'].includes(String(value.expectedOutcome)) ||
+      !Array.isArray(value.expectedTools) ||
+      value.expectedTools.some((tool) => typeof tool !== 'string') ||
+      !Number.isInteger(value.attempt) ||
       !Number.isInteger(value.sentOrdinal) ||
       typeof value.council.role !== 'string' ||
       (value.council.phase !== 'SHARD' && value.council.phase !== 'CONDUCTOR_COMMIT') ||
@@ -389,7 +403,15 @@ export const verifyCouncilRunEvidence = (
 
   const typedRecords = typedEntries.map(({ record }) => record);
   const ordinals = records.map((record) => isRecord(record) ? record.sentOrdinal : undefined);
-  if (ordinals.some((ordinal, index) => ordinal !== index + 1)) {
+  const sortedOrdinals = ordinals.every((ordinal): ordinal is number =>
+    typeof ordinal === 'number' && Number.isInteger(ordinal)
+  )
+    ? [...ordinals].sort((left, right) => left - right)
+    : [];
+  if (
+    sortedOrdinals.length !== records.length ||
+    sortedOrdinals.some((ordinal, index) => ordinal !== index + 1)
+  ) {
     add('dispatchLedger', 'SENT_ORDINAL_SEQUENCE_INVALID', 'result.attemptRecords');
   }
 
@@ -425,9 +447,6 @@ export const verifyCouncilRunEvidence = (
         if (record.council.declaredDispatchOrdinal !== slot.declaredDispatchOrdinal) {
           add('dispatchLedger', 'DISPATCH_ORDINAL_MISMATCH', `${path}.council.declaredDispatchOrdinal`);
         }
-        if (record.council.phase === 'SHARD' && record.sentOrdinal !== slot.declaredDispatchOrdinal) {
-          add('dispatchLedger', 'DISPATCH_ORDINAL_MISMATCH', `${path}.sentOrdinal`);
-        }
       }
     } else {
       retryEntries.push(entry);
@@ -462,7 +481,11 @@ export const verifyCouncilRunEvidence = (
       continue;
     }
     const prior = recordsByCallId.get(retryOf);
-    if (prior === undefined || prior.index >= index || prior.record.attempt !== 1) {
+    if (
+      prior === undefined ||
+      prior.record.sentOrdinal >= record.sentOrdinal ||
+      prior.record.attempt !== 1
+    ) {
       add('dispatchLedger', 'RETRY_CHAIN_BROKEN', `${path}.contract.retryOf`);
       continue;
     }
@@ -507,6 +530,62 @@ export const verifyCouncilRunEvidence = (
         prior.record.council.declaredDispatchOrdinal !== lowestEligibleOrdinal
       ) {
         add('dispatchLedger', 'PROVIDER_RETRY_PRIORITY_INVALID', `${path}.contract.retryOf`);
+      }
+    }
+  }
+
+  if (resultStatus === 'COMPLETED') {
+    for (const slot of INITIAL_COUNCIL_SLOTS) {
+      const slotKey = councilSlotKey(slot.role, slot.phase);
+      const candidates = typedEntries.filter(({ record }) =>
+        councilSlotKey(record.council.role, record.council.phase) === slotKey &&
+        (record.attempt === 1 || record.attempt === 2)
+      );
+      const finalEntry = [...candidates].sort((left, right) =>
+        right.record.attempt - left.record.attempt ||
+        right.record.sentOrdinal - left.record.sentOrdinal
+      )[0];
+      if (finalEntry === undefined) continue;
+
+      const { record, index } = finalEntry;
+      const path = `result.attemptRecords[${index}]`;
+      const expectedTool = slot.phase === 'SHARD'
+        ? 'pact_submit_council_shard'
+        : 'pact_submit_conductor_commit';
+      if (record.expectedOutcome !== 'structured-tool') {
+        add(
+          'contracts',
+          'COUNCIL_FINAL_EXPECTED_OUTCOME_INVALID',
+          `${path}.expectedOutcome`,
+        );
+      }
+      if (
+        record.expectedTools.length !== 1 ||
+        record.expectedTools[0] !== expectedTool
+      ) {
+        add(
+          'contracts',
+          'COUNCIL_FINAL_EXPECTED_TOOLS_INVALID',
+          `${path}.expectedTools`,
+        );
+      }
+      if (record.contract.finish.kind !== 'tool_calls') {
+        add(
+          'contracts',
+          'COUNCIL_FINAL_FINISH_INVALID',
+          `${path}.contract.finish`,
+        );
+      }
+      if (
+        record.contract.toolCalls.length !== 1 ||
+        record.contract.toolCalls[0]?.name !== expectedTool ||
+        record.contract.toolCalls[0]?.status !== 'accepted'
+      ) {
+        add(
+          'contracts',
+          'COUNCIL_FINAL_TOOL_RECEIPT_INVALID',
+          `${path}.contract.toolCalls`,
+        );
       }
     }
   }
@@ -669,6 +748,7 @@ export const verifyCouncilRunEvidence = (
   const seenReceiptPayloadHashes = new Set<string>();
   const seenReceiptAcceptanceSequences = new Set<number>();
   let previousAcceptanceSequence = 0;
+  let previousAcceptedAtMonotonicMs = Number.NEGATIVE_INFINITY;
   let projectedReceiptCount = 0;
 
   durableShards.forEach((receipt, index) => {
@@ -703,7 +783,7 @@ export const verifyCouncilRunEvidence = (
       receipt.shardEventSeq < 0 ||
       (receipt.projectedTrace
         ? (typeof receipt.traceEventSeq !== 'number' || !Number.isInteger(receipt.traceEventSeq) || receipt.traceEventSeq < 0)
-        : (receipt.traceEventSeq !== null && (typeof receipt.traceEventSeq !== 'number' || !Number.isInteger(receipt.traceEventSeq) || receipt.traceEventSeq < 0)))
+        : receipt.traceEventSeq !== null)
     ) {
       add('contracts', 'DURABLE_SHARD_RECEIPT_INVALID', path);
     }
@@ -740,6 +820,56 @@ export const verifyCouncilRunEvidence = (
       }
       previousAcceptanceSequence = receipt.acceptanceSequence;
     }
+    if (
+      typeof receipt.acceptedAtMonotonicMs === 'number' &&
+      Number.isFinite(receipt.acceptedAtMonotonicMs)
+    ) {
+      if (receipt.acceptedAtMonotonicMs < previousAcceptedAtMonotonicMs) {
+        add(
+          'contracts',
+          'DURABLE_SHARD_ACCEPTED_AT_ORDER_INVALID',
+          'result.durableShardReceipts',
+        );
+      }
+      previousAcceptedAtMonotonicMs = receipt.acceptedAtMonotonicMs;
+    }
+    if (
+      typeof receipt.shardEventSeq === 'number' &&
+      Number.isInteger(receipt.shardEventSeq) &&
+      typeof receipt.lastSeq === 'number' &&
+      Number.isInteger(receipt.lastSeq) &&
+      receipt.shardEventSeq > receipt.lastSeq
+    ) {
+      add(
+        'contracts',
+        'DURABLE_SHARD_EVENT_SEQUENCE_INVALID',
+        `${path}.shardEventSeq`,
+      );
+    }
+    if (receipt.projectedTrace === true) {
+      if (
+        typeof receipt.traceEventSeq !== 'number' ||
+        !Number.isInteger(receipt.traceEventSeq) ||
+        typeof receipt.shardEventSeq !== 'number' ||
+        !Number.isInteger(receipt.shardEventSeq) ||
+        typeof receipt.lastSeq !== 'number' ||
+        !Number.isInteger(receipt.lastSeq) ||
+        receipt.traceEventSeq <= receipt.shardEventSeq ||
+        receipt.traceEventSeq > receipt.lastSeq
+      ) {
+        add(
+          'contracts',
+          'DURABLE_TRACE_EVENT_SEQUENCE_INVALID',
+          `${path}.traceEventSeq`,
+        );
+      }
+    } else if (receipt.projectedTrace === false && receipt.traceEventSeq !== null) {
+      add(
+        'contracts',
+        'DURABLE_TRACE_EVENT_SEQUENCE_INVALID',
+        `${path}.traceEventSeq`,
+      );
+    }
     if (receipt.projectedTrace === true) {
       projectedReceiptCount += 1;
     }
@@ -762,6 +892,19 @@ export const verifyCouncilRunEvidence = (
   if (resultStatus === 'COMPLETED') {
     if (durableShards.length !== 5) {
       add('roleCoverage', 'DURABLE_SHARD_RECEIPT_COUNT_INVALID', 'result.durableShardReceipts');
+    }
+    const canonicalAcceptanceSequence = durableShards.map((receipt) =>
+      isRecord(receipt) ? receipt.acceptanceSequence : undefined
+    );
+    if (
+      canonicalAcceptanceSequence.length !== 5 ||
+      canonicalAcceptanceSequence.some((sequence, index) => sequence !== index + 1)
+    ) {
+      add(
+        'contracts',
+        'DURABLE_SHARD_ACCEPTANCE_SEQUENCE_INVALID',
+        'result.durableShardReceipts',
+      );
     }
     if (projectedReceiptCount !== 1) {
       add(
@@ -791,6 +934,19 @@ export const verifyCouncilRunEvidence = (
         commitReceipt.commitEventSeq < 0
       ) {
         add('contracts', 'DURABLE_COMMIT_RECEIPT_INVALID', 'result.durableConductorCommitReceipt');
+      }
+      if (
+        typeof commitReceipt.commitEventSeq === 'number' &&
+        Number.isInteger(commitReceipt.commitEventSeq) &&
+        typeof commitReceipt.lastSeq === 'number' &&
+        Number.isInteger(commitReceipt.lastSeq) &&
+        commitReceipt.commitEventSeq > commitReceipt.lastSeq
+      ) {
+        add(
+          'contracts',
+          'DURABLE_COMMIT_EVENT_SEQUENCE_INVALID',
+          'result.durableConductorCommitReceipt.commitEventSeq',
+        );
       }
       if (completedTurnId !== undefined && commitReceipt.turnId !== completedTurnId) {
         add('contracts', 'TURN_ID_MISMATCH', 'result.durableConductorCommitReceipt.turnId');

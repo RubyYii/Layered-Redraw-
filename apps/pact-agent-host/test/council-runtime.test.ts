@@ -13,6 +13,10 @@ import {
   type CouncilPublicTrace,
   type CouncilRuntimeResult,
 } from '../src/council-runtime.js';
+import {
+  verifyCouncilRunEvidence,
+  type CouncilRunArchive,
+} from '../src/council-run-evidence.js';
 import type {
   CouncilRole,
   CouncilShard,
@@ -180,6 +184,10 @@ class CouncilScriptedAdapter extends LlmAdapter {
         ) {
           await Promise.resolve();
         }
+        yield {
+          type: 'usage',
+          usage: { inputTokens: 0, outputTokens: 0 },
+        };
         throw new LlmError(
           `synthetic transport reset at dispatch ${declaredDispatchOrdinal}`,
           'TRANSPORT',
@@ -202,6 +210,11 @@ class CouncilScriptedAdapter extends LlmAdapter {
           });
         });
       }
+
+      yield {
+        type: 'usage',
+        usage: { inputTokens: 10, outputTokens: 5 },
+      };
 
       if (this.options.missingRole === role) {
         yield* textResponse(`missing ${role} shard`);
@@ -303,6 +316,8 @@ interface StartedRun {
   readonly execution: Promise<CouncilRuntimeResult>;
   readonly adapter: CouncilScriptedAdapter;
   readonly turn: FrozenCouncilTurn;
+  readonly runId: string;
+  readonly routingManifest: ProviderRoutingManifest;
 }
 
 const startRun = async (
@@ -326,8 +341,9 @@ const startRun = async (
     ...adapterOptions,
   });
   const routingManifest = manifestFor(fixtures);
+  const runId = `council_test_${randomUUID().replaceAll('-', '')}`;
   const execution = runCouncilRuntime({
-    runId: `council_test_${randomUUID().replaceAll('-', '')}`,
+    runId,
     turn,
     routingManifest,
     persistenceRoot: testRoot(),
@@ -360,19 +376,40 @@ const startRun = async (
       }
     },
   });
-  return { execution, adapter, turn };
+  return { execution, adapter, turn, runId, routingManifest };
 };
 
 const run = async (
   adapterOptions: Partial<AdapterOptions> = {},
-): Promise<{ readonly result: CouncilRuntimeResult; readonly adapter: CouncilScriptedAdapter; readonly turn: FrozenCouncilTurn }> => {
+): Promise<{
+  readonly result: CouncilRuntimeResult;
+  readonly adapter: CouncilScriptedAdapter;
+  readonly turn: FrozenCouncilTurn;
+  readonly runId: string;
+  readonly routingManifest: ProviderRoutingManifest;
+}> => {
   const started = await startRun(adapterOptions);
   return {
     result: await started.execution,
     adapter: started.adapter,
     turn: started.turn,
+    runId: started.runId,
+    routingManifest: started.routingManifest,
   };
 };
+
+const evidenceFor = (runResult: {
+  readonly result: CouncilRuntimeResult;
+  readonly turn: FrozenCouncilTurn;
+  readonly runId: string;
+  readonly routingManifest: ProviderRoutingManifest;
+}) => verifyCouncilRunEvidence(JSON.stringify({
+  schemaVersion: 'cp03-council-run/0.1',
+  runId: runResult.runId,
+  snapshotHash: runResult.turn.snapshotHash,
+  routingManifest: runResult.routingManifest,
+  result: runResult.result,
+} satisfies CouncilRunArchive), []);
 
 const success = (result: CouncilRuntimeResult): RuntimeSuccess => {
   expect(result.status).toBe('COMPLETED');
@@ -420,6 +457,64 @@ describe('Task 5 council-v2 critical path', () => {
     expect(completed.attemptRecords.map((record) => record.council.declaredDispatchOrdinal))
       .toEqual([1, 2, 3, 4, 5, 6]);
     expect(completed.selectionBarrierClosed).toBe(true);
+  });
+
+  it('returns a normal local runtime archive that passes the independent Task 6 verifier', async () => {
+    const completedRun = await run();
+    success(completedRun.result);
+
+    const report = evidenceFor(completedRun);
+    expect(report.findings).toEqual([]);
+    expect(report.status).toBe('PASS');
+  });
+
+  it('returns a dual-provider retry archive that passes independent evidence verification', async () => {
+    const retriedRun = await run({ failFirstOrdinals: [3, 4] });
+    const completed = success(retriedRun.result);
+    expect(completed.providerRequestsMade).toBe(8);
+    expect(completed.attemptRecords.filter((record) => record.attempt === 2))
+      .toHaveLength(2);
+
+    const report = evidenceFor(retriedRun);
+    expect(report.findings).toEqual([]);
+    expect(report.status).toBe('PASS');
+  });
+
+  it('records the manifest-pinned prompt-profile hash for every runtime attempt', async () => {
+    const completedRun = await run({ failFirstOrdinals: [3, 4] });
+    const completed = success(completedRun.result);
+
+    for (const record of completed.attemptRecords) {
+      expect(record.council.promptHash).toBe(
+        completedRun.routingManifest.assignments[record.council.role].promptHash,
+      );
+    }
+  });
+
+  it('records deterministic synthetic usage for successful and transport-failed local attempts', async () => {
+    const completed = success((await run({ failFirstOrdinals: [3, 4] })).result);
+    const transportFailures = completed.attemptRecords.filter(
+      (record) => record.contract.finish.kind === 'error' &&
+        record.contract.finish.detailCode === 'TRANSPORT',
+    );
+    const successfulAttempts = completed.attemptRecords.filter(
+      (record) => record.contract.finish.kind === 'tool_calls',
+    );
+
+    expect(transportFailures).toHaveLength(2);
+    expect(transportFailures.every((record) =>
+      record.contract.usage?.inputTokens === 0 &&
+      record.contract.usage.outputTokens === 0 &&
+      record.contract.usage.totalTokens === 0 &&
+      record.contract.usage.estimatedCostUsd === null
+    )).toBe(true);
+    expect(successfulAttempts).toHaveLength(6);
+    expect(successfulAttempts.every((record) =>
+      record.contract.usage?.inputTokens === 10 &&
+      record.contract.usage.outputTokens === 5 &&
+      record.contract.usage.totalTokens === 15 &&
+      record.contract.usage.estimatedCostUsd === null
+    )).toBe(true);
   });
 
   it('records one retry slot for DeepSeek, one retry slot for Gemini, and never retries a second same-provider failure', async () => {
@@ -513,11 +608,12 @@ describe('Task 5 council-v2 critical path', () => {
   });
 
   it('binds every attempt to role, phase, frozen snapshot, prompt hash, and declared ordinal', async () => {
-    const { result, turn } = await run();
+    const { result, turn, routingManifest } = await run();
     const completed = success(result);
     expect(completed.attemptRecords.every((record: CouncilAttemptRecord) =>
       record.council.snapshotHash === turn.snapshotHash &&
-      /^[a-f0-9]{64}$/.test(record.council.promptHash) &&
+      record.council.promptHash ===
+        routingManifest.assignments[record.council.role].promptHash &&
       record.council.declaredDispatchOrdinal >= 1 &&
       record.council.declaredDispatchOrdinal <= 6 &&
       (record.council.phase === 'SHARD' || record.council.phase === 'CONDUCTOR_COMMIT'),

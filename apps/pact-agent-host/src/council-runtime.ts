@@ -8,7 +8,6 @@ import {
 } from '@deepseek-ai/dsh-llm';
 import { SessionId, type Session } from '@deepseek-ai/dsh-session';
 import { foldSubagentDescriptor } from '@deepseek-ai/dsh-subagent';
-import { sha256Canonical } from '@layered-redraw/pact-cp03-contracts';
 
 import type {
   AgentActionDraft,
@@ -179,10 +178,45 @@ const unique = (codes: readonly string[]): readonly string[] => [
 
 const councilRecords = (
   ledger: ProviderDispatchLedger | undefined,
+  conductorSession: Session | undefined,
 ): readonly CouncilAttemptRecord[] => {
   if (ledger === undefined) return [];
+
+  const conductorRangeFor = (
+    phase: CouncilDispatchPhase,
+  ): CouncilAttemptRecord['contract']['sessionEventRange'] => {
+    if (conductorSession === undefined) return null;
+    const turnStarts = conductorSession.events.filter(
+      (event) => event.type === 'turn/start',
+    );
+    const turnStart = turnStarts[phase === 'SHARD' ? 0 : 1];
+    if (turnStart === undefined) return null;
+    const nextTurnStart = turnStarts[phase === 'SHARD' ? 1 : 2];
+    const turnEvents = conductorSession.events.filter((event) =>
+      event.seq >= turnStart.seq &&
+      (nextTurnStart === undefined || event.seq < nextTurnStart.seq)
+    );
+    const turnEnd = turnEvents.find((event) => event.type === 'turn/end') ??
+      turnEvents.at(-1) ??
+      turnStart;
+    return {
+      sessionId: String(conductorSession.id),
+      fromSequence: turnStart.seq,
+      toSequence: turnEnd.seq,
+    };
+  };
+
   return ledger.attemptRecords()
     .filter((record): record is CouncilAttemptRecord => record.council !== undefined)
+    .map((record) => record.council.role !== 'CaseConductor'
+      ? record
+      : {
+          ...record,
+          contract: {
+            ...record.contract,
+            sessionEventRange: conductorRangeFor(record.council.phase),
+          },
+        })
     .sort((left, right) =>
       left.council.declaredDispatchOrdinal - right.council.declaredDispatchOrdinal ||
       left.attempt - right.attempt ||
@@ -193,7 +227,6 @@ const providerAssignment = (
   manifest: ProviderRoutingManifest,
   role: CouncilRole,
   phase: CouncilDispatchPhase,
-  promptHash: string,
   declaredDispatchOrdinal: number,
   sessionId: string,
   deadlineAt: number,
@@ -219,7 +252,7 @@ const providerAssignment = (
       role,
       phase,
       snapshotHash: '',
-      promptHash,
+      promptHash: selected.promptHash,
       declaredDispatchOrdinal,
     },
   };
@@ -464,7 +497,7 @@ export const runCouncilRuntime = async (
     firstPublicTrace,
     reasonCodes: unique(reasonCodes),
     providerRequestsMade: ledger?.sentDispatches ?? 0,
-    attemptRecords: councilRecords(ledger),
+    attemptRecords: councilRecords(ledger, activeConductor?.agent.session),
     durableShardReceipts,
     durableConductorCommitReceipt,
     selectionBarrierClosed,
@@ -565,15 +598,13 @@ export const runCouncilRuntime = async (
 
     const shardPrompts = new Map<CouncilRole, ContentBlock[]>();
     for (const role of ROLE_ORDER) shardPrompts.set(role, shardPrompt(options.turn, role));
-    const assignShard = async (role: CouncilRole, sessionId?: string) => {
+    const assignShard = (role: CouncilRole, sessionId?: string) => {
       const prompt = shardPrompts.get(role)!;
-      const promptHash = await sha256Canonical(prompt);
       const assignment = withSnapshot(
         providerAssignment(
           options.routingManifest,
           role,
           'SHARD',
-          promptHash,
           ROLE_ORDER.indexOf(role) + 1,
           sessionId ?? 'pending',
           options.turn.deadlineAtMonotonicMs,
@@ -587,11 +618,11 @@ export const runCouncilRuntime = async (
       CouncilRole,
       'CaseConductor'
     >[];
-    const plannedShards = new Map<CouncilRole, Awaited<ReturnType<typeof assignShard>>>();
+    const plannedShards = new Map<CouncilRole, ReturnType<typeof assignShard>>();
     for (const role of ROLE_ORDER) {
       plannedShards.set(
         role,
-        await assignShard(
+        assignShard(
           role,
           role === 'CaseConductor'
             ? String(activeConductor.agent.id)
@@ -741,13 +772,11 @@ export const runCouncilRuntime = async (
         payloadHash: entry.payloadHash,
       })),
     );
-    const commitPromptHash = await sha256Canonical(commitContent);
     ledger.assignSession(withSnapshot(
       providerAssignment(
         options.routingManifest,
         'CaseConductor',
         'CONDUCTOR_COMMIT',
-        commitPromptHash,
         6,
         String(activeConductor.agent.id),
         options.turn.deadlineAtMonotonicMs,
@@ -839,7 +868,7 @@ export const runCouncilRuntime = async (
       draftHash: assembled.draftHash,
       firstPublicTrace,
       providerRequestsMade: ledger.sentDispatches,
-      attemptRecords: councilRecords(ledger),
+      attemptRecords: councilRecords(ledger, activeConductor.agent.session),
       durableShardReceipts,
       durableConductorCommitReceipt,
       selectionBarrierClosed: true,
