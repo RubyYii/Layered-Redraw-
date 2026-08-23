@@ -1,0 +1,12 @@
+commandId: host-typecheck
+cwd: apps/pact-agent-host
+command: npm run typecheck
+exitCode: 0
+signal: none
+--- stdout ---
+
+> @layered-redraw/pact-agent-host@0.0.0-gate.1 typecheck
+> tsc -p tsconfig.json --noEmit
+
+
+--- stderr ---
