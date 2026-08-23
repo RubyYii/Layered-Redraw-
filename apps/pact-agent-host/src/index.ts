@@ -228,3 +228,33 @@ export {
   type ModelBakeoffProvider,
   type ModelBakeoffRole,
 } from './model-bakeoff-plan.js';
+export {
+  MODEL_BAKEOFF_PRICING_URLS,
+  createModelBakeoffPricingManifest,
+  createModelBakeoffRoleCapsManifest,
+  estimateModelBakeoffWorstCaseUsd,
+  verifyModelBakeoffPricingManifest,
+  verifyModelBakeoffRoleCapsManifest,
+  type ModelBakeoffCostEstimate,
+  type ModelBakeoffPricingAudit,
+  type ModelBakeoffPricingManifest,
+  type ModelBakeoffPricingRate,
+  type ModelBakeoffRoleCapsManifest,
+  type ModelBakeoffRoleTokenCap,
+} from './model-bakeoff-pricing.js';
+export {
+  buildKeychainPresenceCommand,
+  createModelBakeoffKeychainReferenceManifest,
+  createModelBakeoffPreflight,
+  inspectInstalledModelBakeoffCandidateFacts,
+  inspectModelBakeoffCredentialPresence,
+  resolveModelBakeoffRunRoot,
+  verifyModelBakeoffKeychainReferenceManifest,
+  verifyModelBakeoffPreflight,
+  type CandidateCatalogFact,
+  type KeychainPresenceCommand,
+  type ModelBakeoffCredentialPresence,
+  type ModelBakeoffKeychainReference,
+  type ModelBakeoffKeychainReferenceManifest,
+  type ModelBakeoffPreflight,
+} from './model-bakeoff-preflight.js';
