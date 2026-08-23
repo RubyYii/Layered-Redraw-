@@ -96,6 +96,13 @@ export async function compileGuardedInteractionPlan({
     );
   }
   const [call] = calls;
+  const forbiddenCapabilityIds = sortedUnique(validatedDraft.execution.forbiddenCapabilityIds);
+  if (forbiddenCapabilityIds.includes(call.capability)) {
+    fail(
+      "CP03_GATE_FORBIDDEN_CAPABILITY",
+      `forbidden capability: ${call.capability}`,
+    );
+  }
   if (call.capability !== REGISTERED_CAPABILITY) {
     fail("CP03_GATE_UNKNOWN_CAPABILITY", `unregistered capability: ${call.capability}`);
   }

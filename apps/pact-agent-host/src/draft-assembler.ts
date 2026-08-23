@@ -50,6 +50,8 @@ const ROLE_ORDER: readonly CouncilRole[] = [
   'Guardian',
 ];
 
+const EXECUTABLE_RUNTIME_ROLES: readonly CouncilRole[] = ROLE_ORDER;
+
 const FAIL = 'FAILED_NO_MUTATION' as const;
 const NEEDS = 'NEEDS_CLARIFICATION' as const;
 const WITHHELD = 'WITHHELD' as const;
@@ -113,6 +115,19 @@ const hasEvery = (
   available: ReadonlySet<string>,
 ): boolean => required.every((value) => available.has(value));
 
+const sortedUnique = (values: readonly string[]): readonly string[] =>
+  [...new Set(values)].sort((left, right) => left.localeCompare(right));
+
+const exactStringSet = (
+  actual: readonly string[],
+  expected: readonly string[],
+): boolean => {
+  const actualSorted = sortedUnique(actual);
+  const expectedSorted = sortedUnique(expected);
+  return actualSorted.length === expectedSorted.length &&
+    actualSorted.every((value, index) => value === expectedSorted[index]);
+};
+
 const actionTerminal = (
   actionSequence: readonly string[],
 ): 'Continue' | 'KeepOpaque' | null => {
@@ -153,14 +168,14 @@ const selectedInStableRoleOrder = (
     left.payloadHash.localeCompare(right.payloadHash);
 });
 
-const selectedDissentTexts = (
+const selectedDissentRecords = (
   commit: ConductorDraftCommit,
   guardian: GuardianShard,
-): readonly string[] => {
+): readonly GuardianShard['content']['requiredDissentRecords'][number][] => {
   const records = new Map(
     guardian.content.requiredDissentRecords.map((record) => [record.dissentId, record]),
   );
-  return commit.selectedDissentIds.map((dissentId) => records.get(dissentId)!.text);
+  return commit.selectedDissentIds.map((dissentId) => records.get(dissentId)!);
 };
 
 const isStableReference = (value: string): boolean =>
@@ -191,6 +206,8 @@ const validateReferences = (
   const registeredRightsIds = new Set(turn.snapshot.registeredRightsIds);
   const inputRefIds = new Set(turn.snapshot.inputRefs.map((inputRef) => inputRef.refId));
   const sourceLockIds = new Set(turn.snapshot.sourceLockIds);
+  const registeredSceneObjectIds = new Set(turn.snapshot.registeredSceneObjectIds);
+  const registeredAffordanceIds = new Set(turn.snapshot.registeredAffordanceIds);
   const knownMaterialRefs = new Set([
     ...registeredAssetIds,
     ...registeredSpatialBridgeIds,
@@ -198,11 +215,6 @@ const validateReferences = (
     ...inputRefIds,
     ...sourceLockIds,
   ]);
-  const registeredInteractionTargets = new Set([
-    ...registeredAssetIds,
-    ...registeredSpatialBridgeIds,
-  ]);
-
   if (
     !hasEvery(archivist.content.requestedAssetIds, registeredAssetIds) ||
     !hasEvery(archivist.content.requestedSpatialBridgeIds, registeredSpatialBridgeIds) ||
@@ -224,7 +236,7 @@ const validateReferences = (
   const allowedCapabilityIds = new Set(
     turn.snapshot.allowedSemanticCapabilityIds,
   );
-  const capabilityArgumentRefs = new Set<string>();
+  const affectedObjectIds = new Set<string>();
   for (const call of rewriter.content.semanticCapabilityCalls) {
     if (!allowedCapabilityIds.has(call.capability)) {
       return {
@@ -244,33 +256,33 @@ const validateReferences = (
         reasonCodes: ['ASSEMBLY_CAPABILITY_ARGUMENT_INVALID'],
       };
     }
-    capabilityArgumentRefs.add(call.arguments.actorId);
-    capabilityArgumentRefs.add(call.arguments.targetId);
-    capabilityArgumentRefs.add(call.arguments.affordance);
-    if (call.arguments.recipientId !== undefined) {
-      capabilityArgumentRefs.add(call.arguments.recipientId);
-    }
-    if (call.arguments.placementTargetId !== undefined) {
-      capabilityArgumentRefs.add(call.arguments.placementTargetId);
-    }
-    if (!registeredInteractionTargets.has(call.arguments.targetId) ||
-      (call.arguments.placementTargetId !== undefined &&
-        !registeredInteractionTargets.has(call.arguments.placementTargetId))) {
+    if (!registeredAffordanceIds.has(call.arguments.affordance)) {
       return {
         status: NEEDS,
-        reasonCodes: ['ASSEMBLY_ASSET_REFERENCE_UNKNOWN'],
+        reasonCodes: ['ASSEMBLY_AFFORDANCE_REFERENCE_UNKNOWN'],
       };
     }
+    const objectIds = [
+      call.arguments.actorId,
+      call.arguments.targetId,
+      ...(call.arguments.recipientId === undefined ? [] : [call.arguments.recipientId]),
+      ...(call.arguments.placementTargetId === undefined
+        ? []
+        : [call.arguments.placementTargetId]),
+    ];
+    if (objectIds.some((objectId) => !registeredSceneObjectIds.has(objectId))) {
+      return {
+        status: NEEDS,
+        reasonCodes: ['ASSEMBLY_SCENE_OBJECT_REFERENCE_UNKNOWN'],
+      };
+    }
+    for (const objectId of objectIds) affectedObjectIds.add(objectId);
   }
 
-  const expectedChangeRefs = new Set([
-    ...knownMaterialRefs,
-    ...capabilityArgumentRefs,
-  ]);
-  if (!hasEvery(rewriter.content.expectedChanges, expectedChangeRefs)) {
+  if (!exactStringSet(rewriter.content.expectedChanges, [...affectedObjectIds])) {
     return {
       status: NEEDS,
-      reasonCodes: ['ASSEMBLY_ASSET_REFERENCE_UNKNOWN'],
+      reasonCodes: ['ASSEMBLY_EXPECTED_CHANGES_MISMATCH'],
     };
   }
 
@@ -300,6 +312,12 @@ const validateDissentSelection = (
   guardian: GuardianShard,
 ): ValidationFailure | undefined => {
   if (hasDuplicates(commit.selectedDissentIds)) {
+    return {
+      status: FAIL,
+      reasonCodes: ['ASSEMBLY_DUPLICATE_DISSENT_ID'],
+    };
+  }
+  if (hasDuplicates(guardian.content.requiredDissentRecords.map((record) => record.dissentId))) {
     return {
       status: FAIL,
       reasonCodes: ['ASSEMBLY_DUPLICATE_DISSENT_ID'],
@@ -383,6 +401,11 @@ const validateBeforeAssembly = async (
     return validationFailure('ASSEMBLY_DUPLICATE_SELECTED_HASH');
   }
 
+  if (!Array.isArray(proposal.durableShards) || proposal.durableShards.some((entry) =>
+    entry === null || typeof entry !== 'object' ||
+    entry.shard === null || typeof entry.shard !== 'object')) {
+    return validationFailure('ASSEMBLY_SHARD_INVALID');
+  }
   const allPayloadHashes = proposal.durableShards.map((entry) => entry.payloadHash);
   const allShardIds = proposal.durableShards.map((entry) => entry.shard.shardId);
   const allRoles = proposal.durableShards.map((entry) => entry.shard.role);
@@ -405,6 +428,13 @@ const validateBeforeAssembly = async (
     }
     selected.push(entry);
   }
+  for (const entry of selected) {
+    try {
+      validateCouncilShard(entry.shard);
+    } catch {
+      return validationFailure('ASSEMBLY_SHARD_INVALID');
+    }
+  }
   const selectedRoles = selected.map((entry) => entry.shard.role);
   if (hasDuplicates(selectedRoles)) {
     return validationFailure('ASSEMBLY_DUPLICATE_SELECTED_ROLE');
@@ -417,30 +447,7 @@ const validateBeforeAssembly = async (
   const conductor = byRole.get('CaseConductor');
   const rewriter = byRole.get('Rewriter');
   const guardian = byRole.get('Guardian');
-  if (
-    conductor?.kind !== 'CONDUCTOR_INTENT' ||
-    guardian?.kind !== 'GUARDIAN'
-  ) {
-    return validationFailure('ASSEMBLY_REQUIRED_ROLE_MISSING');
-  }
-  for (const entry of selected) {
-    if (!matchesTurn(entry.shard, turn)) {
-      return validationFailure('ASSEMBLY_SHARD_SNAPSHOT_MISMATCH');
-    }
-    if (entry.shard.kind === 'REWRITER') {
-      const allowedCapabilityIds = new Set(turn.snapshot.allowedSemanticCapabilityIds);
-      if (entry.shard.content.semanticCapabilityCalls.some((call) =>
-        !allowedCapabilityIds.has(call.capability))) {
-        return validationFailure('ASSEMBLY_CAPABILITY_REFERENCE_UNKNOWN', NEEDS);
-      }
-    }
-    try {
-      validateCouncilShard(entry.shard);
-    } catch {
-      return validationFailure('ASSEMBLY_SHARD_INVALID');
-    }
-  }
-  if (rewriter?.kind !== 'REWRITER') {
+  if (conductor?.kind !== 'CONDUCTOR_INTENT') {
     return validationFailure('ASSEMBLY_REQUIRED_ROLE_MISSING');
   }
 
@@ -464,13 +471,30 @@ const validateBeforeAssembly = async (
     };
   }
 
-  const referenceFailure = validateReferences(turn, byRole);
-  if (referenceFailure !== undefined) {
-    return { ok: false, failure: referenceFailure };
+  if (!EXECUTABLE_RUNTIME_ROLES.every((role) => turn.requiredRoles.includes(role))) {
+    return {
+      ok: false,
+      failure: {
+        status: NEEDS,
+        reasonCodes: ['ASSEMBLY_EXECUTABLE_BOUNDARY_REQUIRES_FULL_COUNCIL'],
+      },
+    };
   }
+  if (
+    guardian?.kind !== 'GUARDIAN' ||
+    rewriter?.kind !== 'REWRITER' ||
+    byRole.get('Witness')?.kind !== 'WITNESS'
+  ) {
+    return validationFailure('ASSEMBLY_REQUIRED_ROLE_MISSING');
+  }
+
   const dissentFailure = validateDissentSelection(commit, guardian);
   if (dissentFailure !== undefined) {
     return { ok: false, failure: dissentFailure };
+  }
+  const referenceFailure = validateReferences(turn, byRole);
+  if (referenceFailure !== undefined) {
+    return { ok: false, failure: referenceFailure };
   }
   const guardianResult: GuardianConflictResult = evaluateGuardianConflict({
     turn,
@@ -563,14 +587,29 @@ const buildDraft = async (
         arguments: { ...call.arguments },
       })),
       expectedChanges: [...rewriter.content.expectedChanges],
-      forbiddenChanges: [...guardian.content.forbiddenCapabilityIds],
+      forbiddenChanges: [...guardian.content.requiredSourceLockIds],
+      forbiddenCapabilityIds: [...guardian.content.forbiddenCapabilityIds],
       rollbackRequirements: [...guardian.content.requiredRollbackCapabilityIds],
       terminalIntent: commit.terminalIntent,
     },
     agency: {
       contributions,
-      disagreements: selectedDissentTexts(commit, guardian),
+      disagreements: selectedDissentRecords(commit, guardian).map((record) => record.text),
       guardianChallenge: guardian.content.guardianChallenge,
+      witnessEvidence: {
+        observations: witness.content.observations.map((observation) => ({
+          observationId: observation.observationId,
+          text: observation.text,
+          inputRefIds: [...observation.inputRefIds],
+        })),
+        uncertainties: [...witness.uncertainties],
+        evidenceAnchors: [...witness.evidenceAnchors],
+      },
+      dissentRecords: selectedDissentRecords(commit, guardian).map((record) => ({
+        dissentId: record.dissentId,
+        text: record.text,
+        evidenceIds: [...record.evidenceIds],
+      })),
     },
   };
   return validateAgentActionDraft(draft);
@@ -579,7 +618,12 @@ const buildDraft = async (
 export const assembleCouncilDraft = async (
   input: AssembleCouncilDraftInput,
 ): Promise<AssembleCouncilDraftResult> => {
-  const validation = await validateBeforeAssembly(input);
+  let validation: ValidationResult;
+  try {
+    validation = await validateBeforeAssembly(input);
+  } catch {
+    return failure(FAIL, ['ASSEMBLY_INPUT_INVALID']);
+  }
   if (!validation.ok) {
     return failure(
       validation.failure.status,

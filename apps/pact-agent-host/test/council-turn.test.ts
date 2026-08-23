@@ -70,6 +70,13 @@ describe('council turn snapshot and required-role policy', () => {
       registryVersion: 'cp03-registry/0.1',
       registeredAssetIds: ['asset-cup01'],
       registeredSpatialBridgeIds: ['bridge-window01'],
+      registeredSceneObjectIds: [
+        'asset-cup01',
+        'interaction-actor-a',
+        'interaction-placement-a',
+        'interaction-recipient-a',
+      ],
+      registeredAffordanceIds: ['pickup', 'place'],
       registeredRightsIds: ['rights-local-scene'],
       supportedRollbackCapabilityIds: ['rollback-transient-overlay'],
       allowedSemanticCapabilityIds: ['performRegisteredInteraction'],
@@ -96,6 +103,8 @@ describe('council turn snapshot and required-role policy', () => {
     expect(Object.isFrozen(turn.snapshot.sourceLockIds)).toBe(true);
     expect(Object.isFrozen(turn.snapshot.registeredAssetIds)).toBe(true);
     expect(Object.isFrozen(turn.snapshot.registeredSpatialBridgeIds)).toBe(true);
+    expect(Object.isFrozen(turn.snapshot.registeredSceneObjectIds)).toBe(true);
+    expect(Object.isFrozen(turn.snapshot.registeredAffordanceIds)).toBe(true);
     expect(Object.isFrozen(turn.snapshot.registeredRightsIds)).toBe(true);
     expect(Object.isFrozen(turn.snapshot.supportedRollbackCapabilityIds)).toBe(true);
     expect(Object.isFrozen(turn.snapshot.allowedSemanticCapabilityIds)).toBe(true);
@@ -196,6 +205,20 @@ describe('council turn snapshot and required-role policy', () => {
           'bridge-door01',
         ],
       }],
+      ['scene objects', {
+        ...fullCouncilTurnInput,
+        registeredSceneObjectIds: [
+          ...fullCouncilTurnInput.registeredSceneObjectIds,
+          'interaction-source-a',
+        ],
+      }],
+      ['affordances', {
+        ...fullCouncilTurnInput,
+        registeredAffordanceIds: [
+          ...fullCouncilTurnInput.registeredAffordanceIds,
+          'release',
+        ],
+      }],
       ['rights', {
         ...fullCouncilTurnInput,
         registeredRightsIds: [...fullCouncilTurnInput.registeredRightsIds, 'rights-lamp'],
@@ -266,11 +289,20 @@ describe('council turn snapshot and required-role policy', () => {
 
     (mutable.sourceLockIds as string[]).push('source-mutated-after-freeze');
     (mutable.registeredAssetIds as string[]).push('asset-mutated-after-freeze');
+    (mutable.registeredSceneObjectIds as string[]).push('scene-mutated-after-freeze');
+    (mutable.registeredAffordanceIds as string[]).push('affordance-mutated-after-freeze');
     (mutable.inputRefs as { refId: string; inputClass: 'text' | 'image' | 'audio' }[])
       .push({ refId: 'input-mutated-after-freeze', inputClass: 'text' });
 
     expect(turn.snapshot.sourceLockIds).toEqual(['source-plane']);
     expect(turn.snapshot.registeredAssetIds).toEqual(['asset-cup01']);
+    expect(turn.snapshot.registeredSceneObjectIds).toEqual([
+      'asset-cup01',
+      'interaction-actor-a',
+      'interaction-placement-a',
+      'interaction-recipient-a',
+    ]);
+    expect(turn.snapshot.registeredAffordanceIds).toEqual(['pickup', 'place']);
     expect(turn.snapshot.inputRefs).toHaveLength(2);
   });
 });

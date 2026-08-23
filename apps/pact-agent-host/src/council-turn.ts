@@ -31,6 +31,8 @@ export interface CouncilTurnSnapshot {
   readonly registryVersion: string;
   readonly registeredAssetIds: readonly string[];
   readonly registeredSpatialBridgeIds: readonly string[];
+  readonly registeredSceneObjectIds: readonly string[];
+  readonly registeredAffordanceIds: readonly string[];
   readonly registeredRightsIds: readonly string[];
   readonly supportedRollbackCapabilityIds: readonly string[];
   readonly allowedSemanticCapabilityIds: readonly string[];
@@ -69,6 +71,8 @@ export interface FreezeCouncilTurnInput {
   readonly registryVersion: string;
   readonly registeredAssetIds: readonly string[];
   readonly registeredSpatialBridgeIds: readonly string[];
+  readonly registeredSceneObjectIds: readonly string[];
+  readonly registeredAffordanceIds: readonly string[];
   readonly registeredRightsIds: readonly string[];
   readonly supportedRollbackCapabilityIds: readonly string[];
   readonly allowedSemanticCapabilityIds: readonly string[];
@@ -129,6 +133,8 @@ export const freezeCouncilTurn = async (
     registryVersion: input.registryVersion,
     registeredAssetIds: [...input.registeredAssetIds],
     registeredSpatialBridgeIds: [...input.registeredSpatialBridgeIds],
+    registeredSceneObjectIds: [...input.registeredSceneObjectIds],
+    registeredAffordanceIds: [...input.registeredAffordanceIds],
     registeredRightsIds: [...input.registeredRightsIds],
     supportedRollbackCapabilityIds: [...input.supportedRollbackCapabilityIds],
     allowedSemanticCapabilityIds: [...input.allowedSemanticCapabilityIds],

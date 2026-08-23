@@ -72,6 +72,40 @@ describe("CP03 foundation gate contracts", () => {
     expect(validateProviderCallEnvelope(validProviderCallEnvelope)).toBe(validProviderCallEnvelope);
   });
 
+  it("requires structured runtime evidence and keeps restriction sets independently typed", () => {
+    expect(validateAgentActionDraft(validAgentActionDraft)).toBe(validAgentActionDraft);
+    expect(validateAgentActionDraft({
+      ...validRuntimeAgentActionDraft,
+      execution: {
+        ...validRuntimeAgentActionDraft.execution,
+        forbiddenChanges: [],
+        forbiddenCapabilityIds: [],
+        rollbackRequirements: [],
+      },
+    })).toBeTruthy();
+    expect(() => validateAgentActionDraft({
+      ...validRuntimeAgentActionDraft,
+      execution: {
+        ...validRuntimeAgentActionDraft.execution,
+        forbiddenCapabilityIds: undefined,
+      },
+    })).toThrow(/required|forbiddenCapabilityIds/);
+    expect(() => validateAgentActionDraft({
+      ...validRuntimeAgentActionDraft,
+      agency: {
+        ...validRuntimeAgentActionDraft.agency,
+        witnessEvidence: undefined,
+      },
+    })).toThrow(/required|witnessEvidence/);
+    expect(() => validateAgentActionDraft({
+      ...validRuntimeAgentActionDraft,
+      agency: {
+        ...validRuntimeAgentActionDraft.agency,
+        dissentRecords: undefined,
+      },
+    })).toThrow(/required|dissentRecords/);
+  });
+
   it("accepts every frozen council shard, the minimal commit, and the dual-provider manifest", () => {
     expect(CP03_COUNCIL_SCHEMA_VERSION).toBe("cp03-council/0.2");
     for (const [role, shard] of Object.entries(validCouncilShards)) {

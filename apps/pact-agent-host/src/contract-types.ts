@@ -205,6 +205,24 @@ export interface AgentContribution {
   readonly toolReceiptRefs: readonly string[];
 }
 
+export interface AgentActionDraftWitnessObservation {
+  readonly observationId: string;
+  readonly text: string;
+  readonly inputRefIds: readonly string[];
+}
+
+export interface AgentActionDraftWitnessEvidence {
+  readonly observations: readonly AgentActionDraftWitnessObservation[];
+  readonly uncertainties: readonly string[];
+  readonly evidenceAnchors: readonly string[];
+}
+
+export interface AgentActionDraftDissentRecord {
+  readonly dissentId: string;
+  readonly text: string;
+  readonly evidenceIds: readonly string[];
+}
+
 export interface AgentActionDraft {
   readonly identity: {
     readonly draftId: string;
@@ -221,8 +239,13 @@ export interface AgentActionDraft {
   };
   readonly creative: Readonly<Record<string, unknown>>;
   readonly materials: Readonly<Record<string, unknown>>;
-  readonly execution: Readonly<Record<string, unknown>>;
-  readonly agency: Readonly<Record<string, unknown>>;
+  readonly execution: Readonly<Record<string, unknown>> & {
+    readonly forbiddenCapabilityIds?: readonly string[];
+  };
+  readonly agency: Readonly<Record<string, unknown>> & {
+    readonly witnessEvidence?: AgentActionDraftWitnessEvidence;
+    readonly dissentRecords?: readonly AgentActionDraftDissentRecord[];
+  };
 }
 
 export interface ProviderToolCallReceipt {

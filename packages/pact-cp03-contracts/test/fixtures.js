@@ -88,8 +88,22 @@ export const validRuntimeAgentActionDraft = Object.freeze({
     }],
     expectedChanges: ["interaction-actor-a", "interaction-cup"],
     forbiddenChanges: ["source-plane", "evidence-overlay"],
+    forbiddenCapabilityIds: [],
     rollbackRequirements: ["Discard the transient director overlay."],
     terminalIntent: null,
+  },
+  agency: {
+    ...validAgentActionDraft.agency,
+    witnessEvidence: {
+      observations: [{
+        observationId: "observation_runtime01",
+        text: "The synthetic image contains a visible source plane.",
+        inputRefIds: ["input_image01"],
+      }],
+      uncertainties: ["The spatial relation remains interpretive."],
+      evidenceAnchors: ["input_image01"],
+    },
+    dissentRecords: [],
   },
 });
 

@@ -11,6 +11,7 @@ import type {
   CouncilRole,
   GuardianContent,
   CouncilShard,
+  ArchivistShard,
   GuardianShard,
   RewriterShard,
   WitnessShard,
@@ -126,6 +127,32 @@ describe('typed Guardian conflict evaluation', () => {
     });
   });
 
+  it('requires each Guardian source lock to be anchored by the Archivist', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const archivist = fixtures.shards.Archivist as ArchivistShard;
+    const shards = withGuardianContent({
+      ...fixtures.shards,
+      Archivist: {
+        ...archivist,
+        content: {
+          ...archivist.content,
+          provenanceAnchors: archivist.content.provenanceAnchors
+            .filter((refId) => refId !== 'source-plane'),
+        },
+      } as ArchivistShard,
+    }, { contestedEvidenceIds: [] });
+
+    const result = evaluateGuardianConflict({
+      turn: fixtures.turn,
+      proposal: await makeProposal(fixtures.turn, shards),
+    });
+
+    expect(result).toEqual({
+      status: 'NEEDS_CLARIFICATION',
+      reasonCodes: ['GUARDIAN_RIGHTS_REQUIREMENT_UNSATISFIED'],
+    });
+  });
+
   it('reports contested Witness evidence IDs', async () => {
     const input = await makeInput({
       contestedEvidenceIds: ['observation_witness01'],
@@ -175,6 +202,29 @@ describe('typed Guardian conflict evaluation', () => {
       status: 'ALLOW',
       reasonCodes: [],
     });
+  });
+
+  it('returns a typed clarification instead of throwing on malformed selected content', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const rewriter = fixtures.shards.Rewriter as RewriterShard;
+    const shards = {
+      ...fixtures.shards,
+      Rewriter: {
+        ...rewriter,
+        content: {
+          ...rewriter.content,
+          semanticCapabilityCalls: {} as unknown as RewriterShard['content']['semanticCapabilityCalls'],
+        },
+      } as RewriterShard,
+    };
+
+    const result = evaluateGuardianConflict({
+      turn: fixtures.turn,
+      proposal: await makeProposal(fixtures.turn, shards),
+    });
+
+    expect(result.status).toBe('NEEDS_CLARIFICATION');
+    expect(result.reasonCodes).toContain('GUARDIAN_TYPED_INPUT_INVALID');
   });
 
   it('ignores prose differences when the typed IDs still match', async () => {

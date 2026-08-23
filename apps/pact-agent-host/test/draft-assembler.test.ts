@@ -11,19 +11,24 @@ import {
 } from '../src/draft-assembler.js';
 import type { CouncilProposalSnapshot } from '../src/council-registry.js';
 import type {
+  ArchivistShard,
   CouncilRole,
   CouncilShard,
   ConductorIntentShard,
   ConductorDraftCommit,
   GuardianShard,
   RewriterShard,
+  WitnessShard,
 } from '../src/contract-types.js';
 import {
+  freezeCouncilTurn,
   type FrozenCouncilTurn,
 } from '../src/council-turn.js';
 import {
   createFullCouncilFixtures,
+  fullCouncilTurnInput,
   roleOrder,
+  textOnlyTurnScope,
 } from './council-fixtures.js';
 
 const validChildSessionIds: Readonly<Record<CouncilRole, string>> = {
@@ -129,6 +134,62 @@ const makeInputWithShards = async (
   };
 };
 
+const retargetShards = (
+  turn: FrozenCouncilTurn,
+  shards: Readonly<Record<CouncilRole, CouncilShard>>,
+): Readonly<Record<CouncilRole, CouncilShard>> => Object.fromEntries(
+  roleOrder.map((role) => [role, {
+    ...shards[role],
+    snapshotHash: turn.snapshotHash,
+    parentSceneHash: turn.snapshot.parentSceneHash,
+    registryVersion: turn.snapshot.registryVersion,
+    routingManifestVersion: turn.snapshot.routingManifestVersion,
+    deadlineId: turn.snapshot.deadlineId,
+  }]),
+) as Readonly<Record<CouncilRole, CouncilShard>>;
+
+const makeTextOnlyInput = async (): Promise<AssembleCouncilDraftInput> => {
+  const fixtures = await createFullCouncilFixtures();
+  const turn = await freezeCouncilTurn({
+    ...fullCouncilTurnInput,
+    turnScope: textOnlyTurnScope,
+    now: () => 1_000,
+  });
+  const source = fixtures.shards.CaseConductor as ConductorIntentShard;
+  const conductor: ConductorIntentShard = {
+    ...source,
+    childSessionId: validChildSessionIds.CaseConductor,
+    snapshotHash: turn.snapshotHash,
+    parentSceneHash: turn.snapshot.parentSceneHash,
+    registryVersion: turn.snapshot.registryVersion,
+    routingManifestVersion: turn.snapshot.routingManifestVersion,
+    deadlineId: turn.snapshot.deadlineId,
+  };
+  const payloadHash = await sha256Canonical(conductor);
+  const commit: ConductorDraftCommit = {
+    schemaVersion: 'cp03-council/0.2',
+    turnId: turn.snapshot.turnId,
+    status: 'PROPOSED',
+    actionSequence: ['Reframe', 'Continue'],
+    selectedShardHashes: [payloadHash],
+    selectedDissentIds: [],
+    terminalIntent: 'Continue',
+  };
+  return {
+    turn,
+    proposal: {
+      turn,
+      selectionBarrierClosed: true,
+      durableShards: [{ shard: conductor, payloadHash, acceptanceSequence: 1 }],
+      durableCommit: {
+        commit,
+        payloadHash: await sha256Canonical(commit),
+      },
+    },
+    now: () => 2_000,
+  };
+};
+
 const reorderObject = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(reorderObject);
   if (value === null || typeof value !== 'object') return value;
@@ -171,7 +232,7 @@ describe('deterministic council draft assembler', () => {
     expect(result.draft.materials).toEqual({
       requestedAssetIds: ['asset-cup01'],
       requestedSpatialBridgeIds: ['bridge-window01'],
-      provenanceAnchors: ['input_image01'],
+      provenanceAnchors: ['input_image01', 'source-plane'],
       rightsRequirements: ['rights-local-scene'],
     });
     expect(result.draft.execution).toEqual({
@@ -185,7 +246,8 @@ describe('deterministic council draft assembler', () => {
         },
       }],
       expectedChanges: ['interaction-actor-a', 'asset-cup01'],
-      forbiddenChanges: ['rawTransform'],
+      forbiddenChanges: ['source-plane'],
+      forbiddenCapabilityIds: ['rawTransform'],
       rollbackRequirements: ['rollback-transient-overlay'],
       terminalIntent: 'Continue',
     });
@@ -197,6 +259,20 @@ describe('deterministic council draft assembler', () => {
       })),
       disagreements: ['Do not treat the spatial relation as historical fact.'],
       guardianChallenge: 'Execute only after approval of this exact hash-bound proposal.',
+      witnessEvidence: {
+        observations: [{
+          observationId: 'observation_witness01',
+          text: 'The synthetic image contains a visible source plane.',
+          inputRefIds: ['input_image01', 'input_text01'],
+        }],
+        uncertainties: ['The spatial relation remains interpretive.'],
+        evidenceAnchors: ['input_image01', 'input_text01'],
+      },
+      dissentRecords: [{
+        dissentId: 'dissent_guardian01',
+        text: 'Do not treat the spatial relation as historical fact.',
+        evidenceIds: ['input_text01'],
+      }],
     });
     expect(result.draft.identity.draftId).toMatch(/^draft_[A-Za-z0-9_-]{8,80}$/);
     expect(result.draftHash).toMatch(/^[a-f0-9]{64}$/);
@@ -330,6 +406,294 @@ describe('deterministic council draft assembler', () => {
       .toBe('NEEDS_CLARIFICATION');
   });
 
+  it('binds every nested interaction reference to the frozen registries and exact effects', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const rewriter = fixtures.shards.Rewriter as RewriterShard;
+    const call = rewriter.content.semanticCapabilityCalls[0]!;
+    const nestedArguments = {
+      ...call.arguments,
+      recipientId: 'interaction-recipient-a',
+      placementTargetId: 'interaction-placement-a',
+    };
+    const nestedShards = validShards({
+      ...fixtures.shards,
+      Rewriter: {
+        ...rewriter,
+        content: {
+          ...rewriter.content,
+          semanticCapabilityCalls: [{ ...call, arguments: nestedArguments }],
+          expectedChanges: [
+            'asset-cup01',
+            'interaction-actor-a',
+            'interaction-placement-a',
+            'interaction-recipient-a',
+          ],
+        },
+      } as RewriterShard,
+    });
+    const result = await assembleCouncilDraft(await makeInputWithShards(nestedShards));
+
+    expect(result.status).toBe('ASSEMBLED');
+  });
+
+  it('requires the semantic capability to be allowed by the frozen turn', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const turn = await freezeCouncilTurn({
+      ...fullCouncilTurnInput,
+      allowedSemanticCapabilityIds: [],
+      now: () => 1_000,
+    });
+    const shards = retargetShards(turn, validShards(fixtures.shards));
+    const result = await assembleCouncilDraft({
+      turn,
+      proposal: await makeProposal(turn, shards),
+      now: () => 2_000,
+    });
+
+    expect(result).toMatchObject({
+      status: 'NEEDS_CLARIFICATION',
+      reasonCodes: ['ASSEMBLY_CAPABILITY_REFERENCE_UNKNOWN'],
+    });
+  });
+
+  it('rejects unknown nested scene objects, affordances, and exact-effect mismatches', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const rewriter = fixtures.shards.Rewriter as RewriterShard;
+    const call = rewriter.content.semanticCapabilityCalls[0]!;
+    const baseArguments = {
+      ...call.arguments,
+      recipientId: 'interaction-recipient-a',
+      placementTargetId: 'interaction-placement-a',
+    };
+    const expectedChanges = [
+      'asset-cup01',
+      'interaction-actor-a',
+      'interaction-placement-a',
+      'interaction-recipient-a',
+    ];
+    const cases: readonly [
+      string,
+      typeof baseArguments,
+      string,
+    ][] = [
+      ['actor', { ...baseArguments, actorId: 'scene-unknown-actor' }, 'ASSEMBLY_SCENE_OBJECT_REFERENCE_UNKNOWN'],
+      ['target', { ...baseArguments, targetId: 'scene-unknown-target' }, 'ASSEMBLY_SCENE_OBJECT_REFERENCE_UNKNOWN'],
+      ['recipient', { ...baseArguments, recipientId: 'scene-unknown-recipient' }, 'ASSEMBLY_SCENE_OBJECT_REFERENCE_UNKNOWN'],
+      ['placement', { ...baseArguments, placementTargetId: 'scene-unknown-placement' }, 'ASSEMBLY_SCENE_OBJECT_REFERENCE_UNKNOWN'],
+      ['affordance', { ...baseArguments, affordance: 'affordance-unknown' }, 'ASSEMBLY_AFFORDANCE_REFERENCE_UNKNOWN'],
+    ];
+
+    for (const [_label, argumentsOverride, reasonCode] of cases) {
+      const shards = validShards({
+        ...fixtures.shards,
+        Rewriter: {
+          ...rewriter,
+          content: {
+            ...rewriter.content,
+            semanticCapabilityCalls: [{ ...call, arguments: argumentsOverride }],
+            expectedChanges,
+          },
+        } as RewriterShard,
+      });
+      const result = await assembleCouncilDraft(await makeInputWithShards(shards));
+      expect(result.status).toBe('NEEDS_CLARIFICATION');
+      if (result.status === 'NEEDS_CLARIFICATION') {
+        expect(result.reasonCodes).toContain(reasonCode);
+      }
+    }
+
+    const mismatchShards = validShards({
+      ...fixtures.shards,
+      Rewriter: {
+        ...rewriter,
+        content: {
+          ...rewriter.content,
+          semanticCapabilityCalls: [{ ...call, arguments: baseArguments }],
+          expectedChanges: ['asset-cup01'],
+        },
+      } as RewriterShard,
+    });
+    const mismatch = await assembleCouncilDraft(await makeInputWithShards(mismatchShards));
+    expect(mismatch.status).toBe('NEEDS_CLARIFICATION');
+    if (mismatch.status === 'NEEDS_CLARIFICATION') {
+      expect(mismatch.reasonCodes).toContain('ASSEMBLY_EXPECTED_CHANGES_MISMATCH');
+    }
+  });
+
+  it('rejects duplicate and conflicting Guardian dissent records before map selection', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const guardian = fixtures.shards.Guardian as GuardianShard;
+    const record = guardian.content.requiredDissentRecords[0]!;
+    const duplicateShards = validShards({
+      ...fixtures.shards,
+      Guardian: {
+        ...guardian,
+        content: {
+          ...guardian.content,
+          requiredDissentRecords: [
+            record,
+            { ...record, text: 'A conflicting record with the same stable ID.' },
+          ],
+        },
+      } as GuardianShard,
+    });
+    const result = await assembleCouncilDraft(await makeInputWithShards(duplicateShards));
+
+    expect(result).toMatchObject({
+      status: 'FAILED_NO_MUTATION',
+      reasonCodes: ['ASSEMBLY_DUPLICATE_DISSENT_ID'],
+    });
+  });
+
+  it('preserves selected structured dissent records in commit-selected order', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const guardian = fixtures.shards.Guardian as GuardianShard;
+    const first = guardian.content.requiredDissentRecords[0]!;
+    const second = {
+      dissentId: 'dissent_guardian02',
+      text: 'Keep the source plane visibly unchanged.',
+      evidenceIds: ['input_image01'],
+    };
+    const shards = validShards({
+      ...fixtures.shards,
+      Guardian: {
+        ...guardian,
+        content: {
+          ...guardian.content,
+          requiredDissentRecords: [first, second],
+        },
+      } as GuardianShard,
+    });
+    const result = await assembleCouncilDraft(await makeInputWithShards(
+      shards,
+      { selectedDissentIds: [second.dissentId, first.dissentId] },
+    ));
+
+    expect(result.status).toBe('ASSEMBLED');
+    if (result.status !== 'ASSEMBLED') return;
+    expect(result.draft.agency.dissentRecords).toEqual([second, first]);
+    expect(result.draft.agency.disagreements).toEqual([second.text, first.text]);
+  });
+
+  it('allows empty runtime restriction and rollback sets without fallback strings', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const guardian = fixtures.shards.Guardian as GuardianShard;
+    const shards = validShards({
+      ...fixtures.shards,
+      Guardian: {
+        ...guardian,
+        content: {
+          ...guardian.content,
+          forbiddenCapabilityIds: [],
+          requiredSourceLockIds: [],
+          requiredRollbackCapabilityIds: [],
+        },
+      } as GuardianShard,
+    });
+    const result = await assembleCouncilDraft(await makeInputWithShards(shards));
+
+    expect(result.status).toBe('ASSEMBLED');
+    if (result.status !== 'ASSEMBLED') return;
+    expect(result.draft.execution.forbiddenChanges).toEqual([]);
+    expect(result.draft.execution.forbiddenCapabilityIds).toEqual([]);
+    expect(result.draft.execution.rollbackRequirements).toEqual([]);
+  });
+
+  it('validates every selected shard before any kind-specific nested access', async () => {
+    type ShardMap = Readonly<Record<CouncilRole, CouncilShard>>;
+    type Mutator = (shards: ShardMap) => ShardMap;
+    const malformedCases: readonly [string, Mutator][] = [
+      ['CaseConductor', (shards) => {
+        const shard = shards.CaseConductor as ConductorIntentShard;
+        return {
+          ...shards,
+          CaseConductor: {
+            ...shard,
+            content: {
+              ...shard.content,
+              candidateActionSequence: {} as unknown as readonly string[],
+            },
+          } as ConductorIntentShard,
+        };
+      }],
+      ['Witness', (shards) => {
+        const shard = shards.Witness as WitnessShard;
+        return {
+          ...shards,
+          Witness: {
+            ...shard,
+            content: {
+              ...shard.content,
+              observations: {} as unknown as WitnessShard['content']['observations'],
+            },
+          } as WitnessShard,
+        };
+      }],
+      ['Archivist', (shards) => {
+        const shard = shards.Archivist as ArchivistShard;
+        return {
+          ...shards,
+          Archivist: {
+            ...shard,
+            content: {
+              ...shard.content,
+              provenanceAnchors: {} as unknown as ArchivistShard['content']['provenanceAnchors'],
+            },
+          } as ArchivistShard,
+        };
+      }],
+      ['Rewriter', (shards) => {
+        const shard = shards.Rewriter as RewriterShard;
+        return {
+          ...shards,
+          Rewriter: {
+            ...shard,
+            content: {
+              ...shard.content,
+              semanticCapabilityCalls: {} as unknown as RewriterShard['content']['semanticCapabilityCalls'],
+            },
+          } as RewriterShard,
+        };
+      }],
+      ['Guardian', (shards) => {
+        const shard = shards.Guardian as GuardianShard;
+        return {
+          ...shards,
+          Guardian: {
+            ...shard,
+            content: {
+              ...shard.content,
+              requiredDissentRecords: {} as unknown as GuardianShard['content']['requiredDissentRecords'],
+            },
+          } as GuardianShard,
+        };
+      }],
+    ];
+
+    for (const [_role, mutate] of malformedCases) {
+      const fixtures = await createFullCouncilFixtures();
+      const input = await makeInputWithShards(mutate(validShards(fixtures.shards)));
+      const now = vi.fn(() => 2_000);
+      const result = await assembleCouncilDraft({ ...input, now });
+      expect(result).toMatchObject({
+        status: 'FAILED_NO_MUTATION',
+        reasonCodes: ['ASSEMBLY_SHARD_INVALID'],
+      });
+      expect(now).not.toHaveBeenCalled();
+    }
+  });
+
+  it('does not report an optional role as missing when a text-only turn cannot form an executable draft', async () => {
+    const input = await makeTextOnlyInput();
+    const result = await assembleCouncilDraft(input);
+
+    expect(result).toMatchObject({
+      status: 'NEEDS_CLARIFICATION',
+      reasonCodes: ['ASSEMBLY_EXECUTABLE_BOUNDARY_REQUIRES_FULL_COUNCIL'],
+    });
+    expect('draft' in result).toBe(false);
+  });
+
   it('rejects stale snapshot/hash and unknown asset or capability references', async () => {
     const stale = await makeInput();
     const staleShard = stale.proposal.durableShards[3]!.shard;
@@ -378,8 +742,11 @@ describe('deterministic council draft assembler', () => {
         },
       } as RewriterShard,
     } as Readonly<Record<CouncilRole, CouncilShard>>);
-    expect((await assembleCouncilDraft(unknownCapabilityInput)).status)
-      .toBe('NEEDS_CLARIFICATION');
+    const unknownCapabilityResult = await assembleCouncilDraft(unknownCapabilityInput);
+    expect(unknownCapabilityResult.status).toBe('FAILED_NO_MUTATION');
+    if (unknownCapabilityResult.status === 'FAILED_NO_MUTATION') {
+      expect(unknownCapabilityResult.reasonCodes).toContain('ASSEMBLY_SHARD_INVALID');
+    }
   });
 
   it('rejects terminal-action mismatch without changing the commit sequence', async () => {

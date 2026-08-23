@@ -117,6 +117,13 @@ export const fullCouncilTurnInput: Omit<FreezeCouncilTurnInput, 'now'> = deepFre
   registryVersion: 'cp03-registry/0.1',
   registeredAssetIds: ['asset-cup01'],
   registeredSpatialBridgeIds: ['bridge-window01'],
+  registeredSceneObjectIds: [
+    'asset-cup01',
+    'interaction-actor-a',
+    'interaction-placement-a',
+    'interaction-recipient-a',
+  ],
+  registeredAffordanceIds: ['pickup', 'place'],
   registeredRightsIds: ['rights-local-scene'],
   supportedRollbackCapabilityIds: ['rollback-transient-overlay'],
   allowedSemanticCapabilityIds: ['performRegisteredInteraction'],
@@ -194,7 +201,7 @@ const buildCouncilShards = (
     content: {
       requestedAssetIds: ['asset-cup01'],
       requestedSpatialBridgeIds: ['bridge-window01'],
-      provenanceAnchors: ['input_image01'],
+      provenanceAnchors: ['input_image01', 'source-plane'],
       rightsRequirements: ['rights-local-scene'],
       unavailableRefs: [],
     },

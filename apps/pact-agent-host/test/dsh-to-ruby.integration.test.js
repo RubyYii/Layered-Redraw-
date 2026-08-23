@@ -68,6 +68,7 @@ const executableDraft = ({ caseSessionId, turnId, parentSceneHash }) => ({
     }],
     expectedChanges: ["interaction-actor-a", "interaction-cup"],
     forbiddenChanges: ["interaction-floor", "interaction-backdrop"],
+    forbiddenCapabilityIds: [],
     rollbackRequirements: ["Discard the transient director overlay."],
     terminalIntent: null,
   },
@@ -75,6 +76,12 @@ const executableDraft = ({ caseSessionId, turnId, parentSceneHash }) => ({
     contributions: [],
     disagreements: [],
     guardianChallenge: "Execute only after approval of this exact draft hash.",
+    witnessEvidence: {
+      observations: [],
+      uncertainties: [],
+      evidenceAnchors: [],
+    },
+    dissentRecords: [],
   },
 });
 
