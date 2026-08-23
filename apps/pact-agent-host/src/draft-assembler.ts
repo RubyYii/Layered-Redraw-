@@ -517,7 +517,7 @@ const validateBeforeAssembly = async (
   if (referenceFailure !== undefined) {
     return { ok: false, failure: referenceFailure };
   }
-  const guardianResult: GuardianConflictResult = evaluateGuardianConflict({
+  const guardianResult: GuardianConflictResult = await evaluateGuardianConflict({
     turn,
     proposal,
   });

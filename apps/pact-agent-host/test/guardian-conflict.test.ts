@@ -13,6 +13,7 @@ import type {
   CouncilShard,
   ArchivistShard,
   ConductorIntentShard,
+  ConductorDraftCommit,
   GuardianShard,
   RewriterShard,
   WitnessShard,
@@ -98,6 +99,27 @@ const makeInput = async (
   };
 };
 
+const withDurableCommit = async (
+  proposal: CouncilProposalSnapshot,
+  commit: ConductorDraftCommit,
+  payloadHash?: string,
+): Promise<CouncilProposalSnapshot> => ({
+  ...proposal,
+  durableCommit: {
+    commit,
+    payloadHash: payloadHash ?? await sha256Canonical(commit),
+  },
+});
+
+const expectSelectedShardInvalid = async (
+  input: GuardianConflictInput,
+): Promise<void> => {
+  expect(await evaluateGuardianConflict(input)).toEqual({
+    status: 'NEEDS_CLARIFICATION',
+    reasonCodes: ['GUARDIAN_SELECTED_SHARD_INVALID'],
+  });
+};
+
 describe('typed Guardian conflict evaluation', () => {
   it('preserves WITHHOLD as WITHHELD', async () => {
     const fixtures = await createFullCouncilFixtures();
@@ -105,7 +127,7 @@ describe('typed Guardian conflict evaluation', () => {
       disposition: 'WITHHOLD',
       contestedEvidenceIds: [],
     });
-    const result = evaluateGuardianConflict({
+    const result = await evaluateGuardianConflict({
       turn: fixtures.turn,
       proposal: await makeProposal(fixtures.turn, shards),
     });
@@ -116,7 +138,8 @@ describe('typed Guardian conflict evaluation', () => {
   it('preserves a Guardian NEEDS_CLARIFICATION disposition', async () => {
     const input = await makeInput({ disposition: 'NEEDS_CLARIFICATION' });
 
-    expect(evaluateGuardianConflict(input).status).toBe('NEEDS_CLARIFICATION');
+    expect((await evaluateGuardianConflict(input)).status)
+      .toBe('NEEDS_CLARIFICATION');
   });
 
   it('reports a Rewriter capability intersection without rewriting prose', async () => {
@@ -124,7 +147,7 @@ describe('typed Guardian conflict evaluation', () => {
       forbiddenCapabilityIds: ['performRegisteredInteraction'],
     });
 
-    expect(evaluateGuardianConflict(input)).toEqual({
+    expect(await evaluateGuardianConflict(input)).toEqual({
       status: 'NEEDS_CLARIFICATION',
       reasonCodes: ['GUARDIAN_FORBIDDEN_CAPABILITY'],
     });
@@ -136,7 +159,7 @@ describe('typed Guardian conflict evaluation', () => {
       requiredRightsIds: ['rights_missing'],
     });
 
-    expect(evaluateGuardianConflict(input)).toEqual({
+    expect(await evaluateGuardianConflict(input)).toEqual({
       status: 'NEEDS_CLARIFICATION',
       reasonCodes: ['GUARDIAN_RIGHTS_REQUIREMENT_UNSATISFIED'],
     });
@@ -157,7 +180,7 @@ describe('typed Guardian conflict evaluation', () => {
       } as ArchivistShard,
     }, { contestedEvidenceIds: [] });
 
-    const result = evaluateGuardianConflict({
+    const result = await evaluateGuardianConflict({
       turn: fixtures.turn,
       proposal: await makeProposal(fixtures.turn, shards),
     });
@@ -173,7 +196,7 @@ describe('typed Guardian conflict evaluation', () => {
       contestedEvidenceIds: ['observation_witness01'],
     });
 
-    expect(evaluateGuardianConflict(input)).toEqual({
+    expect(await evaluateGuardianConflict(input)).toEqual({
       status: 'NEEDS_CLARIFICATION',
       reasonCodes: ['GUARDIAN_CONTESTED_EVIDENCE'],
     });
@@ -184,7 +207,7 @@ describe('typed Guardian conflict evaluation', () => {
       requiredRollbackCapabilityIds: ['rollback_missing'],
     });
 
-    expect(evaluateGuardianConflict(input)).toEqual({
+    expect(await evaluateGuardianConflict(input)).toEqual({
       status: 'NEEDS_CLARIFICATION',
       reasonCodes: ['GUARDIAN_ROLLBACK_REQUIREMENT_UNSATISFIED'],
     });
@@ -199,7 +222,7 @@ describe('typed Guardian conflict evaluation', () => {
       requiredRollbackCapabilityIds: ['rollback_missing'],
     });
 
-    expect(evaluateGuardianConflict(input)).toEqual({
+    expect(await evaluateGuardianConflict(input)).toEqual({
       status: 'NEEDS_CLARIFICATION',
       reasonCodes: [
         'GUARDIAN_FORBIDDEN_CAPABILITY',
@@ -213,9 +236,169 @@ describe('typed Guardian conflict evaluation', () => {
   it('allows fully matching typed constraints', async () => {
     const input = await makeInput();
 
-    expect(evaluateGuardianConflict(input)).toEqual({
+    expect(await evaluateGuardianConflict(input)).toEqual({
       status: 'ALLOW',
       reasonCodes: [],
+    });
+  });
+
+  it('fails closed when the Conductor selects the same shard hash twice', async () => {
+    const input = await makeInput();
+    const durableCommit = input.proposal.durableCommit;
+    if (durableCommit === null) throw new Error('expected durable commit');
+    const selectedShardHashes = durableCommit.commit.selectedShardHashes;
+    const commit: ConductorDraftCommit = {
+      ...durableCommit.commit,
+      selectedShardHashes: [
+        selectedShardHashes[0]!,
+        selectedShardHashes[0]!,
+        ...selectedShardHashes.slice(1),
+      ],
+    };
+
+    await expectSelectedShardInvalid({
+      ...input,
+      proposal: await withDurableCommit(input.proposal, commit),
+    });
+  });
+
+  it('fails closed when a selected shard hash has no durable entry', async () => {
+    const input = await makeInput();
+    const durableCommit = input.proposal.durableCommit;
+    if (durableCommit === null) throw new Error('expected durable commit');
+    const selectedShardHashes = durableCommit.commit.selectedShardHashes;
+    const commit: ConductorDraftCommit = {
+      ...durableCommit.commit,
+      selectedShardHashes: [
+        '0'.repeat(64),
+        ...selectedShardHashes.slice(1),
+      ],
+    };
+
+    await expectSelectedShardInvalid({
+      ...input,
+      proposal: await withDurableCommit(input.proposal, commit),
+    });
+  });
+
+  it('fails closed when a selected durable payload hash does not bind its shard', async () => {
+    const input = await makeInput();
+    const durableCommit = input.proposal.durableCommit;
+    if (durableCommit === null) throw new Error('expected durable commit');
+    const forgedHash = '0'.repeat(64);
+    const forgedDurableShards = input.proposal.durableShards.map((entry, index) =>
+      index === 0 ? { ...entry, payloadHash: forgedHash } : entry);
+    const commit: ConductorDraftCommit = {
+      ...durableCommit.commit,
+      selectedShardHashes: [
+        forgedHash,
+        ...durableCommit.commit.selectedShardHashes.slice(1),
+      ],
+    };
+
+    await expectSelectedShardInvalid({
+      ...input,
+      proposal: await withDurableCommit({
+        ...input.proposal,
+        durableShards: forgedDurableShards,
+      }, commit),
+    });
+  });
+
+  it('fails closed when one selected hash resolves to multiple durable entries', async () => {
+    const input = await makeInput();
+    const durableCommit = input.proposal.durableCommit;
+    if (durableCommit === null) throw new Error('expected durable commit');
+    const archivistEntry = input.proposal.durableShards[2]!;
+    const rewriterEntry = input.proposal.durableShards[3]!;
+    const guardianEntry = input.proposal.durableShards[4]!;
+    const conductorEntry = input.proposal.durableShards[0]!;
+    const commit: ConductorDraftCommit = {
+      ...durableCommit.commit,
+      selectedShardHashes: [
+        archivistEntry.payloadHash,
+        rewriterEntry.payloadHash,
+        guardianEntry.payloadHash,
+      ],
+    };
+
+    await expectSelectedShardInvalid({
+      ...input,
+      proposal: await withDurableCommit({
+        ...input.proposal,
+        durableShards: [
+          ...input.proposal.durableShards,
+          {
+            ...conductorEntry,
+            payloadHash: guardianEntry.payloadHash,
+            acceptanceSequence: 99,
+          },
+        ],
+      }, commit),
+    });
+  });
+
+  it('fails closed for a malformed full Conductor commit', async () => {
+    const input = await makeInput();
+    const durableCommit = input.proposal.durableCommit;
+    if (durableCommit === null) throw new Error('expected durable commit');
+    const malformedCommit = {
+      ...durableCommit.commit,
+      schemaVersion: 'cp03-council/9.9',
+    } as unknown as ConductorDraftCommit;
+
+    await expectSelectedShardInvalid({
+      ...input,
+      proposal: await withDurableCommit(input.proposal, malformedCommit),
+    });
+  });
+
+  it('fails closed when the durable commit payload hash does not bind the commit', async () => {
+    const input = await makeInput();
+    const durableCommit = input.proposal.durableCommit;
+    if (durableCommit === null) throw new Error('expected durable commit');
+
+    await expectSelectedShardInvalid({
+      ...input,
+      proposal: await withDurableCommit(
+        input.proposal,
+        durableCommit.commit,
+        '0'.repeat(64),
+      ),
+    });
+  });
+
+  it('fails closed when the Conductor selects no shard hashes', async () => {
+    const input = await makeInput();
+    const durableCommit = input.proposal.durableCommit;
+    if (durableCommit === null) throw new Error('expected durable commit');
+    const commit: ConductorDraftCommit = {
+      ...durableCommit.commit,
+      selectedShardHashes: [],
+    };
+
+    await expectSelectedShardInvalid({
+      ...input,
+      proposal: await withDurableCommit(input.proposal, commit),
+    });
+  });
+
+  it('fails closed for malformed durable shard metadata', async () => {
+    const input = await makeInput();
+    const malformedDurableShards = input.proposal.durableShards.map((entry, index) =>
+      index === 0
+        ? {
+            ...entry,
+            acceptanceSequence: 'not-a-number' as unknown as number,
+          }
+        : entry);
+
+    await expectSelectedShardInvalid({
+      ...input,
+      proposal: {
+        ...input.proposal,
+        durableShards: malformedDurableShards,
+      },
     });
   });
 
@@ -287,7 +470,7 @@ describe('typed Guardian conflict evaluation', () => {
     }],
   ] as const)('fails closed for malformed selected %s shards', async (_role, mutate) => {
     const fixtures = await createFullCouncilFixtures();
-    const result = evaluateGuardianConflict({
+    const result = await evaluateGuardianConflict({
       turn: fixtures.turn,
       proposal: await makeProposal(fixtures.turn, mutate(fixtures.shards)),
     });
@@ -326,7 +509,7 @@ describe('typed Guardian conflict evaluation', () => {
         },
       } as RewriterShard,
     };
-    const result = evaluateGuardianConflict({
+    const result = await evaluateGuardianConflict({
       turn: fixtures.turn,
       proposal: await makeProposal(fixtures.turn, changedShards),
     });

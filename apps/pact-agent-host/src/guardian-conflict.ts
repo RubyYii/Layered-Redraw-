@@ -1,4 +1,8 @@
-import { validateCouncilShard } from '@layered-redraw/pact-cp03-contracts';
+import {
+  sha256Canonical,
+  validateConductorDraftCommit,
+  validateCouncilShard,
+} from '@layered-redraw/pact-cp03-contracts';
 import type { CouncilProposalSnapshot } from './council-registry.js';
 import type {
   ArchivistShard,
@@ -46,50 +50,68 @@ const selectedShardFailure = (): GuardianConflictResult => ({
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
-const isStringArray = (value: unknown): value is readonly string[] =>
-  Array.isArray(value) && value.every((item) => typeof item === 'string');
+const isHash = (value: unknown): value is string =>
+  typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 
-const isCouncilRole = (value: unknown): value is CouncilRole =>
-  value === 'CaseConductor' ||
-  value === 'Witness' ||
-  value === 'Archivist' ||
-  value === 'Rewriter' ||
-  value === 'Guardian';
+const hasDuplicates = <T>(values: readonly T[]): boolean =>
+  new Set(values).size !== values.length;
 
-const selectedShardsByRole = (
+const selectedShardsByRole = async (
   proposal: CouncilProposalSnapshot,
-): {
-  readonly selected: readonly CouncilProposalSnapshot['durableShards'][number]['shard'][];
-  readonly byRole: ReadonlyMap<
-    CouncilRole,
-    CouncilProposalSnapshot['durableShards'][number]['shard']
-  >;
-} | undefined => {
+): Promise<ReadonlyMap<
+  CouncilRole,
+  CouncilProposalSnapshot['durableShards'][number]['shard']
+> | undefined> => {
   if (!isRecord(proposal) || !Array.isArray(proposal.durableShards)) return undefined;
-  const rawCommit = proposal.durableCommit?.commit as unknown;
-  if (rawCommit !== null && rawCommit !== undefined && !isRecord(rawCommit)) {
+  const rawDurableCommit = proposal.durableCommit as unknown;
+  if (!isRecord(rawDurableCommit) || !isHash(rawDurableCommit.payloadHash)) {
     return undefined;
   }
-  const rawSelectedHashes = rawCommit?.selectedShardHashes;
-  if (rawSelectedHashes !== undefined && !isStringArray(rawSelectedHashes)) {
+  const commit = validateConductorDraftCommit(rawDurableCommit.commit);
+  if (await sha256Canonical(commit) !== rawDurableCommit.payloadHash) {
     return undefined;
   }
-  const selectedHashes = new Set(rawSelectedHashes ?? []);
-  const selected: CouncilProposalSnapshot['durableShards'][number]['shard'][] = [];
-  const byRole = new Map<CouncilRole, CouncilProposalSnapshot['durableShards'][number]['shard']>();
-  for (const entry of proposal.durableShards) {
-    if (!isRecord(entry) || !isRecord(entry.shard) || typeof entry.payloadHash !== 'string') {
+  if (
+    commit.selectedShardHashes.length === 0 ||
+    hasDuplicates(commit.selectedShardHashes)
+  ) {
+    return undefined;
+  }
+
+  const durableEntries: CouncilProposalSnapshot['durableShards'][number][] = [];
+  for (const rawEntry of proposal.durableShards) {
+    if (
+      !isRecord(rawEntry) ||
+      !isRecord(rawEntry.shard) ||
+      !isHash(rawEntry.payloadHash) ||
+      !Number.isSafeInteger(rawEntry.acceptanceSequence) ||
+      (rawEntry.acceptanceSequence as number) <= 0
+    ) {
       return undefined;
     }
-    if (!selectedHashes.has(entry.payloadHash)) continue;
-    const shard = entry.shard as unknown as CouncilProposalSnapshot['durableShards'][number]['shard'];
-    const role = shard.role;
-    if (!isCouncilRole(role)) return undefined;
-    selected.push(shard);
-    if (byRole.has(role)) return undefined;
-    byRole.set(role, shard);
+    durableEntries.push(
+      rawEntry as unknown as CouncilProposalSnapshot['durableShards'][number],
+    );
   }
-  return { selected, byRole };
+  if (hasDuplicates(durableEntries.map((entry) => entry.payloadHash))) {
+    return undefined;
+  }
+
+  const byRole = new Map<CouncilRole, CouncilProposalSnapshot['durableShards'][number]['shard']>();
+  for (const payloadHash of commit.selectedShardHashes) {
+    const matches = durableEntries.filter((entry) => entry.payloadHash === payloadHash);
+    if (matches.length !== 1) {
+      return undefined;
+    }
+    const entry = matches[0]!;
+    const shard = validateCouncilShard(entry.shard);
+    if (await sha256Canonical(entry.shard) !== entry.payloadHash) {
+      return undefined;
+    }
+    if (byRole.has(shard.role)) return undefined;
+    byRole.set(shard.role, shard);
+  }
+  return byRole;
 };
 
 const hasEvery = (
@@ -124,18 +146,14 @@ const archivistContent = (
     : undefined;
 };
 
-export const evaluateGuardianConflict = (
+export const evaluateGuardianConflict = async (
   input: GuardianConflictInput,
-): GuardianConflictResult => {
+): Promise<GuardianConflictResult> => {
   try {
-    const selected = selectedShardsByRole(input.proposal);
-    if (selected === undefined) {
+    const shards = await selectedShardsByRole(input.proposal);
+    if (shards === undefined) {
       return selectedShardFailure();
     }
-    for (const shard of selected.selected) {
-      validateCouncilShard(shard);
-    }
-    const shards = selected.byRole;
     const guardian = guardianContent(shards);
     const rewriter = rewriterContent(shards);
     const archivist = archivistContent(shards);
