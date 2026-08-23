@@ -13,6 +13,7 @@ import type {
 import { PactDurabilityError } from './durable-turn.js';
 import {
   COUNCIL_DURABILITY_PROOF as RECEIPT_PROOF,
+  councilRegistryRecoveryCapability,
 } from './council-registry.js';
 import type {
   AcceptedCouncilCommitReceipt,
@@ -49,7 +50,6 @@ interface CouncilTraceRecoveryInput {
   readonly shard: CouncilShard;
   readonly shardPayloadHash: string;
   readonly acceptanceSequence: number;
-  readonly now: () => number;
 }
 
 const inspectCold = async (
@@ -722,7 +722,16 @@ export const recoverCouncilTraceProjection = async (
   if (targetSession === undefined) {
     incomplete(`recovery shard ${earliest.shard.shardId}`);
   }
-  const projectedAtMonotonicMs = input.now();
+  const recoveryCapability = councilRegistryRecoveryCapability(input.registry);
+  const reservation = recoveryCapability.reserveRecoveryTrace({
+    turnId: registeredTurn.snapshot.turnId,
+    shardId: earliest.shard.shardId,
+    payloadHash: earliest.context.receipt.payloadHash,
+    acceptanceSequence: earliest.context.receipt.acceptanceSequence,
+    session: targetSession!,
+  });
+  const projectedAtMonotonicMs =
+    recoveryCapability.recoveryTimestamp(reservation);
   targetSession!.append('pact/public-trace', {
     caseSessionId: registeredTurn.snapshot.caseSessionId,
     turnId: registeredTurn.snapshot.turnId,
@@ -744,13 +753,10 @@ export const recoverCouncilTraceProjection = async (
     earliest.context.receipt.acceptanceSequence,
     projectedAtMonotonicMs,
   );
-  input.registry.recordRecoveredCouncilTrace({
-    turnId: registeredTurn.snapshot.turnId,
-    shardId: earliest.shard.shardId,
-    payloadHash: earliest.context.receipt.payloadHash,
-    acceptanceSequence: earliest.context.receipt.acceptanceSequence,
+  recoveryCapability.commitRecoveryTrace(
+    reservation,
+    targetSession!,
     traceEventSeq,
-    projectedAtMonotonicMs,
-  });
+  );
   return { appended: true, traceEventSeq };
 };

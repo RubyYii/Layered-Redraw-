@@ -3,7 +3,11 @@ import {
   validateConductorDraftCommit,
   validateCouncilShard,
 } from '@layered-redraw/pact-cp03-contracts';
-import type { JsonValue, Session } from '@deepseek-ai/dsh-session';
+import type {
+  JsonValue,
+  Session,
+  SessionEvent,
+} from '@deepseek-ai/dsh-session';
 
 import type {
   CouncilRole,
@@ -130,7 +134,33 @@ interface AcceptedShard {
   receipt: AcceptedCouncilShardReceipt;
   readonly sessionId: string;
   projectionAtMonotonicMs: number | null;
+  recoveryReservation: RecoveryTraceReservation | null;
   durable: boolean;
+}
+
+interface RecoveryTraceTarget {
+  readonly turnId: string;
+  readonly shardId: string;
+  readonly payloadHash: string;
+  readonly acceptanceSequence: number;
+  readonly session: Session;
+}
+
+type RecoveryTraceReservation = object;
+
+interface RecoveryTraceReservationState extends RecoveryTraceTarget {
+  readonly projectedAtMonotonicMs: number;
+  committed: boolean;
+}
+
+interface CouncilRegistryRecoveryCapability {
+  reserveRecoveryTrace(target: RecoveryTraceTarget): RecoveryTraceReservation;
+  recoveryTimestamp(reservation: RecoveryTraceReservation): number;
+  commitRecoveryTrace(
+    reservation: RecoveryTraceReservation,
+    session: Session,
+    traceEventSeq: number,
+  ): AcceptedCouncilShardContext;
 }
 
 interface AcceptedCommit {
@@ -206,12 +236,52 @@ const acceptedReceiptMatches = (
   candidate.shardEventSeq === expected.shardEventSeq &&
   candidate.traceEventSeq === expected.traceEventSeq;
 
+const recoveryTraceMatches = (
+  event: SessionEvent | undefined,
+  state: TurnState,
+  accepted: AcceptedShard,
+  projectedAtMonotonicMs: number,
+  traceEventSeq: number,
+): boolean =>
+  event !== undefined &&
+  event.seq === traceEventSeq &&
+  event.type === 'pact/public-trace' &&
+  event.data.caseSessionId === state.turn.snapshot.caseSessionId &&
+  event.data.turnId === accepted.shard.turnId &&
+  event.data.role === accepted.shard.role &&
+  event.data.text === accepted.shard.publicTrace &&
+  event.data.sourceContributionHash === accepted.receipt.payloadHash &&
+  event.data.acceptanceSequence === accepted.receipt.acceptanceSequence &&
+  event.data.phase === 'COUNCIL' &&
+  event.data.provisional === true &&
+  event.data.projectedAtMonotonicMs === projectedAtMonotonicMs;
+
+const recoveryCapabilities = new WeakMap<
+  CouncilRegistry,
+  CouncilRegistryRecoveryCapability
+>();
+
 export class CouncilRegistry {
   private readonly turns = new Map<string, TurnState>();
   private readonly now: () => number;
+  private readonly recoveryReservations = new WeakMap<
+    RecoveryTraceReservation,
+    RecoveryTraceReservationState
+  >();
 
   constructor(private readonly options: CouncilRegistryOptions) {
     this.now = options.now ?? defaultMonotonicNow;
+    recoveryCapabilities.set(this, Object.freeze({
+      reserveRecoveryTrace: (target: RecoveryTraceTarget) =>
+        this.#reserveRecoveryTrace(target),
+      recoveryTimestamp: (reservation: RecoveryTraceReservation) =>
+        this.#recoveryTimestamp(reservation),
+      commitRecoveryTrace: (
+        reservation: RecoveryTraceReservation,
+        session: Session,
+        traceEventSeq: number,
+      ) => this.#commitRecoveryTrace(reservation, session, traceEventSeq),
+    }));
   }
 
   get submissions(): SubmissionRegistry {
@@ -369,6 +439,7 @@ export class CouncilRegistry {
       receipt,
       sessionId: String(session.id),
       projectionAtMonotonicMs: null,
+      recoveryReservation: null,
       durable: false,
     };
     state.shards.set(shard.shardId, accepted);
@@ -459,44 +530,91 @@ export class CouncilRegistry {
     return state.turn;
   }
 
-  recordRecoveredCouncilTrace(input: {
-    readonly turnId: string;
-    readonly shardId: string;
-    readonly payloadHash: string;
-    readonly acceptanceSequence: number;
-    readonly traceEventSeq: number;
-    readonly projectedAtMonotonicMs: number;
-  }): AcceptedCouncilShardContext {
-    const state = this.turns.get(input.turnId);
-    const accepted = state?.shards.get(input.shardId);
+  #reserveRecoveryTrace(
+    target: RecoveryTraceTarget,
+  ): RecoveryTraceReservation {
+    const state = this.turns.get(target.turnId);
+    const accepted = state?.shards.get(target.shardId);
+    const sessionId = String(target.session.id);
     if (
       state === undefined ||
       accepted === undefined ||
       !traceEligible(accepted.shard.role) ||
-      accepted.receipt.payloadHash !== input.payloadHash ||
-      accepted.receipt.acceptanceSequence !== input.acceptanceSequence ||
-      !Number.isFinite(input.projectedAtMonotonicMs) ||
-      input.traceEventSeq < 0
+      !accepted.receipt.projectedTrace ||
+      accepted.sessionId !== sessionId ||
+      accepted.receipt.payloadHash !== target.payloadHash ||
+      accepted.receipt.acceptanceSequence !== target.acceptanceSequence ||
+      accepted.receipt.traceEventSeq !== null ||
+      accepted.projectionAtMonotonicMs !== null ||
+      state.firstTraceAcceptanceSequence !== target.acceptanceSequence ||
+      accepted.recoveryReservation !== null
     ) {
-      throw new Error('PACT_COUNCIL_RECOVERED_TRACE_MISMATCH');
+      throw new Error('PACT_COUNCIL_RECOVERY_RESERVATION_MISMATCH');
     }
-    if (accepted.receipt.traceEventSeq !== null) {
-      if (
-        accepted.receipt.traceEventSeq !== input.traceEventSeq ||
-        accepted.projectionAtMonotonicMs !== input.projectedAtMonotonicMs
-      ) {
-        throw new Error('PACT_COUNCIL_RECOVERED_TRACE_MISMATCH');
-      }
-      return this.acceptedShardContext(accepted.receipt);
+
+    const projectedAtMonotonicMs = this.now();
+    if (!Number.isFinite(projectedAtMonotonicMs)) {
+      throw new Error('PACT_COUNCIL_RECOVERY_RESERVATION_MISMATCH');
     }
-    if (!accepted.receipt.projectedTrace) {
-      throw new Error('PACT_COUNCIL_RECOVERED_TRACE_MISMATCH');
+    const reservation = Object.freeze({});
+    this.recoveryReservations.set(reservation, {
+      ...target,
+      projectedAtMonotonicMs,
+      committed: false,
+    });
+    accepted.recoveryReservation = reservation;
+    return reservation;
+  }
+
+  #recoveryTimestamp(
+    reservation: RecoveryTraceReservation,
+  ): number {
+    const state = this.recoveryReservations.get(reservation);
+    if (state === undefined || state.committed) {
+      throw new Error('PACT_COUNCIL_RECOVERY_RESERVATION_MISMATCH');
+    }
+    return state.projectedAtMonotonicMs;
+  }
+
+  #commitRecoveryTrace(
+    reservation: RecoveryTraceReservation,
+    session: Session,
+    traceEventSeq: number,
+  ): AcceptedCouncilShardContext {
+    const reservationState = this.recoveryReservations.get(reservation);
+    const state = reservationState === undefined
+      ? undefined
+      : this.turns.get(reservationState.turnId);
+    const accepted = state?.shards.get(reservationState?.shardId ?? '');
+    if (
+      reservationState === undefined ||
+      reservationState.committed ||
+      state === undefined ||
+      accepted === undefined ||
+      accepted.recoveryReservation !== reservation ||
+      session !== reservationState.session ||
+      !Number.isInteger(traceEventSeq) ||
+      traceEventSeq < 0 ||
+      accepted.receipt.payloadHash !== reservationState.payloadHash ||
+      accepted.receipt.acceptanceSequence !== reservationState.acceptanceSequence ||
+      accepted.receipt.traceEventSeq !== null ||
+      accepted.projectionAtMonotonicMs !== null ||
+      !recoveryTraceMatches(
+        session.events.find((event) => event.seq === traceEventSeq),
+        state,
+        accepted,
+        reservationState.projectedAtMonotonicMs,
+        traceEventSeq,
+      )
+    ) {
+      throw new Error('PACT_COUNCIL_RECOVERY_RESERVATION_MISMATCH');
     }
     accepted.receipt = Object.freeze({
       ...accepted.receipt,
-      traceEventSeq: input.traceEventSeq,
+      traceEventSeq,
     });
-    accepted.projectionAtMonotonicMs = input.projectedAtMonotonicMs;
+    accepted.projectionAtMonotonicMs = reservationState.projectedAtMonotonicMs;
+    reservationState.committed = true;
     return this.acceptedShardContext(accepted.receipt);
   }
 
@@ -689,3 +807,14 @@ export class CouncilRegistry {
     this.options.submissions.closeTurn(turnId);
   }
 }
+
+/** @internal Sibling-module capability; intentionally omitted from the package root. */
+export const councilRegistryRecoveryCapability = (
+  registry: CouncilRegistry,
+): CouncilRegistryRecoveryCapability => {
+  const capability = recoveryCapabilities.get(registry);
+  if (capability === undefined) {
+    throw new Error('PACT_COUNCIL_RECOVERY_REGISTRY_MISMATCH');
+  }
+  return capability;
+};
