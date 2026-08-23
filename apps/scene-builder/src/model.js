@@ -72,9 +72,10 @@ const ROLE_DEFAULTS = Object.freeze({
   },
 });
 
-const TIMELINE_TYPES = new Set(["move", "rotate", "scale", "visibility", "dialogue", "camera", "attach", "interaction"]);
+const TIMELINE_TYPES = new Set(["move", "rotate", "scale", "visibility", "dialogue", "camera", "attach", "interaction", "behavior"]);
 const TIMELINE_TRACKS = new Set(["camera", "character", "prop", "environment", "dialogue"]);
 const OWNERSHIP_MODES = new Set(["none", "claim", "transfer", "release"]);
+const BEHAVIOR_ACTIONS = new Set(["idle", "approach", "look", "reach", "grasp", "carry", "transfer", "release", "speak"]);
 const COLLISION_PROXY_SHAPES = new Set(["box", "sphere", "cylinder", "capsule"]);
 
 const clone = (value) => structuredClone(value);
@@ -164,6 +165,14 @@ const normalizeStringMap = (value, limit = 32) => {
     .filter(([key, entry]) => key && entry));
 };
 
+const normalizeNullableStringMap = (value, limit = 32) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value)
+    .slice(0, limit)
+    .map(([key, entry]) => [cleanText(key, 48), entry == null || entry === "" ? null : cleanText(entry, 96)])
+    .filter(([key, entry]) => key && (entry === null || entry)));
+};
+
 const PORTABLE_ASSET_ROLES = new Set(["model", "animation", "bridge", "rgb", "depth"]);
 const PORTABLE_ASSET_KINDS = new Set(["model", "spatial-bridge"]);
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
@@ -208,7 +217,7 @@ const normalizeAsset = (value) => {
     forwardAxis: ["-Z", "+Z", "-X", "+X"].includes(value.forwardAxis) ? value.forwardAxis : "-Z",
     nodes: normalizeStringMap(value.nodes),
     animations: normalizeStringMap(value.animations),
-    bones: normalizeStringMap(value.bones),
+    bones: normalizeNullableStringMap(value.bones),
     expressions: normalizeStringMap(value.expressions),
     ...(portable ? { portable } : {}),
   };
@@ -441,6 +450,8 @@ const normalizeClip = (value, objectIds) => {
     offset: normalizeVector(value.offset, [0.65, 0.8, 0]),
     text: cleanText(value.text, 500),
     action: cleanText(value.action, 64),
+    behaviorAction: BEHAVIOR_ACTIONS.has(value.behaviorAction) ? value.behaviorAction : null,
+    hand: ["auto", "left", "right", "both"].includes(value.hand) ? value.hand : "auto",
     targetAnchor: cleanText(value.targetAnchor, 48) || null,
     actorNode: cleanText(value.actorNode, 48) || null,
     resultingState: cleanText(value.resultingState, 96) || null,

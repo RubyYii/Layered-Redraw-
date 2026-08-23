@@ -34,7 +34,9 @@
 - Layered Redraw `spatial-bridge.json` 工程导入：自动匹配 RGB／近白相对深度、校验两个 SHA-256，并生成可旋转的 2.5D 纹理高度场；载体位置、旋转和尺寸继续可编辑
 - 导入报告会列出网格、蒙皮网格、骨骼、动画片段与 Morph Target，并自动识别 `root/head/effector/statusLight`、常用骨骼和表情槽位
 - `AnimationMixer` 驱动的 `idle/move/interact/react` CrossFade，以及独立的动作、表情权重与骨骼姿态控制接口；模型变化不改写角色根轨道
-- 外部动作 GLB 到当前蒙皮骨架的动画重定向接口，以及交互接触点驱动的世界空间双骨 CCD 手部 IK
+- 外部动作 GLB 到当前蒙皮骨架的动画重定向接口，以及双手／双脚世界空间双骨 CCD、头颈注视与静止脚底锁定
+- 25 槽位骨架映射编辑器：搜索、自动推断、必需槽位／重复骨骼诊断、实时姿势／双手／脚锁测试和工程持久化
+- `idle / approach / look / reach / grasp / carry / transfer / release / speak` 角色动作状态机，统一选择动画槽位与身体约束
 - 交互的预备、伸手、接触、恢复阶段，以及随持有者旋转的局部携带锚点
 - 固定 60Hz 导演预览，以及 `claim / transfer / release` 三阶段所有权状态机；非法持有者不能交接或释放物品
 - `interactionSpec.collisionProxy` 胶囊／箱体代理：角色避开静态场景、道具保持在支撑面之上，HUD 报告修正数量与残余穿透
@@ -42,7 +44,7 @@
 - 十秒交互仿真实验室：两名角色连续完成接近、抓取、携带、交接和放置，并提供独立 30fps 逐帧视频渲染
 - 基于静态碰撞体膨胀边界的三角化导航网格、共享边门户与 A* 走廊，可把越界意图编译为“接近—交互”计划；旧网格 A* 保留为显式回退
 - 按需加载的 Rapier WASM 60Hz 刚体世界：动态物体接受重力、碰撞、摩擦和恢复系数；时间线或所有权控制期间切换为运动学权威
-- 大模型意图观察器、校验器、计划器与单一 `runAgentTurn` 适配入口；模型不能直接写入位置、旋转、路径、脚本或资源 URL
+- 大模型意图观察器、校验器、计划器与 `runAgentBehaviorTurn` 适配入口；模型只能请求 `approach / look / reach / grasp / transfer / release / speak`，不能直接写入位置、旋转、路径、脚本或资源 URL；接受／拒绝都有哈希回执
 - 摄影机曲线缓存、轻量预览变换、增量时间线高亮、FPS/P95 监测、自适应像素比与弱设备阴影／局部灯降级；离线渲染固定为完整特效
 - 可复现仿真交付包：视频、场景快照、资产锁、逐帧增量轨迹、所有权／碰撞审计、离线 WebGL 回放和 SHA-256 验证器统一生成
 - 可移植工程包：项目 JSON、OBJ／GLB、动作 GLB、RGB-D 桥接／RGB／深度按内容寻址打入 `.blockout.zip`，导入时逐项复算哈希
@@ -91,6 +93,7 @@ npm run dev
 npm run build
 npm test
 npm run test:ui
+npm run test:rig-editor
 npm run test:camera-editor
 npm run test:cp03:audience
 npm run test:large-autosave
@@ -117,7 +120,7 @@ npm run package:window-case
 
 物理属性仍由结构化元数据决定。语义交互和所有权保持确定性运动学权威；静态障碍会生成半径膨胀的三角导航网格，离散代理继续审计角色／道具残余穿透；没有被时间线或持有关系控制的 `dynamic` 物体则交给按需加载的 Rapier 60Hz 世界处理重力与接触。这个组合仍不是完整游戏角色控制器，也没有把 RGB-D 高度场自动变成碰撞网格。
 
-OBJ、单文件 GLB、动作 GLB 与含 `spatial-bridge.json` 的 Layered Redraw 工程会写入浏览器内容寻址资产库。普通项目 JSON 只保存 SHA-256 引用；点击“保存可移植工程包”才会把项目与全部引用二进制打成跨机器 `.blockout.zip`，导入时复算清单和内容哈希。RGB-D 仍是相对 2.5D、非米制、无隐藏背面；OBJ 仍是静态网格。需要动作、表情、动画重定向和手部 IK 的角色应使用带蒙皮骨架的 GLB。
+OBJ、单文件 GLB、动作 GLB 与含 `spatial-bridge.json` 的 Layered Redraw 工程会写入浏览器内容寻址资产库。普通项目 JSON 只保存 SHA-256 引用；点击“保存可移植工程包”才会把项目与全部引用二进制打成跨机器 `.blockout.zip`，导入时复算清单和内容哈希。RGB-D 仍是相对 2.5D、非米制、无隐藏背面；OBJ 仍是静态网格。需要动作、表情、动画重定向、四肢 IK 和脚锁的角色应使用带蒙皮骨架的 GLB。
 
 ### 角色运行时接口
 
@@ -129,10 +132,30 @@ editor.playAssetAction(objectId, "interact");
 editor.setAssetExpression(objectId, "smile", 0.8, { exclusive: true });
 editor.setAssetBonePose(objectId, "head", { rotationDegrees: [0, 20, 0] });
 editor.setAssetHandIk(objectId, "rightHand", [0.4, 1.2, -0.7], { weight: 1 });
+editor.setAssetRigBindings(objectId, savedBoneMap);
+editor.previewAssetRig(objectId, "feet");
 await editor.loadRetargetAnimationFile(objectId, animationGlbFile);
 editor.clearAssetExpressions(objectId);
 editor.clearAssetBonePose(objectId, "head");
 editor.clearAssetHandIk(objectId, "rightHand");
 ```
 
-动作既可传语义槽位，也可传 GLB 中的原始动画名；表情、骨骼和左右手同样支持语义槽位或原始名称。动作重定向要求源／目标 GLB 都包含兼容的蒙皮骨架；名称不兼容会失败并保留原动作。`assetReport` 会返回 `handIk`、`animationRetargeting`、可用 IK 链、自动绑定结果和当前运行状态，接入大模型或行为树时应先读报告，再发出受限的语义控制命令。
+动作既可传语义槽位，也可传 GLB 中的原始动画名；表情、骨骼和四肢同样支持语义槽位或原始名称。动作重定向要求源／目标 GLB 都包含兼容的蒙皮骨架；名称不兼容会失败并保留原动作。`assetReport` 会返回 `twoHandIk`、`footLock`、`lookIk`、`fullBodyIk`、映射诊断、重定向能力和当前状态机。页面还暴露只读／编译边界 `window.__BLOCKOUT_AGENT_BEHAVIOR__`；它不会直接把模型输出写进场景。
+
+七动作合同的调用示例：
+
+```js
+const boundary = window.__BLOCKOUT_AGENT_BEHAVIOR__;
+const observation = boundary.observe(actorId);
+const result = await boundary.submit(actorId, {
+  schemaVersion: observation.behaviorContract.schemaVersion,
+  action: "reach",
+  actorId,
+  targetId,
+  hand: "both",
+  requestId: "reach-cup-001",
+});
+// result.receipt binds command, scene and generated clips by SHA-256.
+```
+
+这层只负责观察、校验、规划、编译与回执；是否把片段加入正式时间线仍由上层 Capability Gate／人工批准决定。

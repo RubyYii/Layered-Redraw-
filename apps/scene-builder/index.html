@@ -671,6 +671,11 @@
                 <input id="spatial-bridge-folder" type="file" accept="application/json,image/png,.json,.png" webkitdirectory multiple hidden />
                 <input id="spatial-bridge-files" type="file" accept="application/json,image/png,.json,.png" multiple hidden />
                 <div id="asset-runtime-controls" class="asset-runtime-controls" hidden>
+                  <div class="asset-behavior-readout" aria-label="角色动作运行时状态">
+                    <span>状态机</span>
+                    <strong id="asset-behavior-state">idle</strong>
+                    <small id="asset-ik-state">IK 未就绪</small>
+                  </div>
                   <label for="asset-action-preview"><span>动作预览</span><select id="asset-action-preview" class="field-control"></select></label>
                   <label for="asset-expression-preview"><span>表情／Morph</span><select id="asset-expression-preview" class="field-control"></select></label>
                   <label class="asset-expression-weight" for="asset-expression-weight">
@@ -679,6 +684,7 @@
                   </label>
                   <button id="play-asset-action" class="text-button" type="button">播放／重播动作</button>
                   <button id="clear-asset-expression" class="text-button" type="button">清除表情</button>
+                  <button id="open-rig-mapping" class="text-button rig-mapping-trigger" type="button">骨架映射编辑器</button>
                 </div>
                 <details id="asset-rig-details" class="asset-rig-details" hidden>
                   <summary id="asset-detail-summary">骨架与控制接口</summary>
@@ -853,6 +859,53 @@
           </section>
         </div>
       </div>
+    </dialog>
+    <dialog id="rig-mapping-dialog" class="rig-mapping-dialog" aria-labelledby="rig-mapping-title">
+      <form method="dialog" class="rig-mapping-shell">
+        <header class="rig-mapping-header">
+          <div>
+            <span class="eyebrow">CHARACTER RIG</span>
+            <h2 id="rig-mapping-title">骨架映射编辑器</h2>
+            <p id="rig-mapping-subtitle">把 GLB 骨骼绑定到稳定语义槽位；替换模型后无需改代码。</p>
+          </div>
+          <button id="close-rig-mapping" class="icon-button" type="button" aria-label="关闭骨架映射编辑器" title="关闭">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
+        </header>
+
+        <section class="rig-mapping-overview" aria-label="骨架映射诊断">
+          <div><span>完整度</span><strong id="rig-mapping-coverage">0 / 0</strong></div>
+          <div><span>置信度</span><strong id="rig-mapping-confidence">0%</strong></div>
+          <div><span>全身 IK</span><strong id="rig-mapping-capability">未就绪</strong></div>
+        </section>
+
+        <label class="rig-mapping-search" for="rig-mapping-search">
+          <span>搜索语义槽位或骨骼名称</span>
+          <input id="rig-mapping-search" class="field-control" type="search" autocomplete="off" placeholder="例如：左手 / Hand.L" />
+        </label>
+
+        <div id="rig-mapping-warning" class="rig-mapping-warning" role="status" aria-live="polite"></div>
+        <div id="rig-mapping-list" class="rig-mapping-list" aria-label="骨架槽位映射"></div>
+
+        <section class="rig-test-panel" aria-label="实时骨架测试">
+          <div>
+            <strong>实时测试</strong>
+            <span>仅改变当前预览，不写入模型文件。</span>
+          </div>
+          <div class="rig-test-actions" role="group" aria-label="骨架测试动作">
+            <button type="button" class="text-button" data-rig-test="pose" aria-pressed="false" title="检查头部与左右上臂映射是否正确">姿势</button>
+            <button type="button" class="text-button" data-rig-test="hands" aria-pressed="false" title="让左右手同时追踪两个世界空间目标">双手 IK</button>
+            <button type="button" class="text-button" data-rig-test="feet" aria-pressed="false" title="在当前世界位置锁定左右脚底">脚底锁定</button>
+            <button type="button" class="text-button" data-rig-test="reset" title="清除测试姿势与 IK 目标">复位</button>
+          </div>
+        </section>
+
+        <footer class="rig-mapping-footer">
+          <button id="reset-rig-mapping" class="text-button" type="button">恢复已保存</button>
+          <button id="auto-map-rig" class="text-button" type="button">自动映射</button>
+          <button id="save-rig-mapping" class="text-button is-primary" type="button">保存映射</button>
+        </footer>
+      </form>
     </dialog>
     <input id="reference-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden />
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

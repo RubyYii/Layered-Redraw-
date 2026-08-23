@@ -3,6 +3,7 @@ import {
   SCHEMA_VERSION,
   SceneStore,
   createEmptyProject,
+  createEntityConfig,
   createSceneObject,
   createStarterProject,
   normalizeProject,
@@ -247,6 +248,38 @@ describe("scene schema", () => {
       offset: [0, 0.9, 0],
       margin: 0.06,
       support: false,
+    });
+  });
+
+  it("persists explicit unmapped rig slots and controlled behavior clips", () => {
+    const project = normalizeProject({
+      objects: [
+        { id: "actor", type: "group", entity: createEntityConfig("character"), asset: { bones: { head: null, leftHand: "Hand.L" } } },
+        { id: "target", type: "box" },
+      ],
+      director: {
+        timeline: {
+          clips: [{
+            id: "reach",
+            type: "behavior",
+            track: "character",
+            start: 0,
+            duration: 1,
+            targetId: "actor",
+            secondaryTargetId: "target",
+            behaviorAction: "reach",
+            hand: "both",
+          }],
+        },
+      },
+    });
+
+    expect(project.objects[0].asset.bones).toEqual({ head: null, leftHand: "Hand.L" });
+    expect(project.director.timeline.clips[0]).toMatchObject({
+      type: "behavior",
+      behaviorAction: "reach",
+      hand: "both",
+      secondaryTargetId: "target",
     });
   });
 });

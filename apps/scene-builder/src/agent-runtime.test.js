@@ -4,13 +4,16 @@ import cp02ProjectFixture from "../projects/window-case-cp02/cp02-mutable-room.b
 import slotFixture from "../projects/window-case-cp02/scene-slots.json" with { type: "json" };
 import {
   buildAgentObservation,
+  compileAgentBehaviorCommand,
   compileAgentPlan,
   decideCp02ReframeIntent,
   planAgentIntent,
   runAgentTurn,
+  runAgentBehaviorTurn,
   runSceneCompositionTurn,
   validateAssetIntent,
   validateAgentIntent,
+  validateAgentBehaviorCommand,
 } from "./agent-runtime.js";
 import { createInteractionDemoProject } from "./interaction-demo.js";
 import { createEntityConfig, normalizeProject } from "./model.js";
@@ -200,6 +203,116 @@ describe("LLM agent intent boundary", () => {
     expect(result.plan).toMatchObject({ ok: true, requiresNavigation: false });
     expect(result.clips).toHaveLength(1);
     expect(result.clips[0].type).toBe("interaction");
+  });
+});
+
+describe("constrained seven-action Agent behavior interface", () => {
+  it.each([
+    [{ action: "approach", actorId: "interaction-actor-a", targetId: "interaction-cup" }, "move"],
+    [{ action: "look", actorId: "interaction-actor-a", targetId: "interaction-cup" }, "behavior"],
+    [{ action: "reach", actorId: "interaction-actor-a", targetId: "interaction-cup", hand: "both" }, "behavior"],
+    [{ action: "grasp", actorId: "interaction-actor-a", targetId: "interaction-cup" }, "interaction"],
+    [{ action: "transfer", actorId: "interaction-actor-a", targetId: "interaction-cup", recipientId: "interaction-actor-b" }, "interaction"],
+    [{ action: "release", actorId: "interaction-actor-a", targetId: "interaction-cup", placementTargetId: "interaction-destination-table" }, "interaction"],
+    [{ action: "speak", actorId: "interaction-actor-a", targetId: "interaction-actor-b", utterance: "请接住。" }, "dialogue"],
+  ])("compiles %s without accepting transforms", (command, expectedType) => {
+    const project = createOwnershipProject();
+    const baseFrame = evaluateTimeline(project, 0);
+    const frame = ["transfer", "release"].includes(command.action)
+      ? {
+        ...baseFrame,
+        simulation: {
+          ...baseFrame.simulation,
+          ownership: {
+            ...baseFrame.simulation.ownership,
+            "interaction-cup": { status: "held", holderId: "interaction-actor-a" },
+          },
+        },
+      }
+      : baseFrame;
+    const result = compileAgentBehaviorCommand(project, frame, command, {
+      navigationOptions: { backend: "grid" },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.clips.at(-1)).toMatchObject({ type: expectedType, behaviorAction: command.action });
+    expect(JSON.stringify(result.clips)).not.toMatch(/https?:\/\/|script|code/);
+  });
+
+  it("rejects raw transforms, unknown verbs and cross-actor control", async () => {
+    const project = createAgentProject();
+    const frame = evaluateTimeline(project, 0);
+
+    expect(validateAgentBehaviorCommand(project, frame, {
+      action: "look", actorId: "actor", targetId: "recorder", position: [0, 0, 0],
+    })).toMatchObject({ ok: false, code: "direct_scene_control_forbidden" });
+    expect(validateAgentBehaviorCommand(project, frame, {
+      action: "teleport", actorId: "actor", targetId: "recorder",
+    })).toMatchObject({ ok: false, code: "unsupported_action" });
+
+    const result = await runAgentBehaviorTurn({
+      project,
+      frame,
+      actorId: "actor",
+      decide: async () => ({ action: "look", actorId: "someone-else", targetId: "recorder" }),
+    });
+    expect(result.receipt).toMatchObject({ status: "REJECTED", code: "actor_scope_violation", actorId: "actor" });
+    expect(result.receipt.commandSha256).toHaveLength(64);
+  });
+
+  it("requires approach before a distant reach and enforces current ownership", () => {
+    const distantProject = createAgentProject([0, 0, 5]);
+    expect(validateAgentBehaviorCommand(distantProject, evaluateTimeline(distantProject, 0), {
+      action: "reach", actorId: "actor", targetId: "recorder",
+    })).toMatchObject({ ok: false, code: "out_of_reach", recoverable: true });
+
+    const ownershipProject = createOwnershipProject();
+    const frame = evaluateTimeline(ownershipProject, 0);
+    expect(validateAgentBehaviorCommand(ownershipProject, frame, {
+      action: "transfer",
+      actorId: "interaction-actor-a",
+      targetId: "interaction-cup",
+      recipientId: "interaction-actor-b",
+    })).toMatchObject({ ok: false, code: "ownership_violation" });
+  });
+
+  it("includes visible non-affordance characters as look and speak targets", () => {
+    const project = createOwnershipProject();
+    const observation = buildAgentObservation(project, evaluateTimeline(project, 0), "interaction-actor-a");
+
+    expect(observation.perceivedEntities).toContainEqual(expect.objectContaining({
+      id: "interaction-actor-b",
+      role: "character",
+      affordances: [],
+    }));
+  });
+
+  it("emits a hash-bound accepted receipt at the future provider callback boundary", async () => {
+    const project = createAgentProject();
+    const frame = evaluateTimeline(project, 0);
+    const result = await runAgentBehaviorTurn({
+      project,
+      frame,
+      actorId: "actor",
+      decide: async (observation) => ({
+        schemaVersion: observation.behaviorContract.schemaVersion,
+        action: "look",
+        actorId: observation.actor.id,
+        targetId: observation.perceivedEntities[0].id,
+        requestId: "look-001",
+      }),
+    });
+
+    expect(result.plan.ok).toBe(true);
+    expect(result.clips[0]).toMatchObject({ type: "behavior", behaviorAction: "look" });
+    expect(result.receipt).toMatchObject({
+      status: "ACCEPTED",
+      code: "semantic_action_compiled",
+      action: "look",
+      generatedClipIds: [result.clips[0].id],
+    });
+    expect(result.receipt.sceneSha256).toHaveLength(64);
+    expect(result.receipt.clipsSha256).toHaveLength(64);
   });
 });
 

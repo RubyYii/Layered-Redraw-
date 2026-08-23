@@ -1004,6 +1004,40 @@ export class ThreeSceneAdapter {
     return this.assetControllers.get(id)?.clearHandIk(handName) ?? false;
   }
 
+  setAssetRigBindings(id, bones) {
+    return this.assetControllers.get(id)?.setRigBindings(bones) ?? null;
+  }
+
+  previewAssetRig(id, mode = "pose") {
+    const controller = this.assetControllers.get(id);
+    if (!controller) return false;
+    const poseSlots = ["head", "leftUpperArm", "rightUpperArm"];
+    poseSlots.forEach((slot) => controller.clearBonePose?.(slot));
+    controller.clearTransientIkTargets?.();
+    if (mode === "reset") {
+      controller.clearIkTargets?.();
+      controller.setBehaviorState?.("idle", {}, { recaptureFootLocks: true });
+      return true;
+    }
+    if (mode === "pose") {
+      controller.setBonePose?.("head", { rotationDegrees: [0, 18, 0] });
+      controller.setBonePose?.("leftUpperArm", { rotationDegrees: [0, 0, -24] });
+      controller.setBonePose?.("rightUpperArm", { rotationDegrees: [0, 0, 24] });
+      return true;
+    }
+    if (mode === "hands") {
+      const left = controller.boneFor?.("leftHand")?.getWorldPosition(new THREE.Vector3());
+      const right = controller.boneFor?.("rightHand")?.getWorldPosition(new THREE.Vector3());
+      if (left) controller.setHandIk?.("leftHand", left.add(new THREE.Vector3(0.1, 0.16, 0.18)), { iterations: 8 });
+      if (right) controller.setHandIk?.("rightHand", right.add(new THREE.Vector3(-0.1, 0.16, 0.18)), { iterations: 8 });
+      return Boolean(left || right);
+    }
+    if (mode === "feet") {
+      return controller.setBehaviorState?.("idle", {}, { recaptureFootLocks: true }).ok ?? false;
+    }
+    return false;
+  }
+
   showCp03ActionEffect(action, objectIds, options = {}) {
     return this.cp03VisualEffects.play(action, objectIds, options);
   }
@@ -1228,11 +1262,13 @@ export class ThreeSceneAdapter {
     if (this.mode !== "preview" || !this.lastState) return;
     this.directorFrame = frame;
     this.resetTimelineInteractionPoses();
+    const transformedAssetIds = new Set();
     for (const object of this.lastState.project.objects) {
       const mesh = this.meshes.get(object.id);
       if (!mesh) continue;
       const override = frame.objects?.[object.id];
       const transformChanged = this.syncPreviewMesh(mesh, override ?? object, object);
+      if (transformChanged && this.assetControllers.has(object.id)) transformedAssetIds.add(object.id);
       if (this.interactionVisibility.has(object.id)) {
         mesh.visible = this.interactionVisibility.get(object.id);
       }
@@ -1252,6 +1288,8 @@ export class ThreeSceneAdapter {
       mesh.userData.previewBase = previewBase;
     }
     this.applyAssetReplacements();
+    this.scene.updateMatrixWorld(true);
+    this.applyCharacterBehaviors(frame.characterBehaviors, transformedAssetIds);
     this.scene.updateMatrixWorld(true);
     this.applyTimelineInteractionPoses(frame.interactionPoses ?? frame.interactions);
     this.scene.updateMatrixWorld(true);
@@ -1298,7 +1336,7 @@ export class ThreeSceneAdapter {
   }
 
   resetTimelineInteractionPoses() {
-    for (const controller of this.assetControllers.values()) controller.clearIkTargets?.();
+    for (const controller of this.assetControllers.values()) controller.clearTransientIkTargets?.();
     for (const id of this.timelineInteractionObjectIds) {
       const mesh = this.meshes.get(id);
       const base = mesh?.userData.previewBase;
@@ -1308,6 +1346,41 @@ export class ThreeSceneAdapter {
       mesh.scale.copy(base.scale);
     }
     this.timelineInteractionObjectIds.clear();
+  }
+
+  applyCharacterBehaviors(behaviors = [], transformedAssetIds = new Set()) {
+    if (!Array.isArray(behaviors)) return;
+    for (const behavior of behaviors) {
+      const controller = this.assetControllers.get(behavior.actorId);
+      const actorMesh = this.meshes.get(behavior.actorId);
+      if (!controller || !actorMesh) continue;
+      controller.setBehaviorState?.(behavior.state ?? "idle", behavior, {
+        synchronize: true,
+        recaptureFootLocks: transformedAssetIds.has(behavior.actorId),
+      });
+      const targetMesh = behavior.targetId && behavior.targetId !== behavior.actorId
+        ? this.meshes.get(behavior.targetId)
+        : null;
+      if (!targetMesh || !["look", "reach", "grasp", "transfer", "release"].includes(behavior.state)) continue;
+      const targetBounds = new THREE.Box3().setFromObject(targetMesh);
+      const targetWorld = targetBounds.isEmpty()
+        ? targetMesh.getWorldPosition(new THREE.Vector3())
+        : targetBounds.getCenter(new THREE.Vector3());
+      controller.setLookTarget?.(targetWorld, { weight: behavior.state === "look" ? 1 : 0.72 });
+      if (behavior.state !== "reach") continue;
+      const hand = behavior.hand ?? "auto";
+      if (hand === "both") {
+        const width = Math.max(0.08, targetBounds.getSize(new THREE.Vector3()).x * 0.24);
+        const actorRight = new THREE.Vector3(1, 0, 0)
+          .applyQuaternion(actorMesh.getWorldQuaternion(new THREE.Quaternion()))
+          .normalize()
+          .multiplyScalar(width);
+        controller.setHandIk?.("leftHand", targetWorld.clone().sub(actorRight), { iterations: 8 });
+        controller.setHandIk?.("rightHand", targetWorld.clone().add(actorRight), { iterations: 8 });
+      } else {
+        controller.setHandIk?.(hand === "left" ? "leftHand" : "rightHand", targetWorld, { iterations: 8 });
+      }
+    }
   }
 
   applyTimelineInteractionPoses(interactions = []) {

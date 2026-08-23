@@ -28,9 +28,18 @@ import {
   synchronizePathEndpoints,
 } from "./camera-editor.js";
 import {
+  AGENT_BEHAVIOR_CONTRACT,
+  buildAgentObservation,
+  compileAgentBehaviorCommand,
   decideCp02ReframeIntent,
+  runAgentBehaviorTurn,
   runSceneCompositionTurn,
 } from "./agent-runtime.js";
+import {
+  RIG_SLOT_DEFINITIONS,
+  autoMapRigBones,
+  evaluateRigMapping,
+} from "./character-rig.js";
 import {
   applyScenePatch,
   hashProject,
@@ -287,12 +296,15 @@ const elements = {
   assetSessionTitle: $("#asset-session-title"),
   assetSessionDetail: $("#asset-session-detail"),
   assetRuntimeControls: $("#asset-runtime-controls"),
+  assetBehaviorState: $("#asset-behavior-state"),
+  assetIkState: $("#asset-ik-state"),
   assetActionPreview: $("#asset-action-preview"),
   playAssetAction: $("#play-asset-action"),
   assetExpressionPreview: $("#asset-expression-preview"),
   assetExpressionWeight: $("#asset-expression-weight"),
   assetExpressionOutput: $("#asset-expression-output"),
   clearAssetExpression: $("#clear-asset-expression"),
+  openRigMapping: $("#open-rig-mapping"),
   assetRigDetails: $("#asset-rig-details"),
   assetDetailSummary: $("#asset-detail-summary"),
   assetRigDetail: $("#asset-rig-detail"),
@@ -385,6 +397,18 @@ const elements = {
   cp03ExportArchive: $("#cp03-export-archive"),
   cp03Reset: $("#cp03-reset"),
   cp03Phase: $("#cp03-phase"),
+  rigMappingDialog: $("#rig-mapping-dialog"),
+  closeRigMapping: $("#close-rig-mapping"),
+  rigMappingSubtitle: $("#rig-mapping-subtitle"),
+  rigMappingCoverage: $("#rig-mapping-coverage"),
+  rigMappingConfidence: $("#rig-mapping-confidence"),
+  rigMappingCapability: $("#rig-mapping-capability"),
+  rigMappingSearch: $("#rig-mapping-search"),
+  rigMappingWarning: $("#rig-mapping-warning"),
+  rigMappingList: $("#rig-mapping-list"),
+  resetRigMapping: $("#reset-rig-mapping"),
+  autoMapRig: $("#auto-map-rig"),
+  saveRigMapping: $("#save-rig-mapping"),
   toast: $("#toast"),
 };
 
@@ -408,6 +432,15 @@ let lastDialogueClipId = null;
 let cp02LastHashedProject = null;
 let cp02HashSequence = 0;
 let cp02RuntimeCasePack = null;
+const rigMappingSession = {
+  objectId: null,
+  sourceName: null,
+  boneNames: [],
+  saved: {},
+  savedSources: {},
+  draft: {},
+  sources: {},
+};
 
 const cp02Evidence = {
   ready: false,
@@ -461,6 +494,122 @@ const showToast = (message) => {
   toastTimer = window.setTimeout(() => {
     elements.toast.hidden = true;
   }, 2400);
+};
+
+const rigDefinitionBySlot = new Map(RIG_SLOT_DEFINITIONS.map((definition) => [definition.slot, definition]));
+
+const renderRigMappingEditor = () => {
+  if (!rigMappingSession.objectId) return;
+  const report = editor.assetReport(rigMappingSession.objectId);
+  if (!report) return;
+  const diagnostics = evaluateRigMapping(rigMappingSession.draft, rigMappingSession.boneNames, {
+    sources: rigMappingSession.sources,
+  });
+  elements.rigMappingCoverage.textContent = `${diagnostics.mappedCount} / ${diagnostics.slots.length}`;
+  elements.rigMappingConfidence.textContent = `${Math.round(diagnostics.overallConfidence * 100)}%`;
+  elements.rigMappingCapability.textContent = diagnostics.valid ? "可用" : "降级";
+  elements.rigMappingCapability.dataset.status = diagnostics.valid ? "ready" : "warning";
+  elements.rigMappingCapability.title = diagnostics.valid
+    ? "双手、双脚与头颈所需骨骼已映射；运行时可启用全身约束。"
+    : "补齐黄色提示中的必需骨骼，并消除重复映射后即可启用完整全身 IK。";
+  elements.saveRigMapping.disabled = diagnostics.duplicateBones.length > 0;
+  if (diagnostics.duplicateBones.length) {
+    elements.rigMappingWarning.dataset.status = "warning";
+    elements.rigMappingWarning.textContent = `同一骨骼不能占用多个槽位：${diagnostics.duplicateBones.map((entry) => entry.boneName).join("、")}。`;
+  } else if (diagnostics.missingRequired.length) {
+    elements.rigMappingWarning.dataset.status = "warning";
+    elements.rigMappingWarning.textContent = `缺少 ${diagnostics.missingRequired.map((slot) => rigDefinitionBySlot.get(slot)?.label ?? slot).join("、")}；可以保存，但对应 IK 会保持降级。`;
+  } else {
+    elements.rigMappingWarning.dataset.status = "ready";
+    elements.rigMappingWarning.textContent = "必需骨骼映射完整；双手、双脚与头颈约束可由运行时接管。";
+  }
+
+  const query = elements.rigMappingSearch.value.trim().toLowerCase();
+  const visibleSlots = diagnostics.slots.filter((slot) => [
+    slot.slot,
+    slot.label,
+    slot.group,
+    slot.boneName,
+  ].filter(Boolean).some((value) => String(value).toLowerCase().includes(query)));
+  elements.rigMappingList.replaceChildren();
+  let currentGroup = null;
+  for (const slot of visibleSlots) {
+    if (slot.group !== currentGroup) {
+      currentGroup = slot.group;
+      const heading = document.createElement("h3");
+      heading.className = "rig-mapping-group-title";
+      heading.textContent = currentGroup;
+      elements.rigMappingList.appendChild(heading);
+    }
+    const row = document.createElement("label");
+    row.className = "rig-mapping-row";
+    row.dataset.slot = slot.slot;
+    row.dataset.status = slot.duplicate ? "duplicate" : slot.boneName ? "mapped" : "missing";
+    const label = document.createElement("span");
+    label.className = "rig-mapping-label";
+    const strong = document.createElement("strong");
+    strong.textContent = slot.label;
+    const small = document.createElement("small");
+    small.textContent = `${slot.slot}${slot.required ? " · 必需" : " · 可选"}`;
+    label.append(strong, small);
+    const select = document.createElement("select");
+    select.className = "field-control";
+    select.setAttribute("aria-label", `${slot.label}骨骼`);
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "— 未映射 —";
+    select.appendChild(empty);
+    for (const boneName of rigMappingSession.boneNames) {
+      const option = document.createElement("option");
+      option.value = boneName;
+      option.textContent = boneName;
+      select.appendChild(option);
+    }
+    select.value = slot.boneName ?? "";
+    select.addEventListener("change", () => {
+      rigMappingSession.draft[slot.slot] = select.value || null;
+      rigMappingSession.sources[slot.slot] = select.value ? "manual" : "unmapped";
+      renderRigMappingEditor();
+    });
+    const confidence = document.createElement("span");
+    confidence.className = "rig-mapping-confidence";
+    confidence.textContent = slot.boneName ? `${Math.round(slot.confidence * 100)}%` : "缺失";
+    row.append(label, select, confidence);
+    elements.rigMappingList.appendChild(row);
+  }
+  if (!visibleSlots.length) {
+    const empty = document.createElement("p");
+    empty.className = "rig-mapping-warning";
+    empty.textContent = "没有匹配的语义槽位或骨骼名称。";
+    elements.rigMappingList.appendChild(empty);
+  }
+};
+
+const restoreSavedRigRuntime = () => {
+  if (!rigMappingSession.objectId) return;
+  editor.setAssetRigBindings(rigMappingSession.objectId, rigMappingSession.saved);
+  editor.previewAssetRig(rigMappingSession.objectId, "reset");
+};
+
+const openRigMappingEditor = () => {
+  const object = selectedObject();
+  const report = object ? editor.assetReport(object.id) : null;
+  if (!object || !report?.capabilities.skeleton || !report.boneNames.length) {
+    showToast("请先选择并导入带蒙皮骨架的 GLB 角色");
+    return;
+  }
+  rigMappingSession.objectId = object.id;
+  rigMappingSession.sourceName = report.sourceName;
+  rigMappingSession.boneNames = [...report.boneNames].sort((left, right) => left.localeCompare(right));
+  rigMappingSession.saved = Object.fromEntries(RIG_SLOT_DEFINITIONS.map(({ slot }) => [slot, report.bones[slot] ?? null]));
+  rigMappingSession.savedSources = { ...report.boneSources };
+  rigMappingSession.draft = { ...rigMappingSession.saved };
+  rigMappingSession.sources = { ...rigMappingSession.savedSources };
+  elements.rigMappingSubtitle.textContent = `${object.name} · ${report.sourceName} · ${report.boneCount} 根骨骼`;
+  elements.rigMappingSearch.value = "";
+  document.querySelectorAll("[data-rig-test][aria-pressed]").forEach((button) => button.setAttribute("aria-pressed", "false"));
+  renderRigMappingEditor();
+  if (!elements.rigMappingDialog.open) elements.rigMappingDialog.showModal();
 };
 
 const cp02ProtectedObjectIds = (project) => project.objects
@@ -1211,6 +1360,12 @@ const renderInspector = (state) => {
   elements.assetRigDetails.hidden = !assetReport;
   elements.assetDetailSummary.textContent = spatialReport ? "空间合同与边界" : "骨架与控制接口";
   if (assetReport) {
+    elements.assetBehaviorState.textContent = assetReport.runtime.behavior?.state ?? "idle";
+    elements.assetIkState.textContent = assetReport.capabilities.fullBodyIk
+      ? `全身 IK · 双手 · 脚锁`
+      : assetReport.capabilities.handIk || assetReport.capabilities.footIk
+        ? `部分 IK · ${assetReport.ikChains.length} 条链`
+        : "IK 未就绪";
     const assetKey = `${object.id}:${assetReport.sourceName}`;
     const mappedActions = Object.entries(assetReport.animations).filter(([, name]) => name);
     const mappedActionNames = new Set(mappedActions.map(([, name]) => name));
@@ -1251,6 +1406,7 @@ const renderInspector = (state) => {
     elements.assetExpressionPreview.disabled = locked || !assetReport.capabilities.expressions;
     elements.assetExpressionWeight.disabled = locked || !assetReport.capabilities.expressions;
     elements.clearAssetExpression.disabled = locked || !assetReport.capabilities.expressions;
+    elements.openRigMapping.disabled = locked || !assetReport.capabilities.skeleton;
     const boneBindings = Object.entries(assetReport.bones).filter(([, name]) => name)
       .map(([slot, name]) => `${slot}→${name}`).join("、") || "无";
     const expressionBindings = mappedExpressions.map(([slot, name]) => `${slot}→${name}`).join("、") || "无";
@@ -1258,7 +1414,7 @@ const renderInspector = (state) => {
       ? `已校验 RGB 与深度预览 2 个工件；合同指纹 ${spatialReport.contractSha256.slice(0, 12)}…。近白值沿表面法线向前，但仍是相对深度，不是米制重建。载体负责位置、旋转和尺寸；表面不会自动变成碰撞体。`
       : assetReport.format === "OBJ"
         ? "静态 OBJ：没有骨骼、蒙皮权重、动画或 Morph；如需角色控制请导出为 GLB。"
-        : `骨架映射：${boneBindings}。表情映射：${expressionBindings}。运行时接口：playAction、setExpression、setBonePose、setHandIk、retargetAnimationsFrom；交互镜头会对映射手臂执行世界空间 CCD IK。`;
+        : `骨架映射：${boneBindings}。表情映射：${expressionBindings}。运行时接口：setBehaviorState、setRigBindings、setBonePose、setLimbIk、setFootLock、setLookTarget、retargetAnimationsFrom；角色状态机负责双手、双脚与头颈约束。`;
     elements.assetRigDetail.textContent = `${rigSummary}${assetReport.warnings.length ? ` 提示：${assetReport.warnings.join("；")}` : ""}`;
   }
   elements.interactionTrigger.value = object.entity.interaction.trigger;
@@ -2572,6 +2728,69 @@ elements.clearAssetExpression.addEventListener("click", () => {
   showToast("已清除表情覆盖");
 });
 
+elements.openRigMapping.addEventListener("click", openRigMappingEditor);
+elements.closeRigMapping.addEventListener("click", () => elements.rigMappingDialog.close());
+elements.rigMappingDialog.addEventListener("click", (event) => {
+  if (event.target === elements.rigMappingDialog) elements.rigMappingDialog.close();
+});
+elements.rigMappingDialog.addEventListener("close", () => {
+  restoreSavedRigRuntime();
+  rigMappingSession.objectId = null;
+  renderInspector(currentState);
+});
+elements.rigMappingSearch.addEventListener("input", renderRigMappingEditor);
+elements.resetRigMapping.addEventListener("click", () => {
+  rigMappingSession.draft = { ...rigMappingSession.saved };
+  rigMappingSession.sources = { ...rigMappingSession.savedSources };
+  restoreSavedRigRuntime();
+  renderRigMappingEditor();
+  showToast("已恢复当前工程中保存的骨架映射");
+});
+elements.autoMapRig.addEventListener("click", () => {
+  const inferred = autoMapRigBones(rigMappingSession.boneNames);
+  rigMappingSession.draft = { ...inferred.bones };
+  rigMappingSession.sources = Object.fromEntries(RIG_SLOT_DEFINITIONS.map(({ slot }) => [
+    slot,
+    inferred.bones[slot] ? "auto" : "missing",
+  ]));
+  renderRigMappingEditor();
+  showToast("已按 Mixamo／通用 GLB 命名重新推断骨架");
+});
+elements.saveRigMapping.addEventListener("click", () => {
+  const object = currentState.project.objects.find((candidate) => candidate.id === rigMappingSession.objectId);
+  if (!object) return;
+  const bones = Object.fromEntries(RIG_SLOT_DEFINITIONS.map(({ slot }) => [slot, rigMappingSession.draft[slot] ?? null]));
+  const diagnostics = evaluateRigMapping(bones, rigMappingSession.boneNames, { sources: rigMappingSession.sources });
+  if (diagnostics.duplicateBones.length) {
+    showToast("请先解决重复骨骼映射");
+    return;
+  }
+  editor.setAssetRigBindings(object.id, bones);
+  const latest = currentState.project.objects.find((candidate) => candidate.id === object.id);
+  store.updateObject(object.id, { asset: { ...(latest.asset ?? {}), bones } });
+  rigMappingSession.saved = { ...bones };
+  rigMappingSession.savedSources = Object.fromEntries(RIG_SLOT_DEFINITIONS.map(({ slot }) => [
+    slot,
+    bones[slot] ? "manual" : "unmapped",
+  ]));
+  showToast(diagnostics.missingRequired.length
+    ? `映射已保存；${diagnostics.missingRequired.length} 个必需槽位保持降级`
+    : "骨架映射已保存；替换 GLB 时无需修改代码");
+  elements.rigMappingDialog.close();
+});
+document.querySelectorAll("[data-rig-test]").forEach((button) => {
+  button.addEventListener("click", () => {
+    if (!rigMappingSession.objectId) return;
+    editor.setAssetRigBindings(rigMappingSession.objectId, rigMappingSession.draft);
+    const ok = editor.previewAssetRig(rigMappingSession.objectId, button.dataset.rigTest);
+    document.querySelectorAll("[data-rig-test][aria-pressed]").forEach((candidate) => {
+      candidate.setAttribute("aria-pressed", String(ok && candidate === button && button.dataset.rigTest !== "reset"));
+    });
+    renderRigMappingEditor();
+    showToast(ok ? `骨架测试：${button.textContent}` : "当前映射不支持这个测试");
+  });
+});
+
 elements.referenceVisible.addEventListener("change", () => {
   store.updateReference({ visible: elements.referenceVisible.checked });
 });
@@ -2966,6 +3185,29 @@ document.addEventListener("keydown", (event) => {
     store.setSelection(null);
     closeDrawers();
   }
+});
+
+window.__BLOCKOUT_AGENT_BEHAVIOR__ = Object.freeze({
+  contract: AGENT_BEHAVIOR_CONTRACT,
+  actorIds: () => currentState.project.objects
+    .filter((object) => object.entity?.role === "character")
+    .map((object) => object.id),
+  observe: (actorId) => buildAgentObservation(
+    currentState.project,
+    currentFrame ?? evaluateTimeline(currentState.project, runtime?.time ?? 0),
+    actorId,
+  ),
+  compile: (command) => compileAgentBehaviorCommand(
+    currentState.project,
+    currentFrame ?? evaluateTimeline(currentState.project, runtime?.time ?? 0),
+    structuredClone(command),
+  ),
+  submit: (actorId, command) => runAgentBehaviorTurn({
+    project: currentState.project,
+    frame: currentFrame ?? evaluateTimeline(currentState.project, runtime?.time ?? 0),
+    actorId: String(actorId ?? ""),
+    decide: async () => structuredClone(command),
+  }),
 });
 
 window.addEventListener("beforeunload", () => {
