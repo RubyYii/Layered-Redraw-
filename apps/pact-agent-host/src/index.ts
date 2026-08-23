@@ -271,3 +271,10 @@ export {
   type ModelBakeoffTransportResult,
   type ModelBakeoffTransportResultKind,
 } from './model-bakeoff-runner.js';
+export {
+  createModelBakeoffDshTransport,
+  type ModelBakeoffDshDiagnostic,
+  type ModelBakeoffDshTransport,
+  type ModelBakeoffDshTransportOptions,
+  type ModelBakeoffPromptContext,
+} from './model-bakeoff-dsh-transport.js';

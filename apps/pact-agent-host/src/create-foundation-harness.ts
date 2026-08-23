@@ -55,6 +55,7 @@ interface FoundationHarnessCommonOptions {
   readonly conductorSelection?: {
     readonly provider: string;
     readonly model: string;
+    readonly maxTokens?: number;
   };
 }
 
@@ -73,6 +74,7 @@ export interface ProviderFoundationHarnessOptions
   readonly conductorSelection: {
     readonly provider: string;
     readonly model: string;
+    readonly maxTokens?: number;
   };
 }
 
