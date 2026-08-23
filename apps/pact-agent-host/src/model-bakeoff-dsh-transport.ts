@@ -236,6 +236,8 @@ export interface ModelBakeoffPromptContext {
 }
 
 export interface ModelBakeoffDshDiagnostic {
+  readonly attemptId: string;
+  readonly sentOrdinal: number;
   readonly caseId: string;
   readonly provider: ModelBakeoffCase['provider'];
   readonly route: ModelBakeoffCase['route'];
@@ -250,6 +252,7 @@ export interface ModelBakeoffDshDiagnostic {
   readonly acceptedDomainEventCount: number;
   readonly availableTools: readonly string[];
   readonly imageBlockCount: number;
+  readonly redactedOutputText: string | null;
   readonly turnEndReason: string | null;
   readonly sessionEventRange: ModelBakeoffSessionEventRange;
 }
@@ -395,6 +398,60 @@ const eventPayload = (event: SessionEvent): unknown =>
   event.type === 'pact/council-shard' || event.type === 'pact/conductor-commit'
     ? event.data.payload
     : null;
+
+const redactedReviewText = (
+  phase: ModelBakeoffPhase,
+  payload: unknown,
+): string | null => {
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const record = payload as Record<string, unknown>;
+  if (phase === 'ConductorCommit') {
+    const actions = Array.isArray(record.actionSequence)
+      ? record.actionSequence.filter((value): value is string => typeof value === 'string')
+      : [];
+    return `Status ${String(record.status ?? 'unknown')}. Actions: ${actions.join(' → ')}.`;
+  }
+  const content = record.content;
+  if (content === null || typeof content !== 'object' || Array.isArray(content)) return null;
+  const value = content as Record<string, unknown>;
+  let text: string;
+  switch (phase) {
+    case 'ConductorIntent':
+      text = String(value.initialInterpretation ?? '');
+      break;
+    case 'Witness':
+      text = Array.isArray(value.observations)
+        ? value.observations.map((observation) =>
+          observation !== null && typeof observation === 'object' && !Array.isArray(observation)
+            ? String((observation as Record<string, unknown>).text ?? '')
+            : ''
+        ).filter(Boolean).join(' ')
+        : '';
+      break;
+    case 'Archivist':
+      text = [
+        `Provenance: ${Array.isArray(value.provenanceAnchors) ? value.provenanceAnchors.join(', ') : ''}.`,
+        `Rights: ${Array.isArray(value.rightsRequirements) ? value.rightsRequirements.join(', ') : ''}.`,
+        `Unavailable: ${Array.isArray(value.unavailableRefs) ? value.unavailableRefs.join(', ') : 'none'}.`,
+      ].join(' ');
+      break;
+    case 'Rewriter':
+      text = [value.interpretation, value.publicPoeticText]
+        .filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+        .join(' ');
+      break;
+    case 'Guardian':
+      text = [
+        `Disposition ${String(value.disposition ?? 'unknown')}.`,
+        String(value.guardianChallenge ?? ''),
+      ].join(' ');
+      break;
+    default:
+      return null;
+  }
+  const normalized = text.replaceAll(/\s+/g, ' ').trim();
+  return normalized.length === 0 ? null : normalized.slice(0, 4_000);
+};
 
 const scanForForbidden = (
   value: unknown,
@@ -607,6 +664,9 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         normalizedUsage.inputTokens <= this.options.roleCaps[request.case.phase].maxInputTokens
         && normalizedUsage.outputTokens <=
           this.options.roleCaps[request.case.phase].maxOutputTokens;
+      const reviewText = schemaValid
+        ? redactedReviewText(request.case.phase, payload)
+        : null;
       const success = !timedOut
         && observation.capture.thrown === undefined
         && observation.capture.streamCount === 1
@@ -616,6 +676,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         && accepted.length === 1
         && actualToolName === expected.name
         && schemaValid
+        && reviewText !== null
         && tokenCapValid;
       if (success && acceptedEvent?.type === 'pact/council-shard') {
         const acceptedContext = scope.harness.councilRegistry
@@ -694,15 +755,19 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         groundedInputRefs: imageRole
           ? [SYNTHETIC_IMAGE_REF, SYNTHETIC_SCENE_REF]
           : [SYNTHETIC_SCENE_REF],
-        redactedOutputSha256: canonicalSha256({
-          caseId: request.case.caseId,
-          payloadSha256,
-          accepted: success,
-        }),
+        redactedOutputSha256: success
+          ? sha256(reviewText)
+          : canonicalSha256({
+            caseId: request.case.caseId,
+            payloadSha256,
+            accepted: false,
+          }),
         sessionEventRange: range,
       });
 
       const diagnostic: ModelBakeoffDshDiagnostic = deepFreeze({
+        attemptId: request.attemptId,
+        sentOrdinal: request.sentOrdinal,
         caseId: request.case.caseId,
         provider: request.case.provider,
         route: request.case.route,
@@ -717,6 +782,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         acceptedDomainEventCount: observation.acceptedEvents.length,
         availableTools: [...observation.capture.availableTools],
         imageBlockCount: prompt.filter(({ type }) => type === 'image').length,
+        redactedOutputText: success ? reviewText : null,
         turnEndReason: reason,
         sessionEventRange: range,
       });
@@ -779,6 +845,8 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
       });
       const reason = session === null ? null : latestTurnRange(session).reason;
       const diagnostic: ModelBakeoffDshDiagnostic = deepFreeze({
+        attemptId: request.attemptId,
+        sentOrdinal: request.sentOrdinal,
         caseId: request.case.caseId,
         provider: request.case.provider,
         route: request.case.route,
@@ -793,6 +861,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         acceptedDomainEventCount: observation?.acceptedEvents.length ?? 0,
         availableTools: [...(observation?.capture.availableTools ?? [])],
         imageBlockCount: promptImageBlockCount,
+        redactedOutputText: null,
         turnEndReason: reason,
         sessionEventRange: range,
       });

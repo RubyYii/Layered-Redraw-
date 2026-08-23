@@ -278,3 +278,22 @@ export {
   type ModelBakeoffDshTransportOptions,
   type ModelBakeoffPromptContext,
 } from './model-bakeoff-dsh-transport.js';
+export {
+  verifyModelBakeoffEvidence,
+  type ModelBakeoffEvidenceCheck,
+  type ModelBakeoffEvidenceReport,
+  type ModelBakeoffPairEvidence,
+  type ModelBakeoffPairRepetitionEvidence,
+  type ModelBakeoffRoleDecision,
+  type ModelBakeoffTechnicalArchive,
+} from './model-bakeoff-evidence.js';
+export {
+  MODEL_BAKEOFF_REVIEW_CRITERIA,
+  createModelBakeoffBlindReview,
+  type ModelBakeoffBlindCandidate,
+  type ModelBakeoffBlindIdentityMapping,
+  type ModelBakeoffBlindOutput,
+  type ModelBakeoffBlindPacket,
+  type ModelBakeoffBlindRoleSection,
+  type ModelBakeoffSealedMapping,
+} from './model-bakeoff-blind-review.js';
