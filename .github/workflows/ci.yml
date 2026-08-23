@@ -103,6 +103,23 @@ jobs:
         working-directory: apps/scene-builder
         run: npm run build
 
+      - name: Verify CP03 audience UI and large-project recovery
+        working-directory: apps/scene-builder
+        shell: bash
+        run: |
+          npm run dev -- --port 5173 > "$RUNNER_TEMP/scene-builder-vite.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:5173/ > /dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:5173/ > /dev/null
+          npm run test:cp03:audience -- --url http://127.0.0.1:5173/
+          npm run test:large-autosave -- --url http://127.0.0.1:5173/
+
   cp03-agent:
     name: CP03 Contracts and Agent Host
     runs-on: ubuntu-latest

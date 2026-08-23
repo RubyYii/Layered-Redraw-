@@ -45,7 +45,11 @@ export function inferRigBindings(boneNames = [], morphTargetNames = []) {
       neck: findName(bones, [/(^|[_ .-])neck($|[_ .-])/]),
       head: findName(bones, [/(^|[_ .-])head($|[_ .-])/]),
       jaw: findName(bones, [/jaw/, /mouth/]),
+      leftUpperArm: findName(bones, [/left.*upper.*arm/, /upper.*arm.*left/, /upperarm[_ .-]?l$/, /mixamorigleftarm/]),
+      leftLowerArm: findName(bones, [/left.*forearm/, /forearm.*left/, /left.*lower.*arm/, /lower.*arm.*left/, /forearm[_ .-]?l$/]),
       leftHand: findName(bones, [/left.*hand/, /hand.*left/, /hand[_ .-]?l$/]),
+      rightUpperArm: findName(bones, [/right.*upper.*arm/, /upper.*arm.*right/, /upperarm[_ .-]?r$/, /mixamorigrightarm/]),
+      rightLowerArm: findName(bones, [/right.*forearm/, /forearm.*right/, /right.*lower.*arm/, /lower.*arm.*right/, /forearm[_ .-]?r$/]),
       rightHand: findName(bones, [/right.*hand/, /hand.*right/, /hand[_ .-]?r$/]),
       leftFoot: findName(bones, [/left.*foot/, /foot.*left/, /foot[_ .-]?l$/]),
       rightFoot: findName(bones, [/right.*foot/, /foot.*right/, /foot[_ .-]?r$/]),
@@ -180,6 +184,12 @@ const disposeMaterial = (material) => {
 const poseVector = (value) => Array.isArray(value) && value.length >= 3
   ? value.slice(0, 3).map((entry) => Number(entry) || 0)
   : null;
+const basenameForRetarget = (value) => String(value ?? "animation.glb")
+  .replaceAll("\\", "/")
+  .split("/")
+  .at(-1)
+  .replace(/\.glb$/i, "")
+  .slice(0, 48) || "retargeted";
 
 export function createAssetController(asset, config = {}, sourceName = "model.glb", options = {}) {
   if (!asset?.scene?.isObject3D) throw new Error("模型中没有可用的三维场景。");
@@ -192,6 +202,7 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
   const boneByName = new Map();
   let meshCount = 0;
   let skinnedMeshCount = 0;
+  let firstSkinnedMesh = null;
   content.traverse((node) => {
     if (node.name) {
       nodeNames.push(node.name);
@@ -203,7 +214,10 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
     }
     if (!node.isMesh) return;
     meshCount += 1;
-    if (node.isSkinnedMesh) skinnedMeshCount += 1;
+    if (node.isSkinnedMesh) {
+      skinnedMeshCount += 1;
+      firstSkinnedMesh ??= node;
+    }
     node.castShadow = true;
     node.receiveShadow = true;
     for (const [name, index] of Object.entries(node.morphTargetDictionary ?? {})) {
@@ -248,9 +262,11 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
   const clipByName = new Map(clips.map((clip) => [clip.name, clip]));
   const morphNameByLower = new Map(morphTargetNames.map((name) => [name.toLowerCase(), name]));
   const boneNameByLower = new Map(uniqueBoneNames.map((name) => [name.toLowerCase(), name]));
-  const mixer = clips.length ? new THREE.AnimationMixer(content) : null;
+  let mixer = clips.length ? new THREE.AnimationMixer(content) : null;
   const expressionOverrides = new Map();
   const bonePoseOverrides = new Map();
+  const ikTargets = new Map();
+  const ikPreSolve = new Map();
   const boneRestPose = new Map([...boneByName.values()].map((bone) => [bone.uuid, {
     position: bone.position.clone(),
     quaternion: bone.quaternion.clone(),
@@ -286,6 +302,67 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       );
       if (pose.scale) bone.scale.fromArray(pose.scale);
     }
+  };
+  const handSlotFor = (nameOrSlot) => {
+    const requested = String(nameOrSlot ?? "").toLowerCase();
+    if (requested.includes("left") || requested.endsWith("_l") || requested.endsWith(".l")) return "leftHand";
+    if (requested.includes("right") || requested.endsWith("_r") || requested.endsWith(".r")) return "rightHand";
+    return rigBindings.bones.rightHand ? "rightHand" : rigBindings.bones.leftHand ? "leftHand" : null;
+  };
+  const chainForHand = (slot) => {
+    if (!slot) return null;
+    const side = slot.startsWith("left") ? "left" : "right";
+    const hand = resolveBone(slot);
+    const lower = resolveBone(`${side}LowerArm`) ?? (hand?.parent?.isBone ? hand.parent : null);
+    const upper = resolveBone(`${side}UpperArm`) ?? (lower?.parent?.isBone ? lower.parent : null);
+    if (!hand || !lower || !upper || new Set([hand.uuid, lower.uuid, upper.uuid]).size !== 3) return null;
+    return { slot, hand, joints: [lower, upper] };
+  };
+  const restoreIkPose = () => {
+    for (const [uuid, quaternion] of ikPreSolve) {
+      const bone = [...boneByName.values()].find((candidate) => candidate.uuid === uuid);
+      if (bone) bone.quaternion.copy(quaternion);
+    }
+    ikPreSolve.clear();
+  };
+  const solveHandIk = ({ chain, target, weight, iterations }) => {
+    const identity = new THREE.Quaternion();
+    const jointWorld = new THREE.Quaternion();
+    const parentWorld = new THREE.Quaternion();
+    const effectorPosition = new THREE.Vector3();
+    const jointPosition = new THREE.Vector3();
+    const currentDirection = new THREE.Vector3();
+    const targetDirection = new THREE.Vector3();
+    const maxStep = THREE.MathUtils.degToRad(42);
+    for (const joint of chain.joints) ikPreSolve.set(joint.uuid, joint.quaternion.clone());
+    content.updateMatrixWorld(true);
+    for (let iteration = 0; iteration < iterations; iteration += 1) {
+      for (const joint of chain.joints) {
+        chain.hand.getWorldPosition(effectorPosition);
+        joint.getWorldPosition(jointPosition);
+        currentDirection.copy(effectorPosition).sub(jointPosition);
+        targetDirection.copy(target).sub(jointPosition);
+        if (currentDirection.lengthSq() < 1e-10 || targetDirection.lengthSq() < 1e-10) continue;
+        currentDirection.normalize();
+        targetDirection.normalize();
+        const deltaWorld = new THREE.Quaternion().setFromUnitVectors(currentDirection, targetDirection);
+        const angle = identity.angleTo(deltaWorld);
+        if (angle > maxStep) deltaWorld.slerp(identity, 1 - maxStep / angle);
+        joint.getWorldQuaternion(jointWorld);
+        const desiredWorld = deltaWorld.multiply(jointWorld);
+        if (joint.parent) joint.parent.getWorldQuaternion(parentWorld).invert();
+        else parentWorld.identity();
+        const desiredLocal = parentWorld.multiply(desiredWorld);
+        joint.quaternion.slerp(desiredLocal, weight);
+        joint.updateWorldMatrix(false, true);
+      }
+      chain.hand.getWorldPosition(effectorPosition);
+      if (effectorPosition.distanceToSquared(target) < 1e-6) break;
+    }
+  };
+  const applyIkTargets = () => {
+    restoreIkPose();
+    for (const entry of ikTargets.values()) solveHandIk(entry);
   };
   const activateClip = (clipName, slot, { fadeSeconds = 0.18, loop = true, restart = false } = {}) => {
     const clip = clipByName.get(clipName);
@@ -330,7 +407,12 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
         skeleton: skinnedMeshCount > 0 && uniqueBoneNames.length > 0,
         actions: clipNames.length > 0,
         expressions: morphTargetNames.length > 0,
+        handIk: Boolean(chainForHand("leftHand") || chainForHand("rightHand")),
+        animationRetargeting: Boolean(firstSkinnedMesh?.skeleton),
       },
+      ikChains: [chainForHand("leftHand"), chainForHand("rightHand")]
+        .filter(Boolean)
+        .map((chain) => ({ slot: chain.slot, bones: [...chain.joints.map((bone) => bone.name), chain.hand.name] })),
       warnings: [...(options.warnings ?? [])],
       ...semanticBindings,
       ...rigBindings,
@@ -395,6 +477,92 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       }
       expressionOverrides.clear();
     },
+    setHandIk(nameOrSlot, targetWorld, { weight = 1, iterations = 4 } = {}) {
+      const slot = handSlotFor(nameOrSlot);
+      const chain = chainForHand(slot);
+      const target = targetWorld?.isVector3
+        ? targetWorld.clone()
+        : Array.isArray(targetWorld) && targetWorld.length >= 3
+          ? new THREE.Vector3(...targetWorld.slice(0, 3).map((value) => Number(value) || 0))
+          : null;
+      if (!chain || !target) return false;
+      const safeWeight = clamp01(weight);
+      if (safeWeight <= 0) return controller.clearHandIk(slot);
+      ikTargets.set(slot, {
+        chain,
+        target,
+        weight: safeWeight,
+        iterations: Math.min(8, Math.max(1, Math.round(Number(iterations) || 4))),
+      });
+      applyIkTargets();
+      return true;
+    },
+    clearHandIk(nameOrSlot) {
+      const slot = handSlotFor(nameOrSlot);
+      if (!slot || !ikTargets.delete(slot)) return false;
+      applyIkTargets();
+      return true;
+    },
+    clearIkTargets() {
+      const changed = ikTargets.size > 0 || ikPreSolve.size > 0;
+      ikTargets.clear();
+      restoreIkPose();
+      return changed;
+    },
+    async retargetAnimationsFrom(sourceAsset, { sourceName = "animation.glb", boneMap = {} } = {}) {
+      if (!firstSkinnedMesh?.skeleton) throw new Error("目标模型没有可重定向的蒙皮骨架。");
+      const sourceClips = Array.isArray(sourceAsset?.animations) ? sourceAsset.animations : [];
+      let sourceSkinnedMesh = null;
+      sourceAsset?.scene?.traverse?.((node) => {
+        if (!sourceSkinnedMesh && node.isSkinnedMesh) sourceSkinnedMesh = node;
+      });
+      if (!sourceSkinnedMesh?.skeleton || !sourceClips.length) {
+        throw new Error("动作 GLB 必须同时包含蒙皮骨架与至少一个 AnimationClip。");
+      }
+      const { retargetClip } = await import("three/examples/jsm/utils/SkeletonUtils.js");
+      const mappedName = (targetBone) => boneMap[targetBone.name] ?? targetBone.name;
+      const targetHip = rigBindings.bones.hips;
+      const imported = [];
+      const failures = [];
+      for (const sourceClip of sourceClips) {
+        try {
+          if (!(Number(sourceClip.duration) > 0) || !sourceClip.tracks?.length) throw new Error("动画轨道为空");
+          firstSkinnedMesh.skeleton.pose();
+          sourceSkinnedMesh.skeleton.pose();
+          firstSkinnedMesh.updateMatrixWorld(true);
+          sourceSkinnedMesh.updateMatrixWorld(true);
+          const clip = retargetClip(firstSkinnedMesh, sourceSkinnedMesh, sourceClip, {
+            getBoneName: mappedName,
+            hip: targetHip ? mappedName({ name: targetHip }) : undefined,
+            useFirstFramePosition: true,
+          });
+          let name = sourceClip.name || `Retargeted ${imported.length + 1}`;
+          if (clipByName.has(name)) name = `${name} · ${basenameForRetarget(sourceName)}`;
+          let suffix = 2;
+          while (clipByName.has(name)) name = `${sourceClip.name || "Retargeted"} · ${suffix++}`;
+          clip.name = name;
+          clips.push(clip);
+          clipNames.push(name);
+          clipByName.set(name, clip);
+          imported.push(name);
+          const inferred = inferSemanticBindings([], [name]).animations;
+          for (const slot of ANIMATION_SLOTS) {
+            if (!semanticBindings.animations[slot] && inferred[slot]) semanticBindings.animations[slot] = name;
+          }
+        } catch (error) {
+          failures.push({ clipName: sourceClip.name || "unnamed", message: error.message });
+        }
+      }
+      firstSkinnedMesh.skeleton.pose();
+      firstSkinnedMesh.updateMatrixWorld(true);
+      if (!imported.length) throw new Error(`没有动作可重定向：${failures[0]?.message ?? "骨架名称不兼容"}`);
+      mixer ??= new THREE.AnimationMixer(content);
+      semanticBindings.missingAnimations = Object.entries(semanticBindings.animations)
+        .filter(([, name]) => !name)
+        .map(([slot]) => slot);
+      controller.report.capabilities.actions = true;
+      return { sourceName, imported, failures, targetBoneCount: uniqueBoneNames.length };
+    },
     setBonePose(nameOrSlot, pose = {}) {
       const bone = resolveBone(nameOrSlot);
       if (!bone) return false;
@@ -420,9 +588,11 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       return true;
     },
     update(deltaSeconds) {
+      restoreIkPose();
       mixer?.update(Math.min(0.1, Math.max(0, Number(deltaSeconds) || 0)));
       applyBonePoseOverrides();
       applyExpressionOverrides();
+      applyIkTargets();
     },
     nodeFor(slot) {
       const name = semanticBindings.nodes[slot];
@@ -437,9 +607,11 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
         actionSlot: currentSlot,
         expressions: Object.fromEntries(expressionOverrides),
         bonePoses: [...bonePoseOverrides.values()].map(({ bone }) => bone.name),
+        ikTargets: [...ikTargets.keys()],
       };
     },
     dispose() {
+      controller.clearIkTargets();
       mixer?.stopAllAction();
       mixer?.uncacheRoot(content);
       root.removeFromParent();
@@ -467,7 +639,7 @@ export async function loadGlbFile(file, config = {}) {
   return loadGlbBytes(buffer, name, config);
 }
 
-export async function loadGlbBytes(input, name = "model.glb", config = {}) {
+export async function parseGlbAssetBytes(input, name = "model.glb") {
   const bytes = input instanceof ArrayBuffer
     ? new Uint8Array(input)
     : ArrayBuffer.isView(input)
@@ -475,10 +647,25 @@ export async function loadGlbBytes(input, name = "model.glb", config = {}) {
       : null;
   validateGlbFile({ name, size: bytes?.byteLength ?? 0 });
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  inspectGlbBuffer(buffer);
+  const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+  return new GLTFLoader().parseAsync(buffer, "");
+}
+
+export async function parseGlbAssetFile(file) {
+  const { name } = validateGlbFile(file);
+  let buffer;
   try {
-    inspectGlbBuffer(buffer);
-    const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
-    const gltf = await new GLTFLoader().parseAsync(buffer, "");
+    buffer = await file.arrayBuffer();
+    return await parseGlbAssetBytes(buffer, name);
+  } catch (error) {
+    throw new Error(`GLB 载入失败：${error?.message || "文件结构不兼容"}`);
+  }
+}
+
+export async function loadGlbBytes(input, name = "model.glb", config = {}) {
+  try {
+    const gltf = await parseGlbAssetBytes(input, name);
     return createAssetController(gltf, config, name, { format: "GLB" });
   } catch (error) {
     throw new Error(`GLB 载入失败：${error?.message || "文件结构不兼容"}`);

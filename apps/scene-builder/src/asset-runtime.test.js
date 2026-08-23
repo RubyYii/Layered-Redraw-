@@ -208,4 +208,83 @@ describe("replaceable OBJ/GLB asset bindings", () => {
     expect(controller.boneFor("hips")).toBe(rootBone);
     controller.dispose();
   });
+
+  it("solves a real two-bone hand IK chain in world space", () => {
+    const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+    const vertexCount = geometry.attributes.position.count;
+    geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(new Uint16Array(vertexCount * 4), 4));
+    const weights = new Float32Array(vertexCount * 4);
+    for (let index = 0; index < vertexCount; index += 1) weights[index * 4] = 1;
+    geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(weights, 4));
+    const upper = new THREE.Bone();
+    upper.name = "RightUpperArm";
+    const lower = new THREE.Bone();
+    lower.name = "RightForeArm";
+    lower.position.x = 1;
+    const hand = new THREE.Bone();
+    hand.name = "RightHand";
+    hand.position.x = 1;
+    upper.add(lower);
+    lower.add(hand);
+    const mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+    mesh.add(upper);
+    mesh.bind(new THREE.Skeleton([upper, lower, hand]));
+    const scene = new THREE.Group();
+    scene.add(mesh);
+    const host = new THREE.Scene();
+    const controller = createAssetController({ scene, animations: [] }, {}, "arm.glb");
+    host.add(controller.root);
+    host.updateMatrixWorld(true);
+    const before = hand.getWorldPosition(new THREE.Vector3());
+    const target = before.clone().add(new THREE.Vector3(-0.35, 0.55, 0));
+    const beforeDistance = before.distanceTo(target);
+
+    expect(controller.report.capabilities.handIk).toBe(true);
+    expect(controller.setHandIk("rightHand", target, { iterations: 8 })).toBe(true);
+    host.updateMatrixWorld(true);
+    expect(hand.getWorldPosition(new THREE.Vector3()).distanceTo(target)).toBeLessThan(beforeDistance);
+    expect(controller.getState().ikTargets).toEqual(["rightHand"]);
+    controller.clearIkTargets();
+    controller.dispose();
+  });
+
+  it("retargets compatible source clips onto the loaded skeleton", async () => {
+    const makeRig = () => {
+      const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+      const vertexCount = geometry.attributes.position.count;
+      geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(new Uint16Array(vertexCount * 4), 4));
+      const weights = new Float32Array(vertexCount * 4);
+      for (let index = 0; index < vertexCount; index += 1) weights[index * 4] = 1;
+      geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(weights, 4));
+      const hips = new THREE.Bone();
+      hips.name = "Hips";
+      const arm = new THREE.Bone();
+      arm.name = "RightUpperArm";
+      arm.position.y = 1;
+      hips.add(arm);
+      const mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshBasicMaterial());
+      mesh.add(hips);
+      mesh.bind(new THREE.Skeleton([hips, arm]));
+      const scene = new THREE.Group();
+      scene.add(mesh);
+      return { scene, arm };
+    };
+    const target = makeRig();
+    const source = makeRig();
+    const clip = new THREE.AnimationClip("Wave", 1, [
+      new THREE.QuaternionKeyframeTrack(
+        ".bones[RightUpperArm].quaternion",
+        [0, 1],
+        [0, 0, 0, 1, 0, 0.3826834, 0, 0.9238795],
+      ),
+    ]);
+    const controller = createAssetController({ scene: target.scene, animations: [] }, {}, "target.glb");
+    const report = await controller.retargetAnimationsFrom({ scene: source.scene, animations: [clip] }, { sourceName: "wave.glb" });
+
+    expect(report.imported).toEqual(["Wave"]);
+    expect(controller.report.clipNames).toContain("Wave");
+    expect(controller.report.capabilities.actions).toBe(true);
+    expect(controller.playAction("Wave")).toBe(true);
+    controller.dispose();
+  });
 });

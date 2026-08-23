@@ -76,11 +76,12 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>
           </button>
           <div id="project-menu" class="project-menu" hidden>
+            <button id="save-portable-project" type="button">保存可移植工程包</button>
             <button id="new-project" type="button">新建空场景</button>
             <button id="load-demo" type="button">恢复示例场景</button>
             <button id="load-interaction-demo" type="button">载入十秒交互仿真</button>
           </div>
-          <input id="project-file" type="file" accept="application/json,.json" hidden />
+          <input id="project-file" type="file" accept="application/json,application/zip,.json,.zip,.blockout.zip" hidden />
         </div>
       </header>
 
@@ -313,6 +314,65 @@
             </details>
 
             <p id="cp02-phase" class="cp02-phase" aria-live="polite">本地确定性运行时已就绪。</p>
+          </aside>
+
+          <aside id="cp03-panel" class="cp03-panel" aria-label="PACT CP03 五动作观众交互" hidden>
+            <header class="cp03-heading">
+              <div>
+                <span class="cp03-kicker">PACT · CP03</span>
+                <h2>五动作观众台</h2>
+              </div>
+              <span class="cp03-local-badge">0-CALL LOCAL HARNESS</span>
+            </header>
+
+            <p class="cp03-boundary">本地脚本工程验收，不是 Gemini／DeepSeek 成功证明，也不是正式 checkpoint。</p>
+
+            <label class="cp03-prompt" for="cp03-viewer-input">
+              <span>观众输入</span>
+              <textarea id="cp03-viewer-input" rows="3" maxlength="500" spellcheck="false">我记得杯子被拿起，但不确定是谁的手。</textarea>
+            </label>
+
+            <fieldset class="cp03-actions">
+              <legend>选择本轮动作</legend>
+              <button type="button" data-cp03-action="Translate" aria-pressed="true" class="is-active" title="转译对象之间的空间关系，并显示青色关系回声。"><strong>Translate</strong><span>转译关系 · 青色回声</span></button>
+              <button type="button" data-cp03-action="Reframe" aria-pressed="false" title="改变观看框架与光线重点，并保留原始场景依据。"><strong>Reframe</strong><span>重构观看 · 琥珀取景</span></button>
+              <button type="button" data-cp03-action="Merge" aria-pressed="false" title="合并两个关系但显式保留接缝，不抹平证据差异。"><strong>Merge</strong><span>保留接缝 · 紫色联结</span></button>
+              <button type="button" data-cp03-action="Continue" aria-pressed="false" title="把本轮状态作为可继续的终点，以绿色涟漪确认。"><strong>Continue</strong><span>结束并延续 · 绿色涟漪</span></button>
+              <button type="button" data-cp03-action="KeepOpaque" aria-pressed="false" title="拒绝替不确定内容下结论，以暗色遮罩保持不透明。"><strong>Keep Opaque</strong><span>保持不透明 · 暗色遮罩</span></button>
+            </fieldset>
+
+            <button id="cp03-propose" class="cp03-primary" type="button">生成本地哈希提案</button>
+
+            <section class="cp03-trace-card" aria-labelledby="cp03-trace-title">
+              <header><span id="cp03-trace-title">ROLE-ATTRIBUTED TRACE</span><b id="cp03-trace-source">WAITING</b></header>
+              <p id="cp03-public-trace" aria-live="polite">等待观众输入与动作选择。</p>
+            </section>
+
+            <dl class="cp03-proposal-facts">
+              <div><dt>Guardian</dt><dd id="cp03-guardian">WAITING</dd></div>
+              <div><dt>提案状态</dt><dd id="cp03-outcome" data-outcome="READY">READY</dd></div>
+              <div class="is-hash"><dt>不可变 Draft Hash</dt><dd><code id="cp03-draft-hash">尚未生成</code><button id="cp03-copy-hash" type="button" disabled>复制</button></dd></div>
+              <div><dt>执行回执</dt><dd id="cp03-receipt">尚未执行</dd></div>
+            </dl>
+
+            <div class="cp03-approval" role="group" aria-label="观众提案审批">
+              <button id="cp03-approve" type="button" disabled>批准这个哈希</button>
+              <button id="cp03-reject" type="button" disabled>拒绝</button>
+            </div>
+
+            <button id="cp03-reset" class="cp03-reset" type="button" hidden>恢复基线并演练下一动作</button>
+
+            <details class="cp03-diagnostics">
+              <summary>操作员诊断与归档</summary>
+              <dl>
+                <div><dt>Provider</dt><dd>scripted-local · 0 calls</dd></div>
+                <div><dt>Capability Gate</dt><dd id="cp03-gate-status">等待提案</dd></div>
+                <div><dt>归档资格</dt><dd>ENGINEERING ONLY</dd></div>
+              </dl>
+              <button id="cp03-export-archive" type="button">导出本地工程证据</button>
+            </details>
+
+            <p id="cp03-phase" class="cp03-phase" aria-live="polite">本地演练已就绪；尚未调用任何外部模型。</p>
           </aside>
 
           <aside id="camera-editor-panel" class="camera-editor-panel" aria-label="电影镜头编辑器" hidden>
@@ -590,7 +650,7 @@
                   <label for="entity-friction"><span>摩擦</span><input id="entity-friction" class="field-control" type="number" min="0" max="1" step="0.05" /></label>
                   <label for="entity-restitution"><span>弹性</span><input id="entity-restitution" class="field-control" type="number" min="0" max="1" step="0.05" /></label>
                 </div>
-                <p>当前保存为可导出的物理属性；动力学求解器将在物理阶段接入。</p>
+                <p id="physics-runtime-status">预览时自动启用：动态刚体由 Rapier 60 Hz 重力／碰撞求解；时间线与抓取中的对象保持运动学权威。</p>
               </details>
 
               <fieldset class="asset-fieldset">
@@ -601,11 +661,13 @@
                 </div>
                 <div class="asset-import-actions">
                   <button id="choose-asset-file" class="text-button is-primary" type="button">OBJ / GLB</button>
+                  <button id="choose-animation-file" class="text-button" type="button" hidden>动作 GLB</button>
                   <button id="choose-spatial-bridge" class="text-button" type="button">RGB-D 工程</button>
                   <button id="choose-spatial-files" class="text-button asset-spatial-fallback" type="button">改选桥接 + RGB + 深度</button>
                   <button id="clear-asset-file" class="text-button" type="button" hidden>恢复灰模</button>
                 </div>
                 <input id="asset-file" type="file" accept="model/gltf-binary,model/obj,.glb,.obj" hidden />
+                <input id="animation-file" type="file" accept="model/gltf-binary,.glb" hidden />
                 <input id="spatial-bridge-folder" type="file" accept="application/json,image/png,.json,.png" webkitdirectory multiple hidden />
                 <input id="spatial-bridge-files" type="file" accept="application/json,image/png,.json,.png" multiple hidden />
                 <div id="asset-runtime-controls" class="asset-runtime-controls" hidden>
@@ -622,7 +684,7 @@
                   <summary id="asset-detail-summary">骨架与控制接口</summary>
                   <p id="asset-rig-detail"></p>
                 </details>
-                <small>模型导入会识别骨架与动作；RGB-D 优先选择 Layered Redraw 工程文件夹，目录选择不可用时可改选合同、RGB 和深度预览。两者都是会话级资产，不写入项目 JSON。</small>
+                <small>模型与 RGB-D 会写入浏览器内容寻址资产库；使用“保存可移植工程包”可连同二进制和 SHA-256 清单跨机器迁移。</small>
               </fieldset>
 
               <fieldset class="interaction-fieldset">

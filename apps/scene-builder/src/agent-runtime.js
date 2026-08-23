@@ -1,6 +1,7 @@
 import cp02IntentFixture from "../projects/window-case-cp02/intent-fixtures.json" with { type: "json" };
 import { rotateLocalOffset } from "./interaction-runtime.js";
 import { planGroundPath } from "./navigation-runtime.js";
+import { planNavmeshPath } from "./navmesh-runtime.js";
 import { hashProject, validateScenePatch } from "./scene-patch-runtime.js";
 import { resolveAssetForSlot, validateAssetCatalog, validateSceneSlots } from "./scene-governance.js";
 
@@ -269,10 +270,13 @@ export function planAgentIntent(project, frame, rawIntent, navigationOptions = {
     actor.position[1],
     anchor[2] + (dz / length) * standOff,
   ];
-  const navigation = planGroundPath(project, actor.position, approach, {
+  const navigationInput = {
     ...navigationOptions,
     ignoreIds: [...new Set([...(navigationOptions.ignoreIds ?? []), actorId, targetId])],
-  });
+  };
+  const navigation = navigationOptions.backend === "grid"
+    ? { ...planGroundPath(project, actor.position, approach, navigationInput), backend: "grid" }
+    : planNavmeshPath(project, actor.position, approach, navigationInput);
   if (!navigation.ok) {
     return { ok: false, code: navigation.code, recoverable: true, message: "导航系统没有找到安全接近目标的路径。" };
   }
@@ -290,7 +294,7 @@ export function planAgentIntent(project, frame, rawIntent, navigationOptions = {
     ok: true,
     requiresNavigation: true,
     steps: [
-      { kind: "navigate", actorId, path: navigation.path, distance: navigation.distance },
+      { kind: "navigate", actorId, path: navigation.path, distance: navigation.distance, backend: navigation.backend },
       { kind: "interact", intent: atGoal.intent },
     ],
   };

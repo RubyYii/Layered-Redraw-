@@ -7,15 +7,17 @@
 1. **Scene schema** — versioned JSON stores stable object IDs, parent relationships, transforms, render metadata, entity capabilities, motion profiles, asset bindings, and semantic interaction anchors.
 2. **Director** — absolute-time clips evaluate movement, rotation, visibility, attachments, dialogue, cameras, and interactions without mutating source project data.
 3. **Motion** — minimum-jerk easing and arc-length path sampling prevent abrupt acceleration and uneven speed across control points. Path tangents drive root yaw, lean, and bank.
-4. **Interaction simulation** — preview advances through a 60Hz fixed-step clock. Ownership clips perform legal `claim`, `transfer`, and `release` transitions; item roots are solved from character hold, item grip, and placement-surface anchors. Invalid transitions are reported instead of silently teleporting a prop. This backend is deterministic kinematics, not rigid-body dynamics.
-5. **Collision proxies** — before ownership solving, kinematic character capsules are separated from static box footprints and from each other; after ownership solving, props that explicitly opt into a collision proxy are separated from static geometry, with declared support surfaces receiving an upward correction. Decorative props remain outside the solver unless authored otherwise. The report exposes initial penetration, corrected pairs, and residual penetration. This is a discrete deterministic pass, not continuous collision detection.
-6. **Renderer/editor** — Three.js groups preserve character hierarchy; gray-box effectors are projected onto opposite target surfaces and their telescoping arms are rebuilt from shoulder to contact point. Cached camera position/look-at curves avoid rebuilding Catmull–Rom data every frame. Preview transforms bypass material work, timeline highlighting is incremental, and measured frame pacing can lower pixel ratio and temporarily simplify shadows/local lights on weak or software renderers. Fixed-step and keyframe render scripts opt into full quality so deliverables do not vary with interactive performance.
-7. **Asset runtime** — a local OBJ or self-contained GLB can replace a selected placeholder for the browser session without non-uniformly distorting the source. OBJ provides static geometry. GLB can additionally provide skins, bones, animation clips, and morph targets; the runtime reports those capabilities and infers semantic nodes, actions, rig bones, and expression slots. `AnimationMixer` crossfades between `idle`, `move`, `interact`, and `react` states supplied by the deterministic timeline.
-8. **Spatial bridge runtime** — a selected carrier can load a Layered Redraw project folder containing `spatial-bridge.json`. The importer resolves the declared RGB and near-white depth-preview paths, verifies both SHA-256 digests, checks dimensions and hard relative-depth invariants, then creates an aspect-preserving textured height field. XY fitting keeps shallow carriers from crushing the authored display depth. The result remains session-only and is never added to collision or navigation data.
-9. **Agent boundary** — an observation builder exposes only visible semantic affordances. The validator rejects direct model control of transforms, paths, scripts, code, or asset URLs; the planner can deterministically add a collision-aware ground path before an out-of-range interaction. `runAgentTurn` is the single callback boundary for a future provider and returns validated timeline clips rather than executing model-authored transforms.
+4. **Interaction simulation** — preview advances through a 60Hz fixed-step clock. Ownership clips perform legal `claim`, `transfer`, and `release` transitions; item roots are solved from character hold, item grip, and placement-surface anchors. Invalid transitions are reported instead of silently teleporting a prop. Semantic interaction remains deterministic kinematics even when unconstrained dynamic props use Rapier.
+5. **Collision and rigid bodies** — deterministic capsule/box proxies remain the audit layer for authored interaction milestones. Separately, preview lazily loads the real Rapier WASM world when a `dynamic` body exists and steps gravity, colliders, mass, friction, restitution, damping, and CCD at 60Hz. A timeline-controlled or owned dynamic body becomes kinematic for that frame so physics cannot fight the semantic authority chain.
+6. **Renderer/editor** — Three.js groups preserve character hierarchy; gray-box effectors still use explicit surface contact and telescoping arms, while imported mapped rigs solve a real world-space two-bone CCD hand chain toward the same contact. Cached camera position/look-at curves avoid rebuilding Catmull–Rom data every frame. Preview transforms bypass material work, timeline highlighting is incremental, and measured frame pacing can lower pixel ratio and temporarily simplify shadows/local lights on weak or software renderers. Fixed-step and keyframe render scripts opt into full quality so deliverables do not vary with interactive performance.
+7. **Asset runtime** — a local OBJ or self-contained GLB can replace a selected placeholder without non-uniformly distorting the source. OBJ provides static geometry. GLB can additionally provide skins, bones, animation clips, morph targets, hand-IK chains, and a target for imported animation-GLB retargeting. `AnimationMixer` crossfades between semantic states; the model and optional animation source are persisted by SHA-256 rather than remaining only in memory.
+8. **Spatial bridge runtime** — a selected carrier can load a Layered Redraw project folder containing `spatial-bridge.json`. The importer resolves the declared RGB and near-white depth-preview paths, verifies both SHA-256 digests, checks dimensions and hard relative-depth invariants, then creates an aspect-preserving textured height field. The bridge, RGB, and depth bytes enter the same content-addressed asset store, but the surface remains non-metric and is never silently added to collision or navigation data.
+9. **Agent boundary and navigation** — an observation builder exposes only visible semantic affordances. The validator rejects direct model control of transforms, paths, scripts, code, or asset URLs. Out-of-range intents are planned over a radius-inflated triangulated raster navigation mesh with shared-edge portals, triangle A*, and visibility simplification; the older grid A* remains an explicit fallback. `runAgentTurn` returns validated timeline clips rather than executing model-authored transforms.
 10. **CP02 governed mutation** — `?case=pact-cp02` loads a source-locked derivative of the collaborator room. A deterministic fixture can propose only semantic assets in authored slots. Guardian approval routes one closed ScenePatch through exact changed-ID and protected-object checks; rejection and receipt-bound undo remain first-class outcomes. The route exposes only a read-only evidence snapshot and does not write the ordinary editor autosave key.
 11. **Reproducible delivery** — deterministic renderers emit a sibling `.simulation-package/` containing an independent video copy, canonical scene snapshot, asset lock, delta-encoded per-frame trace, interaction/ownership ledger, collision audit, portable render report, vendored replay runtime, and full-file SHA-256 manifest. A package-local verifier recomputes hashes and `simulationIdentity`; the browser replay uses only packaged files.
 12. **Cinematic camera editing** — authored camera clips remain first-class timeline records. The non-modal editor captures the current perspective viewport into explicit A/B position, look-at, and FOV endpoints; validates 3–16 point camera/look-at rails; edits timing and easing through the same undoable store; and runs bounded shot previews without recompiling the screenplay or mutating unrelated tracks.
+13. **Persistent recovery and portable projects** — ordinary edits are debounced into an IndexedDB recovery snapshot up to 96 MB, while small projects retain a synchronous localStorage mirror. A `.blockout.zip` contains canonical project JSON plus content-addressed OBJ/GLB, optional animation GLB, or the exact bridge/RGB/depth triplet; import rejects missing, extra, oversized, or hash-mismatched assets.
+14. **CP03 local audience surface** — `?case=pact-cp03` exposes exactly five governed actions, a role-attributed zero-call trace, immutable proposal hash, viewer approve/reject controls, Capability Gate result, Ruby receipt, and five distinct transient Three.js effects. Its export is explicitly `ENGINEERING_ONLY_NOT_CHECKPOINT`.
 
 ## Incoming depth-painting bridge
 
@@ -23,13 +25,13 @@ The Layered Redraw editor can export `spatial-bridge.json` using contract `depth
 
 New bridges are marked `ready-for-import`. Select a Scene Builder carrier, choose **RGB-D 工程**, then select the Layered Redraw project folder. If a browser cannot expose folder selection, **改选桥接 + RGB + 深度** accepts the three consumed files directly. Both paths use the same importer: it finds one bridge, suffix-matches its project-relative artifact paths (with an unambiguous basename fallback for three-file selection), checks the declared RGB and depth-preview hashes, decodes both at the contract dimensions, and mounts a CPU-displaced `PlaneGeometry` through the same replaceable-asset lifecycle used by OBJ/GLB. Older `ready-for-import-adapter` bridges remain accepted for compatibility.
 
-The contract checksum is retained as the handoff fingerprint while the importer independently validates all executable contract fields and both consumed artifact hashes. It does not silently turn the height field into collision geometry, infer hidden surfaces, or claim calibrated world scale. Authored scene objects, character rigs, navigation, and interaction anchors remain separate Scene Builder data. Clearing the session asset restores the original placeholder without changing project JSON or screenplay tracks.
+The contract checksum is retained as the handoff fingerprint while the importer independently validates all executable contract fields and both consumed artifact hashes. It does not silently turn the height field into collision geometry, infer hidden surfaces, or claim calibrated world scale. Authored scene objects, character rigs, navigation, and interaction anchors remain separate Scene Builder data. Clearing the asset restores the original placeholder and removes its portable binding without changing screenplay tracks.
 
-Runtime attachment is also subordinate to scene governance. Generic OBJ, GLB, and RGB-D attachment rejects `SOURCE_LOCKED`, `EVIDENCE_LOCKED`, `STAGE_LOCKED`, and `WITHHELD` carriers before reading asset bytes or creating a replacement controller; only an authorised or otherwise mutable carrier may accept a session asset. In the CP02 route, the Case Pack manifest and source lock remain authoritative, ScenePatch validation still controls project mutations, and receipt-bound undo still restores the exact project hash. A successful RGB-D import therefore proves a governed, reversible display substitution on one permitted carrier—not permission to rewrite the source photograph or bypass the CP02 protocol.
+Runtime attachment is also subordinate to scene governance. Generic OBJ, GLB, and RGB-D attachment rejects `SOURCE_LOCKED`, `EVIDENCE_LOCKED`, `STAGE_LOCKED`, and `WITHHELD` carriers before reading asset bytes or creating a replacement controller; only an authorised or otherwise mutable carrier may accept a persistent asset binding. In the CP02 route, the Case Pack manifest and source lock remain authoritative, ScenePatch validation still controls project mutations, and receipt-bound undo still restores the exact project hash. A successful RGB-D import therefore proves a governed, reversible display substitution on one permitted carrier—not permission to rewrite the source photograph or bypass the CP02 protocol.
 
 ## Stable replacement contract
 
-Characters are addressed through a root object rather than individual placeholder meshes. `asset.nodes` maps semantic slots such as `root`, `head`, `effector`, and `statusLight`; `asset.animations` maps `idle`, `move`, `interact`, and `react`; `asset.bones` maps common rig roles such as `hips`, `head`, and both hands; `asset.expressions` maps roles such as `smile`, blinks, and `mouthOpen` to morph-target names. The importer replaces the placeholder hierarchy for the current session while preserving screenplay tracks and object interactions. Explicit bindings win when present; otherwise conservative name matching reports missing slots instead of inventing them.
+Characters are addressed through a root object rather than individual placeholder meshes. `asset.nodes` maps semantic slots such as `root`, `head`, `effector`, and `statusLight`; `asset.animations` maps `idle`, `move`, `interact`, and `react`; `asset.bones` maps common rig roles including upper/lower arms and both hands; `asset.expressions` maps roles such as `smile`, blinks, and `mouthOpen` to morph-target names. `asset.portable` binds content-addressed model and optional animation entries. Explicit bindings win when present; otherwise conservative name matching reports missing slots instead of inventing them.
 
 The editor runtime provides a format-independent control boundary:
 
@@ -38,13 +40,16 @@ const report = editor.assetReport(objectId);
 editor.playAssetAction(objectId, "interact");
 editor.setAssetExpression(objectId, "smile", 0.8, { exclusive: true });
 editor.setAssetBonePose(objectId, "head", { rotationDegrees: [0, 20, 0] });
+editor.setAssetHandIk(objectId, "rightHand", [0.4, 1.2, -0.7], { weight: 1 });
+await editor.loadRetargetAnimationFile(objectId, animationGlbFile);
 editor.clearAssetExpressions(objectId);
 editor.clearAssetBonePose(objectId, "head");
+editor.clearAssetHandIk(objectId, "rightHand");
 ```
 
-Actions, expressions, and bones accept either a semantic slot or the original GLB name. `assetReport` exposes the source format, geometry/skin/bone counts, clip and morph-target names, inferred bindings, capability flags, warnings, and current overrides. A future behavior tree or model provider should inspect this report and issue constrained semantic commands rather than writing transforms or model URLs directly.
+Actions, expressions, bones, and hands accept either a semantic slot or the original GLB name. Retargeting accepts an animation GLB only when it contains a source skinned mesh and clips; incompatible names fail without replacing existing clips. `assetReport` exposes geometry/skin/bone counts, clips, morphs, inferred bindings, IK-chain availability, retarget capability, warnings, and current overrides. A future behavior tree or model provider should inspect this report and issue constrained semantic commands rather than writing transforms or model URLs directly.
 
-Props declare local `interactionSpec.anchors` and named `affordances`. A timeline interaction records actor, target, actor node, target anchor, action, and resulting state. Ownership-aware clips additionally declare `ownershipMode`, holder/item anchors, an `actorContactAnchor`, and either a recipient or placement target. Optional `interactionSpec.collisionProxy` data declares a box, sphere, cylinder, or capsule with dimensions/offset/margin; support boxes can opt into top-surface correction. They expose anticipation, reach, contact, and recovery phases; gray-box effectors meet the outside of the target while the simulation continuously resolves the prop constraint. Imported rigs use their mapped animation clip instead of gray-box articulation. The deterministic runtime remains responsible for reach distance, legal ownership, movement, collision-aware approach planning, proxy separation, and animation state.
+Props declare local `interactionSpec.anchors` and named `affordances`. A timeline interaction records actor, target, actor node, target anchor, action, and resulting state. Ownership-aware clips additionally declare `ownershipMode`, holder/item anchors, an `actorContactAnchor`, and either a recipient or placement target. Optional `interactionSpec.collisionProxy` data declares a box, sphere, cylinder, or capsule with dimensions/offset/margin; support boxes can opt into top-surface correction. They expose anticipation, reach, contact, and recovery phases; gray-box effectors meet the outside of the target, while imported rigs combine their mapped clip with contact-driven hand IK. The deterministic runtime remains responsible for reach distance, legal ownership, navigation, proxy audit, and animation state; Rapier owns only unconstrained dynamic-body motion.
 
 ## Run and verify
 
@@ -59,6 +64,8 @@ npm run render:window-case:video30
 npm run package:interaction-demo
 npm run package:window-case
 npm run build:window-case:cp02
+npm run test:cp03:audience
+npm run test:large-autosave
 npm run build
 npm run dev
 ```
@@ -152,39 +159,51 @@ source project is not mutated, and rollback is discarding that overlay. The
 CaseSession layer records the resulting receipt IDs and pre/post scene hashes;
 it is not a parallel Ruby execution backend.
 
-The local integration test runs the real DSH rc.6 session/tool/event stack with
-the `pact-fake` scripted adapter. It proves that a root draft can be stored by
-canonical hash, approved, gated, executed by Ruby's deterministic 60Hz runtime,
-received as a linked receipt, entered into the same root CaseSession, flushed,
-and cold-read as a durable bounded DSH event. Cumulative and terminal mechanics
-are unit-tested, but five visually distinct runtime effects are not implemented.
-Real-provider compatibility remains `0/8 ELIGIBLE`, `0 SENT` until the missing
-local configuration and a fresh exact approval exist. This test does **not**
-prove real Gemini/DeepSeek structured-tool quality, real multimodal
-interpretation, provider latency, multi-call sequencing, the five-action visual
-grammar, audience UI, a formal encounter suite, CP03 checkpoint archive,
-artistic approval or public release. The current local Gate deliberately accepts
-one capability call per proposal while the wider schema reserves up to eight for
-the later orchestrator.
+The local integration test still runs the real DSH rc.6 session/tool/event stack
+with the `pact-fake` scripted adapter through hash approval, Gate, Ruby execution,
+receipt, flush, and cold read. In addition, the approved critical-path redesign
+now has a provider-neutral local engine: all five typed role shards start against
+one immutable snapshot, durable Witness/Rewriter text is the only eligible public
+trace, Guardian dissent cannot be dropped, a minimal Conductor commit selects
+hashes, and a non-creative assembler deterministically produces the draft. Tests
+cover strict-at-deadline quarantine, 6 planned/8 maximum dispatch accounting,
+one pre-side-effect retry per provider, stable draft hashes, and no draft on
+failure. A routing-manifest audit rejects silent model switching, missing
+multimodal support, or insufficient parallel concurrency before any call.
+
+The audience route and all five transient visual effects are implemented and
+browser-tested at desktop and 390×844 with zero external requests. This remains
+a scripted local engineering surface, not provider proof. Live Runs 01–03 remain
+failed evidence; no Live Run 04 was made. Real Gemini/DeepSeek compatibility
+still requires exact model/route/repetition/input/call-count/USD approval, DSH
+adapter wiring to the new council, a passing archived run, and separate human
+quality review.
+
+The formal checkpoint **contract** is implemented as a fail-closed archive gate.
+It requires interaction, visual, engineering, provenance, and discourse evidence,
+plus a passing representative real-provider archive, Ruby execution and rollback,
+technical review, artistic `KEEP`, integrity, commit, and pushed-branch facts.
+No formal CP03 archive has been produced, because those external and human facts
+do not yet exist.
 
 ## Current limits
 
-- OBJ and GLB loading are connected for local session files. CP02 additionally supports one fixed same-origin local Case Pack, but its binary files remain intentionally ignored and are not yet packaged for transfer or remote recovery.
+- OBJ, GLB, animation GLB, and RGB-D inputs enter a browser content-addressed store and can be exported in a cross-machine `.blockout.zip`. CP02's separate fixed ignored Case Pack remains private and is not automatically admitted to that public project package.
 - OBJ is intentionally static: its common interchange form has no portable skin, skeletal animation, or morph-expression contract. Animated characters should use a self-contained GLB; external OBJ MTL/texture references are ignored.
-- GLB bone overrides are local-pose controls, not animation retargeting or inverse kinematics.
-- The ground planner expands axis-aligned static bounds by actor radius; the runtime collision pass uses discrete capsule/box proxies. Neither is a navigation mesh, swept continuous collision detector, or rigid-body character controller.
-- The ownership solver is deterministic kinematics. It constrains authored anchors, corrects configured proxy penetration, and rejects illegal transitions, but it does not simulate gravity, impulses, frictional stacking, or Rapier contacts.
-- Semantic effectors select animation/node bindings, but full-body and hand IK are not connected yet.
+- Animation retargeting currently relies on compatible source/target bone names or an explicit map; it is not a full humanoid retarget profile with rest-pose normalization. Hand IK is a real two-bone CCD chain, not full-body IK, finger solving, joint-limit authoring, or foot placement.
+- Navigation is a deterministic triangulated raster mesh over radius-inflated axis-aligned static bounds. It is not Recast polygon baking, dynamic obstacle avoidance, crowd steering, or arbitrary sloped-surface traversal.
+- Rapier provides real gravity and rigid-body contacts for unconstrained dynamic objects. Authored ownership and timeline control intentionally override those bodies kinematically; stacked-scene tuning and a full rigid-body character controller remain future work.
 - Camera splines and procedural secondary motion improve continuity but do not replace authored animation.
-- The Scene Builder agent runtime validates semantic intents but does not itself call a language model; CP03 receives a validated DSH draft across the separate Gate.
+- The Scene Builder agent runtime validates semantic intents but does not itself call a language model. The new parallel council is provider-neutral local code; real DSH Gemini/DeepSeek adapters for it are not yet accepted.
 - CP02 understands only the two frozen bilingual fixture statements; Gemini, DeepSeek, and DSH are not live dependencies in this checkpoint.
 - CP02's three selected public assets have separate source, technical and local artistic records and are loaded from the fixed ignored Case Pack. This does not generalise to arbitrary catalog entries and does not authorise public display.
 - The example is real-time stylized blockout, not photoreal final rendering.
-- RGB-D height fields are session-only textured 2.5D surfaces. They are not packaged with project JSON and do not provide backs, watertight topology, metric scale, collision, rigging, or navigation geometry.
+- RGB-D height fields can now be persisted and packaged with their exact bridge/RGB/depth bytes, but they still do not provide backs, watertight topology, metric scale, collision, rigging, or navigation geometry.
 
-The immediate CP03 vertical slice is the bounded real-provider compatibility
-gate, followed on `GO` by the five-action effect runtime, loopback privacy/evidence
-host and audience proposal UI. The separate 3D-hardening track still needs
-persisted asset packaging, a retargeting profile, real hand IK and—only if the
-installation requires physical dynamics—a Rapier-backed controller while
-keeping the semantic ownership contract unchanged.
+The next CP03 gate is narrower than before: wire the approved parallel council
+to real DSH continuable sessions, produce a new zero-call preflight, then request
+fresh exact Live Run 04 authority. Only a passing run plus human quality review
+can unblock formal encounters and the five-class archive. Separately, 3D hardening
+can deepen humanoid retarget profiles, full-body/finger IK, Recast-style navigation,
+dynamic obstacles, and rigid-body character control without weakening semantic
+ownership or hash approval.
