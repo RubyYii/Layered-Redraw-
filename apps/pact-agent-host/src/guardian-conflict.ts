@@ -7,10 +7,14 @@ import type { CouncilProposalSnapshot } from './council-registry.js';
 import type {
   ArchivistShard,
   CouncilRole,
+  CouncilShard,
   GuardianShard,
   RewriterShard,
 } from './contract-types.js';
-import type { FrozenCouncilTurn } from './council-turn.js';
+import {
+  requiredRolesForTurn,
+  type FrozenCouncilTurn,
+} from './council-turn.js';
 
 export type GuardianConflictResult =
   | { readonly status: 'ALLOW'; readonly reasonCodes: readonly [] }
@@ -56,12 +60,105 @@ const isHash = (value: unknown): value is string =>
 const hasDuplicates = <T>(values: readonly T[]): boolean =>
   new Set(values).size !== values.length;
 
+const isCouncilTurnScope = (
+  value: unknown,
+): value is FrozenCouncilTurn['snapshot']['turnScope'] =>
+  isRecord(value) &&
+  typeof value.usesImageOrAudioClaims === 'boolean' &&
+  typeof value.usesSceneObservationClaims === 'boolean' &&
+  typeof value.allowsSceneMutation === 'boolean' &&
+  typeof value.allowsAssetOrSpatialChange === 'boolean' &&
+  typeof value.requiresProvenanceOrRights === 'boolean';
+
+const isExactUniqueRoleList = (
+  value: unknown,
+  expected: readonly CouncilRole[],
+): value is readonly CouncilRole[] =>
+  Array.isArray(value) &&
+  value.length === expected.length &&
+  !hasDuplicates(value) &&
+  value.every((role, index) => role === expected[index]);
+
+const safeCanonicalHash = async (
+  value: unknown,
+): Promise<string | undefined> => {
+  try {
+    return await sha256Canonical(value);
+  } catch {
+    return undefined;
+  }
+};
+
+const matchesTurnIdentity = (
+  shard: CouncilShard,
+  turn: FrozenCouncilTurn,
+): boolean =>
+  shard.caseSessionId === turn.snapshot.caseSessionId &&
+  shard.turnId === turn.snapshot.turnId &&
+  shard.snapshotHash === turn.snapshotHash &&
+  shard.parentSceneHash === turn.snapshot.parentSceneHash &&
+  shard.registryVersion === turn.snapshot.registryVersion &&
+  shard.routingManifestVersion === turn.snapshot.routingManifestVersion &&
+  shard.deadlineId === turn.snapshot.deadlineId;
+
+const validateTurnAuthority = async (
+  input: GuardianConflictInput,
+): Promise<boolean> => {
+  if (!isRecord(input) || !isRecord(input.turn) || !isRecord(input.proposal)) {
+    return false;
+  }
+  const turn = input.turn as FrozenCouncilTurn;
+  const proposal = input.proposal as CouncilProposalSnapshot;
+  const proposalTurn = proposal.turn;
+  if (
+    !isRecord(turn.snapshot) ||
+    !isRecord(proposalTurn) ||
+    !isRecord(proposalTurn.snapshot) ||
+    proposal.selectionBarrierClosed !== true ||
+    !isCouncilTurnScope(turn.snapshot.turnScope)
+  ) {
+    return false;
+  }
+
+  const expectedRequiredRoles = requiredRolesForTurn(turn.snapshot.turnScope);
+  const [turnSnapshotHash, proposalSnapshotHash, turnHash, proposalTurnHash] =
+    await Promise.all([
+      safeCanonicalHash(turn.snapshot),
+      safeCanonicalHash(proposalTurn.snapshot),
+      safeCanonicalHash(turn),
+      safeCanonicalHash(proposalTurn),
+    ]);
+  if (
+    turnSnapshotHash === undefined ||
+    proposalSnapshotHash === undefined ||
+    turnHash === undefined ||
+    proposalTurnHash === undefined ||
+    turnSnapshotHash !== turn.snapshotHash ||
+    proposalSnapshotHash !== proposalTurn.snapshotHash ||
+    turnHash !== proposalTurnHash ||
+    proposalTurn.snapshotHash !== turn.snapshotHash
+  ) {
+    return false;
+  }
+
+  const rolePolicyValid = [
+    turn.requiredRoles,
+    turn.snapshot.requiredRoles,
+    proposalTurn.requiredRoles,
+    proposalTurn.snapshot.requiredRoles,
+  ].every((requiredRoles) =>
+    isExactUniqueRoleList(requiredRoles, expectedRequiredRoles));
+  return rolePolicyValid;
+};
+
 const selectedShardsByRole = async (
-  proposal: CouncilProposalSnapshot,
+  input: GuardianConflictInput,
 ): Promise<ReadonlyMap<
   CouncilRole,
   CouncilProposalSnapshot['durableShards'][number]['shard']
 > | undefined> => {
+  if (!(await validateTurnAuthority(input))) return undefined;
+  const { turn, proposal } = input;
   if (!isRecord(proposal) || !Array.isArray(proposal.durableShards)) return undefined;
   const rawDurableCommit = proposal.durableCommit as unknown;
   if (!isRecord(rawDurableCommit) || !isHash(rawDurableCommit.payloadHash)) {
@@ -71,6 +168,7 @@ const selectedShardsByRole = async (
   if (await sha256Canonical(commit) !== rawDurableCommit.payloadHash) {
     return undefined;
   }
+  if (commit.turnId !== turn.snapshot.turnId) return undefined;
   if (
     commit.selectedShardHashes.length === 0 ||
     hasDuplicates(commit.selectedShardHashes)
@@ -98,6 +196,7 @@ const selectedShardsByRole = async (
   }
 
   const byRole = new Map<CouncilRole, CouncilProposalSnapshot['durableShards'][number]['shard']>();
+  const selectedEntries: CouncilProposalSnapshot['durableShards'][number][] = [];
   for (const payloadHash of commit.selectedShardHashes) {
     const matches = durableEntries.filter((entry) => entry.payloadHash === payloadHash);
     if (matches.length !== 1) {
@@ -108,8 +207,17 @@ const selectedShardsByRole = async (
     if (await sha256Canonical(entry.shard) !== entry.payloadHash) {
       return undefined;
     }
+    if (!matchesTurnIdentity(shard, turn)) return undefined;
     if (byRole.has(shard.role)) return undefined;
+    selectedEntries.push(entry);
     byRole.set(shard.role, shard);
+  }
+  if (
+    hasDuplicates(selectedEntries.map((entry) => entry.shard.shardId)) ||
+    hasDuplicates(selectedEntries.map((entry) => entry.acceptanceSequence)) ||
+    turn.requiredRoles.some((role) => !byRole.has(role))
+  ) {
+    return undefined;
   }
   return byRole;
 };
@@ -150,7 +258,7 @@ export const evaluateGuardianConflict = async (
   input: GuardianConflictInput,
 ): Promise<GuardianConflictResult> => {
   try {
-    const shards = await selectedShardsByRole(input.proposal);
+    const shards = await selectedShardsByRole(input);
     if (shards === undefined) {
       return selectedShardFailure();
     }

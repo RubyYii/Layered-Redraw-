@@ -18,9 +18,13 @@ import type {
   RewriterShard,
   WitnessShard,
 } from '../src/contract-types.js';
-import { type FrozenCouncilTurn } from '../src/council-turn.js';
+import {
+  freezeCouncilTurn,
+  type FrozenCouncilTurn,
+} from '../src/council-turn.js';
 import {
   createFullCouncilFixtures,
+  fullCouncilTurnInput,
   roleOrder,
 } from './council-fixtures.js';
 
@@ -38,7 +42,13 @@ const makeProposal = async (
   commitOverrides: Partial<{
     readonly status: 'NEEDS_CLARIFICATION' | 'PROPOSED' | 'WITHHELD';
     readonly selectedDissentIds: readonly string[];
+    readonly turnId: string;
   }> = {},
+  options: {
+    readonly selectionBarrierClosed?: boolean;
+    readonly selectedRoles?: readonly CouncilRole[];
+    readonly acceptanceSequences?: Partial<Record<CouncilRole, number>>;
+  } = {},
 ): Promise<CouncilProposalSnapshot> => {
   const durableShards = await Promise.all(roleOrder.map(async (role, index) => {
     const shard = {
@@ -48,21 +58,24 @@ const makeProposal = async (
     return {
       shard,
       payloadHash: await sha256Canonical(shard),
-      acceptanceSequence: index + 1,
+      acceptanceSequence: options.acceptanceSequences?.[role] ?? index + 1,
     };
   }));
+  const selectedRoles = new Set(options.selectedRoles ?? roleOrder);
   const commit = {
     schemaVersion: 'cp03-council/0.2' as const,
-    turnId: turn.snapshot.turnId,
+    turnId: commitOverrides.turnId ?? turn.snapshot.turnId,
     status: commitOverrides.status ?? 'PROPOSED',
     actionSequence: ['Reframe', 'Continue'],
-    selectedShardHashes: durableShards.map((entry) => entry.payloadHash),
+    selectedShardHashes: durableShards
+      .filter((entry) => selectedRoles.has(entry.shard.role))
+      .map((entry) => entry.payloadHash),
     selectedDissentIds: commitOverrides.selectedDissentIds ?? ['dissent_guardian01'],
     terminalIntent: 'Continue' as const,
   };
   return {
     turn,
-    selectionBarrierClosed: true,
+    selectionBarrierClosed: options.selectionBarrierClosed ?? true,
     durableShards,
     durableCommit: {
       commit,
@@ -118,6 +131,45 @@ const expectSelectedShardInvalid = async (
     status: 'NEEDS_CLARIFICATION',
     reasonCodes: ['GUARDIAN_SELECTED_SHARD_INVALID'],
   });
+};
+
+const rebindShardsToTurn = (
+  shards: Readonly<Record<CouncilRole, CouncilShard>>,
+  turn: FrozenCouncilTurn,
+): Readonly<Record<CouncilRole, CouncilShard>> => Object.fromEntries(
+  roleOrder.map((role) => [role, {
+    ...shards[role],
+    caseSessionId: turn.snapshot.caseSessionId,
+    turnId: turn.snapshot.turnId,
+    snapshotHash: turn.snapshotHash,
+    parentSceneHash: turn.snapshot.parentSceneHash,
+    registryVersion: turn.snapshot.registryVersion,
+    routingManifestVersion: turn.snapshot.routingManifestVersion,
+    deadlineId: turn.snapshot.deadlineId,
+  }]),
+) as Readonly<Record<CouncilRole, CouncilShard>>;
+
+const withTurnRoles = async (
+  turn: FrozenCouncilTurn,
+  options: {
+    readonly topLevelRequiredRoles?: readonly CouncilRole[];
+    readonly snapshotRequiredRoles?: readonly CouncilRole[];
+  },
+): Promise<FrozenCouncilTurn> => {
+  const snapshot = {
+    ...turn.snapshot,
+    ...(options.snapshotRequiredRoles === undefined
+      ? {}
+      : { requiredRoles: [...options.snapshotRequiredRoles] }),
+  };
+  return {
+    ...turn,
+    snapshot,
+    snapshotHash: await sha256Canonical(snapshot),
+    ...(options.topLevelRequiredRoles === undefined
+      ? {}
+      : { requiredRoles: [...options.topLevelRequiredRoles] }),
+  } as FrozenCouncilTurn;
 };
 
 describe('typed Guardian conflict evaluation', () => {
@@ -240,6 +292,199 @@ describe('typed Guardian conflict evaluation', () => {
       status: 'ALLOW',
       reasonCodes: [],
     });
+  });
+
+  it('fails closed when the selection barrier is open', async () => {
+    const input = await makeInput();
+
+    await expectSelectedShardInvalid({
+      ...input,
+      proposal: {
+        ...input.proposal,
+        selectionBarrierClosed: false,
+      },
+    });
+  });
+
+  it('fails closed when proposal.turn is structurally different', async () => {
+    const input = await makeInput();
+
+    await expectSelectedShardInvalid({
+      ...input,
+      proposal: {
+        ...input.proposal,
+        turn: {
+          ...input.proposal.turn,
+          startedAtMonotonicMs: input.proposal.turn.startedAtMonotonicMs + 1,
+        },
+      },
+    });
+  });
+
+  it('fails closed for a fully self-consistent foreign frozen turn', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const foreignTurn = await freezeCouncilTurn({
+      ...fullCouncilTurnInput,
+      caseSessionId: 'case_council_foreign',
+      turnId: 'turn_council_foreign',
+      now: () => 1_000,
+    });
+    const foreignProposal = await makeProposal(
+      foreignTurn,
+      rebindShardsToTurn(
+        withGuardianContent(fixtures.shards, { contestedEvidenceIds: [] }),
+        foreignTurn,
+      ),
+    );
+
+    await expectSelectedShardInvalid({
+      turn: fixtures.turn,
+      proposal: foreignProposal,
+    });
+  });
+
+  it.each([
+    ['input turn snapshotHash', 'input'],
+    ['proposal turn snapshotHash', 'proposal'],
+  ] as const)('fails closed when %s is not canonical', async (_label, target) => {
+    const input = await makeInput();
+    const invalidHash = '0'.repeat(64);
+
+    await expectSelectedShardInvalid(target === 'input'
+      ? {
+          ...input,
+          turn: { ...input.turn, snapshotHash: invalidHash },
+        }
+      : {
+          ...input,
+          proposal: {
+            ...input.proposal,
+            turn: { ...input.proposal.turn, snapshotHash: invalidHash },
+          },
+        });
+  });
+
+  it('fails closed when a valid durable commit names a foreign turn', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const shards = withGuardianContent(fixtures.shards, {
+      contestedEvidenceIds: [],
+    });
+    const proposal = await makeProposal(fixtures.turn, shards, {
+      turnId: 'turn_council_foreign',
+    });
+
+    await expectSelectedShardInvalid({ turn: fixtures.turn, proposal });
+  });
+
+  it.each([
+    ['caseSessionId', 'case_council_foreign'],
+    ['turnId', 'turn_council_foreign'],
+    ['snapshotHash', '0'.repeat(64)],
+    ['parentSceneHash', 'a'.repeat(64)],
+    ['registryVersion', 'cp03-registry/foreign'],
+    ['routingManifestVersion', 'cp03-council-routing/foreign'],
+    ['deadlineId', 'deadline_council_foreign'],
+  ] as const)('fails closed when selected shard %s is foreign', async (field, value) => {
+    const fixtures = await createFullCouncilFixtures();
+    const baseShards = withGuardianContent(fixtures.shards, {
+      contestedEvidenceIds: [],
+    });
+    const shard = baseShards.CaseConductor;
+    const shards = {
+      ...baseShards,
+      CaseConductor: {
+        ...shard,
+        [field]: value,
+      } as CouncilShard,
+    };
+    const proposal = await makeProposal(fixtures.turn, shards);
+
+    await expectSelectedShardInvalid({ turn: fixtures.turn, proposal });
+  });
+
+  it('fails closed when selected roles omit the current Guardian requirement set', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const shards = withGuardianContent(fixtures.shards, {
+      contestedEvidenceIds: [],
+      requiredSourceLockIds: [],
+      requiredRightsIds: [],
+      requiredRollbackCapabilityIds: [],
+    });
+    const proposal = await makeProposal(fixtures.turn, shards, {}, {
+      selectedRoles: ['Guardian'],
+    });
+
+    await expectSelectedShardInvalid({ turn: fixtures.turn, proposal });
+  });
+
+  const malformedRequiredRoleLists = [
+    ['narrowed', ['CaseConductor', 'Witness', 'Archivist', 'Rewriter']],
+    ['duplicated', ['CaseConductor', 'Witness', 'Archivist', 'Rewriter', 'Guardian', 'Guardian']],
+    ['reordered', ['CaseConductor', 'Witness', 'Archivist', 'Guardian', 'Rewriter']],
+  ] as const satisfies readonly [string, readonly CouncilRole[]][];
+
+  it.each(malformedRequiredRoleLists)(
+    'fails closed when current turn.requiredRoles is %s',
+    async (_label, requiredRoles) => {
+      const fixtures = await createFullCouncilFixtures();
+      const invalidTurn = await withTurnRoles(fixtures.turn, {
+        topLevelRequiredRoles: requiredRoles,
+        snapshotRequiredRoles: requiredRoles,
+      });
+      const proposal = await makeProposal(
+        invalidTurn,
+        rebindShardsToTurn(
+          withGuardianContent(fixtures.shards, { contestedEvidenceIds: [] }),
+          invalidTurn,
+        ),
+      );
+
+      await expectSelectedShardInvalid({ turn: invalidTurn, proposal });
+    },
+  );
+
+  it.each(malformedRequiredRoleLists)(
+    'fails closed when current snapshot.requiredRoles is %s',
+    async (_label, requiredRoles) => {
+      const fixtures = await createFullCouncilFixtures();
+      const invalidTurn = await withTurnRoles(fixtures.turn, {
+        snapshotRequiredRoles: requiredRoles,
+      });
+      const proposal = await makeProposal(
+        invalidTurn,
+        rebindShardsToTurn(
+          withGuardianContent(fixtures.shards, { contestedEvidenceIds: [] }),
+          invalidTurn,
+        ),
+      );
+
+      await expectSelectedShardInvalid({ turn: invalidTurn, proposal });
+    },
+  );
+
+  it.each([
+    ['shardId', 'shard-id'],
+    ['acceptanceSequence', 'acceptance-sequence'],
+  ] as const)('fails closed when selected durable authority duplicates %s', async (field, _label) => {
+    const fixtures = await createFullCouncilFixtures();
+    const baseShards = withGuardianContent(fixtures.shards, {
+      contestedEvidenceIds: [],
+    });
+    const shards = field === 'shardId'
+      ? {
+          ...baseShards,
+          Witness: {
+            ...baseShards.Witness,
+            shardId: baseShards.CaseConductor.shardId,
+          } as CouncilShard,
+        }
+      : baseShards;
+    const proposalOptions = field === 'acceptanceSequence'
+      ? { acceptanceSequences: { Witness: 1 } }
+      : {};
+    const proposal = await makeProposal(fixtures.turn, shards, {}, proposalOptions);
+
+    await expectSelectedShardInvalid({ turn: fixtures.turn, proposal });
   });
 
   it('fails closed when the Conductor selects the same shard hash twice', async () => {
