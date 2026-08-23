@@ -41,6 +41,30 @@ export { type PactRole } from './events.js';
 export { registerPactTools } from './pact-tools.js';
 export { SubmissionRegistry } from './submission-registry.js';
 export {
+  CouncilRegistry,
+  type AcceptedCouncilCommitReceipt,
+  type AcceptedCouncilShardReceipt,
+  type CouncilCommitReceipt,
+  type CouncilProposalSnapshot,
+  type CouncilRegistryOptions,
+  type CouncilShardReceipt,
+  type DurableConductorCommitReceipt,
+  type DurableCouncilShardReceipt,
+  type RejectedCouncilCommitReceipt,
+  type RejectedCouncilShardReceipt,
+} from './council-registry.js';
+export {
+  COUNCIL_ROLE_TOOLS,
+  COUNCIL_ROOT_TOOLS,
+  councilToolDefinitions,
+  registerCouncilTools,
+} from './council-tools.js';
+export {
+  durableConductorCommit,
+  durableCouncilShard,
+  recoverCouncilTraceProjection,
+} from './council-durability.js';
+export {
   COMPATIBILITY_LIMITS,
   inspectCompatibilityConfig,
 } from './compatibility-config.js';

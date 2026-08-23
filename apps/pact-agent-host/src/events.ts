@@ -16,6 +16,9 @@ export const PACT_SESSION_EVENT_TYPES = [
   'pact/draft',
   'pact/quarantine',
   'pact/case-transition',
+  'pact/council-shard',
+  'pact/conductor-commit',
+  'pact/council-state',
 ] as const;
 
 declare module '@deepseek-ai/dsh-session/types' {
@@ -24,6 +27,12 @@ declare module '@deepseek-ai/dsh-session/types' {
       turnId: string;
       role: PactRole;
       text: string;
+      caseSessionId?: string;
+      sourceContributionHash?: string;
+      acceptanceSequence?: number;
+      phase?: 'COUNCIL';
+      provisional?: true;
+      projectedAtMonotonicMs?: number;
     };
     'pact/contribution': {
       turnId: string;
@@ -51,6 +60,34 @@ declare module '@deepseek-ai/dsh-session/types' {
         | 'CHECKPOINT_RESET';
       payload: JsonValue;
       transitionHash: string;
+    };
+    'pact/council-shard': {
+      caseSessionId: string;
+      turnId: string;
+      shardId: string;
+      role: PactRole;
+      payload: JsonValue;
+      payloadHash: string;
+      acceptanceSequence: number;
+    };
+    'pact/conductor-commit': {
+      turnId: string;
+      payload: JsonValue;
+      payloadHash: string;
+    };
+    'pact/council-state': {
+      caseSessionId: string;
+      turnId: string;
+      state:
+        | 'COUNCIL_RUNNING'
+        | 'COMMIT_READY'
+        | 'DRAFT_ASSEMBLED'
+        | 'NEEDS_CLARIFICATION'
+        | 'WITHHELD'
+        | 'FAILED_NO_MUTATION'
+        | 'LATE_QUARANTINED';
+      reasonCodes: string[];
+      observedAtMonotonicMs: number;
     };
   }
 }
