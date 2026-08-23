@@ -38,6 +38,16 @@
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/stableRef" }
     },
+    "rightsRef": {
+      "type": "string",
+      "pattern": "^rights[-_][A-Za-z0-9][A-Za-z0-9._-]{0,126}$"
+    },
+    "rightsArray": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/rightsRef" }
+    },
     "terminalAction": {
       "enum": ["Continue", "KeepOpaque"]
     },
@@ -243,7 +253,7 @@
         "requestedAssetIds": { "$ref": "#/$defs/refArray" },
         "requestedSpatialBridgeIds": { "$ref": "#/$defs/refArray" },
         "provenanceAnchors": { "$ref": "#/$defs/refArray" },
-        "rightsRequirements": { "$ref": "#/$defs/creativeArray" },
+        "rightsRequirements": { "$ref": "#/$defs/rightsArray" },
         "unavailableRefs": { "$ref": "#/$defs/refArray" }
       }
     },
@@ -298,7 +308,7 @@
         "disposition": { "enum": ["ALLOW", "NEEDS_CLARIFICATION", "WITHHOLD"] },
         "forbiddenCapabilityIds": { "$ref": "#/$defs/refArray" },
         "requiredSourceLockIds": { "$ref": "#/$defs/refArray" },
-        "requiredRightsIds": { "$ref": "#/$defs/refArray" },
+        "requiredRightsIds": { "$ref": "#/$defs/rightsArray" },
         "requiredRollbackCapabilityIds": { "$ref": "#/$defs/refArray" },
         "contestedEvidenceIds": { "$ref": "#/$defs/refArray" },
         "requiredDissentRecords": {

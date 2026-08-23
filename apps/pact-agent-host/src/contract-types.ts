@@ -19,6 +19,8 @@ export type CouncilShardKind =
   | 'REWRITER'
   | 'GUARDIAN';
 
+export type CouncilRightsId = `rights-${string}` | `rights_${string}`;
+
 export interface CouncilObservation {
   readonly observationId: string;
   readonly text: string;
@@ -59,7 +61,7 @@ export interface ArchivistContent {
   readonly requestedAssetIds: readonly string[];
   readonly requestedSpatialBridgeIds: readonly string[];
   readonly provenanceAnchors: readonly string[];
-  readonly rightsRequirements: readonly string[];
+  readonly rightsRequirements: readonly CouncilRightsId[];
   readonly unavailableRefs: readonly string[];
 }
 
@@ -81,7 +83,7 @@ export interface GuardianContent {
   readonly disposition: 'ALLOW' | 'NEEDS_CLARIFICATION' | 'WITHHOLD';
   readonly forbiddenCapabilityIds: readonly string[];
   readonly requiredSourceLockIds: readonly string[];
-  readonly requiredRightsIds: readonly string[];
+  readonly requiredRightsIds: readonly CouncilRightsId[];
   readonly requiredRollbackCapabilityIds: readonly string[];
   readonly contestedEvidenceIds: readonly string[];
   readonly requiredDissentRecords: readonly CouncilDissentRecord[];

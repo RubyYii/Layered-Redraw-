@@ -7,6 +7,7 @@ declare module '@layered-redraw/pact-cp03-contracts' {
   export type ContractRole = import('./contract-types.js').ContractRole;
   export type CouncilRole = import('./contract-types.js').CouncilRole;
   export type CouncilShardKind = import('./contract-types.js').CouncilShardKind;
+  export type CouncilRightsId = import('./contract-types.js').CouncilRightsId;
   export type CouncilShard = import('./contract-types.js').CouncilShard;
   export type CouncilShardBase = import('./contract-types.js').CouncilShardBase;
   export type ConductorIntentShard =

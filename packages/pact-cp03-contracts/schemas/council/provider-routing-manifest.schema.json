@@ -35,7 +35,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 200,
-          "pattern": "^[^\\s]+$"
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
         },
         "adapterPackage": {
           "type": "string",
@@ -73,7 +73,53 @@
           "minimum": 1,
           "maximum": 12000
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "provider": { "const": "deepseek" } },
+            "required": ["provider"]
+          },
+          "then": {
+            "properties": {
+              "route": {
+                "type": "string",
+                "pattern": "^deepseek(?:[-._/][A-Za-z0-9][A-Za-z0-9._/-]*)?$"
+              },
+              "model": {
+                "type": "string",
+                "pattern": "^deepseek-[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "adapterPackage": {
+                "type": "string",
+                "pattern": "^@deepseek-ai/[A-Za-z0-9][A-Za-z0-9._-]*$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "provider": { "const": "gemini" } },
+            "required": ["provider"]
+          },
+          "then": {
+            "properties": {
+              "route": {
+                "type": "string",
+                "pattern": "^gemini(?:[-._/][A-Za-z0-9][A-Za-z0-9._/-]*)?$"
+              },
+              "model": {
+                "type": "string",
+                "pattern": "^gemini-[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "adapterPackage": {
+                "type": "string",
+                "pattern": "^@google/[A-Za-z0-9][A-Za-z0-9._-]*$"
+              }
+            }
+          }
+        }
+      ]
     }
   },
   "type": "object",
@@ -105,7 +151,117 @@
         "Archivist": { "$ref": "#/$defs/assignment" },
         "Rewriter": { "$ref": "#/$defs/assignment" },
         "Guardian": { "$ref": "#/$defs/assignment" }
-      }
+      },
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "required": ["CaseConductor"],
+              "properties": {
+                "CaseConductor": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "deepseek" } }
+                }
+              }
+            },
+            {
+              "required": ["Witness"],
+              "properties": {
+                "Witness": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "deepseek" } }
+                }
+              }
+            },
+            {
+              "required": ["Archivist"],
+              "properties": {
+                "Archivist": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "deepseek" } }
+                }
+              }
+            },
+            {
+              "required": ["Rewriter"],
+              "properties": {
+                "Rewriter": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "deepseek" } }
+                }
+              }
+            },
+            {
+              "required": ["Guardian"],
+              "properties": {
+                "Guardian": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "deepseek" } }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "required": ["CaseConductor"],
+              "properties": {
+                "CaseConductor": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "gemini" } }
+                }
+              }
+            },
+            {
+              "required": ["Witness"],
+              "properties": {
+                "Witness": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "gemini" } }
+                }
+              }
+            },
+            {
+              "required": ["Archivist"],
+              "properties": {
+                "Archivist": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "gemini" } }
+                }
+              }
+            },
+            {
+              "required": ["Rewriter"],
+              "properties": {
+                "Rewriter": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "gemini" } }
+                }
+              }
+            },
+            {
+              "required": ["Guardian"],
+              "properties": {
+                "Guardian": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "gemini" } }
+                }
+              }
+            }
+          ]
+        }
+      ]
     }
   }
 }

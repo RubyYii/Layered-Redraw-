@@ -27,6 +27,26 @@ import {
   validViewerTurn,
 } from "./fixtures.js";
 
+const allRoutingAssignmentsFor = (provider) => {
+  const route = provider === "deepseek" ? "deepseek-official" : "gemini-official";
+  const model = provider === "deepseek"
+    ? "deepseek-model-pending-bakeoff"
+    : "gemini-model-pending-bakeoff";
+  const adapterPackage = provider === "deepseek"
+    ? "@deepseek-ai/dsh-llm-deepseek"
+    : "@google/generative-ai";
+  return Object.fromEntries(Object.keys(validProviderRoutingManifest.assignments).map((role) => [
+    role,
+    {
+      ...validProviderRoutingManifest.assignments[role],
+      provider,
+      route,
+      model,
+      adapterPackage,
+    },
+  ]));
+};
+
 describe("CP03 foundation gate contracts", () => {
   it("canonicalises object keys but preserves array order", async () => {
     expect(canonicalJson({ b: 2, a: [3, 1] })).toBe('{"a":[3,1],"b":2}');
@@ -108,6 +128,55 @@ describe("CP03 foundation gate contracts", () => {
         },
       },
     })).toThrow(/validation failed/);
+  });
+
+  it("requires both provider families in the routing manifest", () => {
+    expect(() => validateProviderRoutingManifest({
+      ...validProviderRoutingManifest,
+      assignments: allRoutingAssignmentsFor("deepseek"),
+    })).toThrow(/validation failed/);
+  });
+
+  it.each([
+    ["provider and route", { provider: "deepseek", route: "gemini-official" }],
+    ["provider and model family", {
+      provider: "deepseek",
+      model: "gemini-model-pending-bakeoff",
+    }],
+    ["provider and adapter package", {
+      provider: "deepseek",
+      adapterPackage: "@google/generative-ai",
+    }],
+    ["URL-like model identifier", {
+      model: "https://models.example.test/deepseek-model",
+    }],
+  ])("rejects %s routing assignments", (_label, override) => {
+    expect(() => validateProviderRoutingManifest({
+      ...validProviderRoutingManifest,
+      assignments: {
+        ...validProviderRoutingManifest.assignments,
+        CaseConductor: {
+          ...validProviderRoutingManifest.assignments.CaseConductor,
+          ...override,
+        },
+      },
+    })).toThrow(/validation failed/);
+  });
+
+  it("keeps Archivist rights requirements registry-bound rather than licence prose", () => {
+    expect(validCouncilShards.Archivist.content.rightsRequirements)
+      .toEqual(["rights-local-scene"]);
+    expect(validateCouncilShard(validCouncilShards.Archivist))
+      .toBe(validCouncilShards.Archivist);
+    for (const rightsRequirement of ["Licensed under CC-BY 4.0", "CC-BY-4.0"]) {
+      expect(() => validateCouncilShard({
+        ...validCouncilShards.Archivist,
+        content: {
+          ...validCouncilShards.Archivist.content,
+          rightsRequirements: [rightsRequirement],
+        },
+      })).toThrow(/validation failed/);
+    }
   });
 
   it("rejects requested action authority in a viewer turn", () => {
