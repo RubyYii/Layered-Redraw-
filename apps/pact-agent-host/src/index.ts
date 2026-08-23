@@ -203,3 +203,28 @@ export {
   verifyAdapterReadinessManifest,
   type AdapterReadinessManifest,
 } from './adapter-readiness-evidence.js';
+export { createSyntheticSpatialImage } from './synthetic-spatial-image.js';
+export {
+  createModelBakeoffFixtures,
+  type ModelBakeoffFixtureManifest,
+  type ModelBakeoffFixtures,
+  type ModelBakeoffPromptManifest,
+  type ModelBakeoffSchemaManifest,
+} from './model-bakeoff-fixtures.js';
+export {
+  BAKEOFF_DEEPSEEK_MODELS,
+  BAKEOFF_DEEPSEEK_PHASES,
+  BAKEOFF_GEMINI_MODELS,
+  BAKEOFF_GEMINI_PHASES,
+  BAKEOFF_MAXIMUM_DISPATCHES,
+  BAKEOFF_PLANNED_DISPATCHES,
+  BAKEOFF_REPETITIONS,
+  createModelBakeoffPlan,
+  summarizeModelBakeoffPlan,
+  type ModelBakeoffCase,
+  type ModelBakeoffInputClass,
+  type ModelBakeoffPhase,
+  type ModelBakeoffPlanSummary,
+  type ModelBakeoffProvider,
+  type ModelBakeoffRole,
+} from './model-bakeoff-plan.js';
