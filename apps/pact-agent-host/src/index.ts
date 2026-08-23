@@ -124,3 +124,18 @@ export {
   type CouncilRuntimeResult,
   type CouncilRuntimeTiming,
 } from './council-runtime.js';
+export {
+  CouncilRoutingError,
+  requireCouncilRoutingManifest,
+  selectionForCouncilRole,
+  type CouncilRoutingErrorCode,
+} from './council-routing.js';
+export {
+  CouncilRunEvidenceError,
+  verifyCouncilRunEvidence,
+  type CouncilEvidenceCheck,
+  type CouncilRunArchive,
+  type CouncilRunEvidenceErrorCode,
+  type CouncilRunEvidenceFinding,
+  type CouncilRunEvidenceReport,
+} from './council-run-evidence.js';

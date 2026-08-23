@@ -54,7 +54,7 @@ const routingAssignment = (
   adapterVersion: '0.1.0-rc.6',
   promptHash,
   toolProfile: 'council-v2',
-  maximumConcurrency: 1,
+  maximumConcurrency: provider === 'deepseek' ? 3 : 2,
   inputClasses: ['text', 'image'],
   inputLimitTokens: 4096,
   outputLimitTokens: 2048,
