@@ -625,6 +625,184 @@ describe('council-v2 durability and recovery', () => {
       .toHaveLength(0);
   });
 
+  test('rejects an extra bound session outside the exact accepted registry scope', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const { fixtures, registry, sessionByRole } = await openRegistry();
+    const session = sessionByRole.Rewriter;
+    const shard = fixtures.shards.Rewriter;
+    const originalAppend = session.append.bind(session);
+    let failTraceAppend = true;
+    vi.spyOn(session, 'append').mockImplementation(((type: string, data: unknown) => {
+      if (type === 'pact/public-trace' && failTraceAppend) {
+        failTraceAppend = false;
+        throw new Error('injected exact-scope setup trace failure');
+      }
+      return (originalAppend as unknown as (
+        appendType: string,
+        appendData: unknown,
+      ) => SessionEvent)(type, data);
+    }) as typeof session.append);
+    await expect(registry.acceptShard(session, shard))
+      .rejects.toThrow('injected exact-scope setup trace failure');
+    const acceptedContext = registry.acceptedCouncilShardContexts(
+      fixtures.turn.snapshot.turnId,
+    ).find((context) => context.shard.shardId === shard.shardId);
+    if (acceptedContext === undefined) throw new Error('expected pending shard');
+    const scope = persistenceContextForSessions([
+      session,
+      sessionByRole.Guardian,
+    ]);
+
+    await expect(recoverCouncilTraceProjection({
+      ctx: scope.ctx,
+      registry,
+      acceptedSessions: [session, sessionByRole.Guardian],
+      session,
+      turn: fixtures.turn,
+      shard,
+      shardPayloadHash: acceptedContext.receipt.payloadHash,
+      acceptanceSequence: acceptedContext.receipt.acceptanceSequence,
+      now: () => 4_800,
+    })).rejects.toMatchObject({
+      name: 'PactDurabilityError',
+      code: 'PACT_DURABILITY_INCOMPLETE',
+    });
+    expect(scope.inspect).not.toHaveBeenCalled();
+    expect(session.events.filter((event) => event.type === 'pact/public-trace'))
+      .toHaveLength(0);
+  });
+
+  test('rejects an extra bound session containing an earlier same-turn orphan shard', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const { fixtures, registry, sessionByRole } = await openRegistry();
+    const session = sessionByRole.Rewriter;
+    const shard = fixtures.shards.Rewriter;
+    const originalAppend = session.append.bind(session);
+    let failTraceAppend = true;
+    vi.spyOn(session, 'append').mockImplementation(((type: string, data: unknown) => {
+      if (type === 'pact/public-trace' && failTraceAppend) {
+        failTraceAppend = false;
+        throw new Error('injected orphan-scope setup trace failure');
+      }
+      return (originalAppend as unknown as (
+        appendType: string,
+        appendData: unknown,
+      ) => SessionEvent)(type, data);
+    }) as typeof session.append);
+    await expect(registry.acceptShard(session, shard))
+      .rejects.toThrow('injected orphan-scope setup trace failure');
+    const acceptedContext = registry.acceptedCouncilShardContexts(
+      fixtures.turn.snapshot.turnId,
+    ).find((context) => context.shard.shardId === shard.shardId);
+    if (acceptedContext === undefined) throw new Error('expected pending shard');
+
+    const guardian = sessionByRole.Guardian;
+    const orphan = {
+      ...fixtures.shards.Witness,
+      childSessionId: String(guardian.id),
+    };
+    const orphanPayloadHash = await sha256Canonical(orphan);
+    guardian.append('pact/council-shard', {
+      caseSessionId: orphan.caseSessionId,
+      turnId: orphan.turnId,
+      shardId: orphan.shardId,
+      role: orphan.role,
+      payload: orphan as unknown as Record<string, never>,
+      payloadHash: orphanPayloadHash,
+      acceptanceSequence: 0,
+    });
+    const scope = persistenceContextForSessions([session, guardian]);
+
+    await expect(recoverCouncilTraceProjection({
+      ctx: scope.ctx,
+      registry,
+      acceptedSessions: [session, guardian],
+      session,
+      turn: fixtures.turn,
+      shard,
+      shardPayloadHash: acceptedContext.receipt.payloadHash,
+      acceptanceSequence: acceptedContext.receipt.acceptanceSequence,
+      now: () => 4_800,
+    })).rejects.toMatchObject({
+      name: 'PactDurabilityError',
+      code: 'PACT_DURABILITY_INCOMPLETE',
+    });
+    expect(scope.inspect).not.toHaveBeenCalled();
+    expect(session.events.filter((event) => event.type === 'pact/public-trace'))
+      .toHaveLength(0);
+    expect(guardian.events.filter((event) => event.type === 'pact/public-trace'))
+      .toHaveLength(0);
+  });
+
+  for (const projectedAtMonotonicMs of [-100, 6_000]) {
+    test(`rejects an unowned existing trace timestamp ${projectedAtMonotonicMs}`, async () => {
+      releases.push(registerPactSessionEventTypes());
+      const { fixtures, registry, sessionByRole } = await openRegistry();
+      const session = sessionByRole.Rewriter;
+      const shard = fixtures.shards.Rewriter;
+      const originalAppend = session.append.bind(session);
+      let failTraceAppend = true;
+      vi.spyOn(session, 'append').mockImplementation(((type: string, data: unknown) => {
+        if (type === 'pact/public-trace' && failTraceAppend) {
+          failTraceAppend = false;
+          throw new Error('injected unowned-trace setup failure');
+        }
+        return (originalAppend as unknown as (
+          appendType: string,
+          appendData: unknown,
+        ) => SessionEvent)(type, data);
+      }) as typeof session.append);
+      await expect(registry.acceptShard(session, shard))
+        .rejects.toThrow('injected unowned-trace setup failure');
+      const acceptedContext = registry.acceptedCouncilShardContexts(
+        fixtures.turn.snapshot.turnId,
+      ).find((context) => context.shard.shardId === shard.shardId);
+      if (acceptedContext === undefined) throw new Error('expected pending shard');
+      session.append('pact/public-trace', {
+        caseSessionId: shard.caseSessionId,
+        turnId: shard.turnId,
+        role: shard.role,
+        text: shard.publicTrace,
+        sourceContributionHash: acceptedContext.receipt.payloadHash,
+        acceptanceSequence: acceptedContext.receipt.acceptanceSequence,
+        phase: 'COUNCIL',
+        provisional: true,
+        projectedAtMonotonicMs,
+      });
+      const scope = persistenceContext(session);
+      const now = vi.fn(() => 4_800);
+
+      await expect(recoverCouncilTraceProjection({
+        ctx: scope.ctx,
+        registry,
+        acceptedSessions: [session],
+        session,
+        turn: fixtures.turn,
+        shard,
+        shardPayloadHash: acceptedContext.receipt.payloadHash,
+        acceptanceSequence: acceptedContext.receipt.acceptanceSequence,
+        now,
+      })).rejects.toMatchObject({
+        name: 'PactDurabilityError',
+        code: 'PACT_DURABILITY_INCOMPLETE',
+      });
+      expect(now).not.toHaveBeenCalled();
+      expect(session.events.filter((event) => event.type === 'pact/public-trace'))
+        .toHaveLength(1);
+      await expect(durableCouncilShard({
+        ctx: persistenceContext(session).ctx,
+        registry,
+        session,
+        receipt: acceptedContext.receipt,
+      })).rejects.toMatchObject({
+        name: 'PactDurabilityError',
+        code: 'PACT_DURABILITY_INCOMPLETE',
+      });
+      expect(registry.durableProposal(fixtures.turn.snapshot.turnId).durableShards)
+        .toHaveLength(0);
+    });
+  }
+
   test('fails closed when the accepted child-session scope is incomplete', async () => {
     releases.push(registerPactSessionEventTypes());
     const { fixtures, registry, sessionByRole } = await openRegistry();

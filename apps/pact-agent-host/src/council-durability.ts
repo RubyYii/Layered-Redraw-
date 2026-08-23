@@ -474,6 +474,15 @@ const assertRecoveryScope = (
   if (contexts.length === 0) {
     incomplete(`recovery shard ${input.shard.shardId}`);
   }
+  const expectedSessionIds = new Set(contexts.map((context) => context.sessionId));
+  const suppliedSessionIds = new Set(sessionsById.keys());
+  if (
+    expectedSessionIds.size !== suppliedSessionIds.size ||
+    [...expectedSessionIds].some((sessionId) => !suppliedSessionIds.has(sessionId)) ||
+    [...suppliedSessionIds].some((sessionId) => !expectedSessionIds.has(sessionId))
+  ) {
+    incomplete(`recovery shard ${input.shard.shardId}`);
+  }
   for (const context of contexts) {
     if (!sessionsById.has(context.sessionId)) {
       incomplete(`recovery shard ${input.shard.shardId}`);
@@ -676,27 +685,28 @@ export const recoverCouncilTraceProjection = async (
     incomplete(`recovery shard ${input.shard.shardId}`);
   }
   const existingTrace = traceRecords[0];
+  const ownsTraceMetadata =
+    earliest.context.receipt.traceEventSeq !== null &&
+    earliest.context.projectionAtMonotonicMs !== null;
+  if (
+    (earliest.context.receipt.traceEventSeq !== null) !==
+      (earliest.context.projectionAtMonotonicMs !== null)
+  ) {
+    incomplete(`recovery shard ${earliest.shard.shardId}`);
+  }
   if (earliest.context.receipt.traceEventSeq !== null && existingTrace === undefined) {
     incomplete(`recovery shard ${earliest.shard.shardId}`);
   }
   if (existingTrace !== undefined) {
-    const projectedAtMonotonicMs = existingTrace.event.data.projectedAtMonotonicMs;
-    const verifiedProjectedAt = typeof projectedAtMonotonicMs === 'number' &&
-      Number.isFinite(projectedAtMonotonicMs)
-      ? projectedAtMonotonicMs
-      : incomplete(`recovery trace ${existingTrace.event.seq}`);
+    if (!ownsTraceMetadata) {
+      incomplete(`recovery trace ${existingTrace.event.seq}`);
+    }
     if (
-      earliest.context.receipt.traceEventSeq === null ||
-      earliest.context.projectionAtMonotonicMs === null
+      existingTrace.event.seq !== earliest.context.receipt.traceEventSeq ||
+      existingTrace.event.data.projectedAtMonotonicMs !==
+        earliest.context.projectionAtMonotonicMs
     ) {
-      input.registry.recordRecoveredCouncilTrace({
-        turnId: registeredTurn.snapshot.turnId,
-        shardId: earliest.shard.shardId,
-        payloadHash: earliest.context.receipt.payloadHash,
-        acceptanceSequence: earliest.context.receipt.acceptanceSequence,
-        traceEventSeq: existingTrace.event.seq,
-        projectedAtMonotonicMs: verifiedProjectedAt,
-      });
+      incomplete(`recovery trace ${existingTrace.event.seq}`);
     }
     return {
       appended: false,
