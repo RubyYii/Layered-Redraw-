@@ -189,7 +189,10 @@ interface TurnState {
   closed: boolean;
   firstTraceAcceptanceSequence: number | null;
   frozenDurableShardIds: ReadonlySet<string> | null;
+  frozenDurableShardPayloadHashes: ReadonlyMap<string, string> | null;
   frozenDurableCommit: boolean;
+  frozenDurableCommitPayloadHash: string | null;
+  frozenDurableCommitSelection: readonly string[] | null;
   readonly canonicalSessionsById: Map<string, Session>;
   readonly shards: Map<string, AcceptedShard>;
   commit?: AcceptedCommit;
@@ -220,6 +223,47 @@ const payloadHashOf = async (value: unknown): Promise<string> => {
 
 const traceEligible = (role: CouncilRole): role is 'Witness' | 'Rewriter' =>
   role === 'Witness' || role === 'Rewriter';
+
+const postBarrierCommitReason = (
+  state: TurnState,
+  selectedShardHashes: readonly string[],
+): string | null => {
+  if (new Set(selectedShardHashes).size !== selectedShardHashes.length) {
+    return 'PACT_CONDUCTOR_COMMIT_SELECTION_DUPLICATE';
+  }
+  const frozenPayloadHashes = state.frozenDurableShardPayloadHashes;
+  if (frozenPayloadHashes === null) {
+    return 'PACT_SELECTION_BARRIER_NOT_FROZEN';
+  }
+
+  const matchingShardIdsByHash = new Map<string, string[]>();
+  for (const [shardId, payloadHash] of frozenPayloadHashes.entries()) {
+    const shardIds = matchingShardIdsByHash.get(payloadHash) ?? [];
+    shardIds.push(shardId);
+    matchingShardIdsByHash.set(payloadHash, shardIds);
+  }
+  for (const payloadHash of selectedShardHashes) {
+    const matchingShardIds = matchingShardIdsByHash.get(payloadHash);
+    if (matchingShardIds === undefined || matchingShardIds.length === 0) {
+      return 'PACT_CONDUCTOR_COMMIT_SELECTION_NOT_FROZEN';
+    }
+    if (matchingShardIds.length !== 1) {
+      return 'PACT_CONDUCTOR_COMMIT_SELECTION_NOT_UNIQUE';
+    }
+  }
+
+  const selectedRoles = new Set<CouncilRole>();
+  for (const payloadHash of selectedShardHashes) {
+    const shardId = matchingShardIdsByHash.get(payloadHash)?.[0];
+    const shard = shardId === undefined ? undefined : state.shards.get(shardId);
+    if (shard === undefined) return 'PACT_CONDUCTOR_COMMIT_SELECTION_NOT_FROZEN';
+    selectedRoles.add(shard.shard.role);
+  }
+  if (state.turn.requiredRoles.some((role) => !selectedRoles.has(role))) {
+    return 'PACT_CONDUCTOR_COMMIT_REQUIRED_ROLE_MISSING';
+  }
+  return null;
+};
 
 const defaultMonotonicNow = (): number => {
   if (typeof globalThis.performance?.now === 'function') {
@@ -336,7 +380,10 @@ export class CouncilRegistry {
       closed: false,
       firstTraceAcceptanceSequence: null,
       frozenDurableShardIds: null,
+      frozenDurableShardPayloadHashes: null,
       frozenDurableCommit: false,
+      frozenDurableCommitPayloadHash: null,
+      frozenDurableCommitSelection: null,
       canonicalSessionsById: new Map(),
       shards: new Map(),
     });
@@ -825,12 +872,19 @@ export class CouncilRegistry {
       if (state.commit.receipt.payloadHash === payloadHash) return state.commit.receipt;
       return reject('PACT_CONDUCTOR_COMMIT_ID_CONFLICT');
     }
-    if (state.closed || state.selectionBarrierClosed) {
+    if (state.closed) {
       return reject('PACT_SELECTION_BARRIER_CLOSED');
     }
     const now = this.now();
     if (!isBeforeCouncilDeadline(now, state.turn.deadlineAtMonotonicMs)) {
       return reject('PACT_CONDUCTOR_COMMIT_DEADLINE_CLOSED');
+    }
+    if (state.selectionBarrierClosed) {
+      const selectionReason = postBarrierCommitReason(
+        state,
+        commit.selectedShardHashes,
+      );
+      if (selectionReason !== null) return reject(selectionReason);
     }
     const event = session.append('pact/conductor-commit', {
       turnId: commit.turnId,
@@ -891,6 +945,13 @@ export class CouncilRegistry {
       throw new Error('PACT_COUNCIL_DURABLE_COMMIT_RECEIPT_MISMATCH');
     }
     accepted.durable = true;
+    if (state.selectionBarrierClosed) {
+      state.frozenDurableCommit = true;
+      state.frozenDurableCommitPayloadHash = accepted.receipt.payloadHash;
+      state.frozenDurableCommitSelection = Object.freeze([
+        ...accepted.commit.selectedShardHashes,
+      ]);
+    }
   }
 
   closeSelectionBarrier(turnId: string): void {
@@ -898,12 +959,20 @@ export class CouncilRegistry {
     if (state === undefined) throw new Error('PACT_COUNCIL_TURN_NOT_OPEN');
     if (state.selectionBarrierClosed) return;
     state.selectionBarrierClosed = true;
-    state.frozenDurableShardIds = new Set(
+    const frozenDurableShardPayloadHashes = new Map(
       [...state.shards.entries()]
         .filter(([, entry]) => entry.durable)
-        .map(([shardId]) => shardId),
+        .map(([shardId, entry]) => [shardId, entry.receipt.payloadHash] as const),
     );
+    state.frozenDurableShardIds = new Set(frozenDurableShardPayloadHashes.keys());
+    state.frozenDurableShardPayloadHashes = frozenDurableShardPayloadHashes;
     state.frozenDurableCommit = state.commit?.durable ?? false;
+    state.frozenDurableCommitPayloadHash = state.commit?.durable
+      ? state.commit.receipt.payloadHash
+      : null;
+    state.frozenDurableCommitSelection = state.commit?.durable
+      ? Object.freeze([...state.commit.commit.selectedShardHashes])
+      : null;
   }
 
   durableProposal(turnId: string): CouncilProposalSnapshot {
@@ -913,7 +982,9 @@ export class CouncilRegistry {
       .filter((entry) =>
         entry.durable &&
         (!state.selectionBarrierClosed ||
-          state.frozenDurableShardIds?.has(entry.shard.shardId) === true))
+          (state.frozenDurableShardIds?.has(entry.shard.shardId) === true &&
+            state.frozenDurableShardPayloadHashes?.get(entry.shard.shardId) ===
+              entry.receipt.payloadHash)))
       .sort((left, right) =>
         left.receipt.acceptanceSequence - right.receipt.acceptanceSequence);
     const durableShards = durableEntries.map((entry) => ({
@@ -921,7 +992,9 @@ export class CouncilRegistry {
       payloadHash: entry.receipt.payloadHash,
       acceptanceSequence: entry.receipt.acceptanceSequence,
     }));
-    const selectedShardHashes = state.commit?.commit.selectedShardHashes ?? [];
+    const selectedShardHashes = state.selectionBarrierClosed
+      ? state.frozenDurableCommitSelection ?? state.commit?.commit.selectedShardHashes ?? []
+      : state.commit?.commit.selectedShardHashes ?? [];
     const selectedEntries = selectedShardHashes.map((payloadHash) =>
       durableEntries.find((entry) => entry.receipt.payloadHash === payloadHash));
     const selectedEntriesComplete =
@@ -934,14 +1007,19 @@ export class CouncilRegistry {
     const requiredRolesSelected = selectedEntriesComplete &&
       state.turn.requiredRoles.every((role) =>
         completeSelectedEntries.some((entry) => entry.shard.role === role));
+    const acceptedCommit = state.commit;
+    const frozenCommitAuthorityMatches =
+      acceptedCommit?.durable === true &&
+      state.frozenDurableCommitPayloadHash === acceptedCommit.receipt.payloadHash &&
+      state.frozenDurableCommitSelection !== null;
     const durableCommit =
-      state.commit?.durable &&
+      frozenCommitAuthorityMatches &&
       state.selectionBarrierClosed &&
       state.frozenDurableCommit &&
       requiredRolesSelected
         ? {
-            commit: snapshot(state.commit.commit),
-            payloadHash: state.commit.receipt.payloadHash,
+            commit: snapshot(acceptedCommit.commit),
+            payloadHash: acceptedCommit.receipt.payloadHash,
           }
         : null;
     return deepFreeze({

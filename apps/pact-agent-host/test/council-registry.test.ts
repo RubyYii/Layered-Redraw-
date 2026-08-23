@@ -130,6 +130,41 @@ const persistenceContextForSessions = (sessions: readonly Session[]) => {
   };
 };
 
+const requiredCouncilRoles = [
+  'CaseConductor',
+  'Witness',
+  'Archivist',
+  'Rewriter',
+  'Guardian',
+] as const;
+
+const acceptAndDurableAllShards = async ({
+  fixtures,
+  registry,
+  sessionByRole,
+}: {
+  fixtures: Awaited<ReturnType<typeof createFullCouncilFixtures>>;
+  registry: CouncilRegistry;
+  sessionByRole: Record<CouncilTestRole, Session>;
+}): Promise<Record<CouncilTestRole, string>> => {
+  const payloadHashByRole = {} as Record<CouncilTestRole, string>;
+  for (const role of requiredCouncilRoles) {
+    const accepted = await registry.acceptShard(
+      sessionByRole[role],
+      { ...fixtures.shards[role], childSessionId: String(sessionByRole[role].id) },
+    );
+    if (!accepted.accepted) throw new Error(`expected accepted ${role} shard`);
+    await durableCouncilShard({
+      ctx: persistenceContext(sessionByRole[role]).ctx,
+      registry,
+      session: sessionByRole[role],
+      receipt: accepted,
+    });
+    payloadHashByRole[role] = accepted.payloadHash;
+  }
+  return payloadHashByRole;
+};
+
 describe('council-v2 public recovery API', () => {
   type PublicRegistryHasRecoveredTraceMutation =
     'recordRecoveredCouncilTrace' extends keyof pactAgentHostApi.CouncilRegistry
@@ -382,6 +417,205 @@ describe('council-v2 registry admission', () => {
     if (accepted.accepted) {
       expect(accepted.acceptedAtMonotonicMs).not.toBe(987_654_321_000);
     }
+  });
+});
+
+describe('council-v2 post-barrier commit admission', () => {
+  const completeCommit = (
+    fixtures: Awaited<ReturnType<typeof createFullCouncilFixtures>>,
+    payloadHashByRole: Record<CouncilTestRole, string>,
+    selectedRoles: readonly CouncilTestRole[] = requiredCouncilRoles,
+  ) => ({
+    ...fixtures.proposedCommit,
+    selectedShardHashes: selectedRoles.map((role) => payloadHashByRole[role]),
+  });
+
+  test('accepts a valid commit after the durable-shard selection barrier', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const opened = await openRegistry();
+    const payloadHashByRole = await acceptAndDurableAllShards(opened);
+    opened.registry.closeSelectionBarrier(opened.fixtures.turn.snapshot.turnId);
+
+    const accepted = await opened.registry.acceptCommit(
+      opened.sessionByRole.CaseConductor,
+      completeCommit(opened.fixtures, payloadHashByRole),
+    );
+
+    expect(accepted).toMatchObject({
+      accepted: true,
+      turnId: opened.fixtures.turn.snapshot.turnId,
+    });
+  });
+
+  test('rejects unknown post-barrier selections as outside the frozen durable set', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const opened = await openRegistry();
+    const payloadHashByRole = await acceptAndDurableAllShards(opened);
+    opened.registry.closeSelectionBarrier(opened.fixtures.turn.snapshot.turnId);
+
+    const accepted = await opened.registry.acceptCommit(
+      opened.sessionByRole.CaseConductor,
+      {
+        ...completeCommit(opened.fixtures, payloadHashByRole),
+        selectedShardHashes: [
+          ...requiredCouncilRoles.slice(0, -1).map((role) => payloadHashByRole[role]),
+          'f'.repeat(64),
+        ],
+      },
+    );
+
+    expect(accepted).toMatchObject({
+      accepted: false,
+      reasonCode: 'PACT_CONDUCTOR_COMMIT_SELECTION_NOT_FROZEN',
+    });
+  });
+
+  test('rejects a post-barrier selection for a shard that was not durable at the freeze', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const opened = await openRegistry();
+    const payloadHashByRole = {} as Record<CouncilTestRole, string>;
+    for (const role of requiredCouncilRoles) {
+      const accepted = await opened.registry.acceptShard(
+        opened.sessionByRole[role],
+        { ...opened.fixtures.shards[role], childSessionId: String(opened.sessionByRole[role].id) },
+      );
+      if (!accepted.accepted) throw new Error(`expected accepted ${role} shard`);
+      payloadHashByRole[role] = accepted.payloadHash;
+      if (role !== 'Guardian') {
+        await durableCouncilShard({
+          ctx: persistenceContext(opened.sessionByRole[role]).ctx,
+          registry: opened.registry,
+          session: opened.sessionByRole[role],
+          receipt: accepted,
+        });
+      }
+    }
+    opened.registry.closeSelectionBarrier(opened.fixtures.turn.snapshot.turnId);
+
+    const accepted = await opened.registry.acceptCommit(
+      opened.sessionByRole.CaseConductor,
+      completeCommit(opened.fixtures, payloadHashByRole),
+    );
+
+    expect(accepted).toMatchObject({
+      accepted: false,
+      reasonCode: 'PACT_CONDUCTOR_COMMIT_SELECTION_NOT_FROZEN',
+    });
+  });
+
+  test('rejects a post-barrier commit that omits a required role', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const opened = await openRegistry();
+    const payloadHashByRole = await acceptAndDurableAllShards(opened);
+    opened.registry.closeSelectionBarrier(opened.fixtures.turn.snapshot.turnId);
+
+    const accepted = await opened.registry.acceptCommit(
+      opened.sessionByRole.CaseConductor,
+      completeCommit(opened.fixtures, payloadHashByRole, [
+        'CaseConductor',
+        'Archivist',
+        'Rewriter',
+        'Guardian',
+      ]),
+    );
+
+    expect(accepted).toMatchObject({
+      accepted: false,
+      reasonCode: 'PACT_CONDUCTOR_COMMIT_REQUIRED_ROLE_MISSING',
+    });
+  });
+
+  test('rejects a shard admitted after the selection barrier', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const opened = await openRegistry();
+    await acceptAndDurableAllShards(opened);
+    opened.registry.closeSelectionBarrier(opened.fixtures.turn.snapshot.turnId);
+
+    const lateShard = {
+      ...opened.fixtures.shards.Guardian,
+      shardId: 'shard_guardian_late01',
+      childSessionId: String(opened.sessionByRole.Guardian.id),
+    };
+    const accepted = await opened.registry.acceptShard(
+      opened.sessionByRole.Guardian,
+      lateShard,
+    );
+
+    expect(accepted).toMatchObject({
+      accepted: false,
+      reasonCode: 'PACT_SELECTION_BARRIER_CLOSED',
+    });
+  });
+
+  test('rejects a conflicting second post-barrier commit', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const opened = await openRegistry();
+    const payloadHashByRole = await acceptAndDurableAllShards(opened);
+    opened.registry.closeSelectionBarrier(opened.fixtures.turn.snapshot.turnId);
+    const first = await opened.registry.acceptCommit(
+      opened.sessionByRole.CaseConductor,
+      completeCommit(opened.fixtures, payloadHashByRole),
+    );
+    if (!first.accepted) throw new Error('expected first post-barrier commit');
+
+    const conflicting = await opened.registry.acceptCommit(
+      opened.sessionByRole.CaseConductor,
+      {
+        ...completeCommit(opened.fixtures, payloadHashByRole),
+        selectedDissentIds: [],
+      },
+    );
+
+    expect(conflicting).toMatchObject({
+      accepted: false,
+      reasonCode: 'PACT_CONDUCTOR_COMMIT_ID_CONFLICT',
+    });
+  });
+
+  test('is idempotent for an identical post-barrier commit', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const opened = await openRegistry();
+    const payloadHashByRole = await acceptAndDurableAllShards(opened);
+    opened.registry.closeSelectionBarrier(opened.fixtures.turn.snapshot.turnId);
+    const commit = completeCommit(opened.fixtures, payloadHashByRole);
+    const first = await opened.registry.acceptCommit(
+      opened.sessionByRole.CaseConductor,
+      commit,
+    );
+    const second = await opened.registry.acceptCommit(
+      opened.sessionByRole.CaseConductor,
+      commit,
+    );
+
+    expect(first).toEqual(second);
+    expect(opened.sessionByRole.CaseConductor.events.filter(
+      (event) => event.type === 'pact/conductor-commit',
+    )).toHaveLength(1);
+  });
+
+  test('does not expose a post-barrier commit before its durability receipt', async () => {
+    releases.push(registerPactSessionEventTypes());
+    const opened = await openRegistry();
+    const payloadHashByRole = await acceptAndDurableAllShards(opened);
+    opened.registry.closeSelectionBarrier(opened.fixtures.turn.snapshot.turnId);
+    const accepted = await opened.registry.acceptCommit(
+      opened.sessionByRole.CaseConductor,
+      completeCommit(opened.fixtures, payloadHashByRole),
+    );
+    if (!accepted.accepted) throw new Error('expected post-barrier commit');
+
+    expect(opened.registry.durableProposal(opened.fixtures.turn.snapshot.turnId).durableCommit)
+      .toBeNull();
+
+    await durableConductorCommit({
+      ctx: persistenceContext(opened.sessionByRole.CaseConductor).ctx,
+      registry: opened.registry,
+      session: opened.sessionByRole.CaseConductor,
+      receipt: accepted,
+    });
+
+    expect(opened.registry.durableProposal(opened.fixtures.turn.snapshot.turnId).durableCommit)
+      .toMatchObject({ payloadHash: accepted.payloadHash });
   });
 });
 

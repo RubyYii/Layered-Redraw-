@@ -24,6 +24,12 @@ import {
   registerPactTools,
   ROOT_PACT_TOOLS,
 } from './pact-tools.js';
+import {
+  COUNCIL_ROLE_TOOLS,
+  COUNCIL_ROOT_TOOLS,
+  registerCouncilTools,
+} from './council-tools.js';
+import { CouncilRegistry } from './council-registry.js';
 import { SubmissionRegistry } from './submission-registry.js';
 
 const childRoleByLabel = new Map<string, Exclude<PactRole, 'CaseConductor'>>([
@@ -45,13 +51,19 @@ const roleForContinuableChild = (session: Session): Exclude<PactRole, 'CaseCondu
 interface FoundationHarnessCommonOptions {
   readonly persistenceRoot: string;
   readonly now?: () => number;
+  readonly toolProfile?: PactToolProfile;
+  readonly conductorSelection?: {
+    readonly provider: string;
+    readonly model: string;
+  };
 }
+
+export type PactToolProfile = 'foundation-v1' | 'council-v2';
 
 export interface ScriptedFoundationHarnessOptions
   extends FoundationHarnessCommonOptions {
   readonly scriptedAdapter: LlmAdapter;
   readonly mountAdapters?: never;
-  readonly conductorSelection?: never;
 }
 
 export interface ProviderFoundationHarnessOptions
@@ -71,6 +83,7 @@ export type FoundationHarnessOptions =
 export interface FoundationHarness {
   readonly ctx: Context;
   readonly registry: SubmissionRegistry;
+  readonly councilRegistry?: CouncilRegistry;
   readonly persistenceRoot: string;
   createConductor(
     sessionId: SessionId,
@@ -116,7 +129,16 @@ export const createFoundationHarness = async (
     model: 'pact-fake',
   };
   const registry = new SubmissionRegistry(options.now);
-  registerPactTools(ctx, registry);
+  const councilRegistry = options.toolProfile === 'council-v2'
+    ? options.now === undefined
+      ? new CouncilRegistry({ submissions: registry })
+      : new CouncilRegistry({ submissions: registry, now: options.now })
+    : undefined;
+  if (councilRegistry === undefined) {
+    registerPactTools(ctx, registry);
+  } else {
+    registerCouncilTools(ctx, councilRegistry);
+  }
   ctx.subagents.registerContinuableSetup((childCtx) => {
     const child = childCtx.agent;
     if (child === undefined) throw new Error('PACT_CHILD_AGENT_REQUIRED');
@@ -129,9 +151,12 @@ export const createFoundationHarness = async (
         `PACT runtime identity: role=${role}; sessionId=${child.id}. ` +
         'Use these exact runtime-bound values in PACT tool arguments; never invent or alter them.',
     });
+    if (councilRegistry !== undefined) {
+      childCtx.tools.restrict({ allow: COUNCIL_ROLE_TOOLS });
+    }
     return () => {
       releaseIdentity();
-      releaseBinding();
+      if (councilRegistry === undefined) releaseBinding();
     };
   });
 
@@ -139,6 +164,7 @@ export const createFoundationHarness = async (
   return {
     ctx,
     registry,
+    ...(councilRegistry === undefined ? {} : { councilRegistry }),
     persistenceRoot: options.persistenceRoot,
     createConductor: async (sessionId, conductorOptions = {}) => {
       const handle = await ctx.agents.create({
@@ -160,7 +186,11 @@ export const createFoundationHarness = async (
               `PACT runtime identity: role=CaseConductor; sessionId=${conductor.id}. ` +
               'Use these exact runtime-bound values in PACT tool arguments; never invent or alter them.',
           });
-          agentCtx.tools.restrict({ allow: ROOT_PACT_TOOLS });
+          agentCtx.tools.restrict({
+            allow: councilRegistry === undefined
+              ? ROOT_PACT_TOOLS
+              : COUNCIL_ROOT_TOOLS,
+          });
         },
       });
       if (conductorOptions.parked ?? true) {

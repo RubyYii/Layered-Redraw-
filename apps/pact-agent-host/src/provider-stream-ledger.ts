@@ -17,6 +17,7 @@ import type {
   ProviderCallEnvelope,
   ProviderToolCallReceipt,
 } from './contract-types.js';
+import type { CouncilRole } from './contract-types.js';
 import { CompatibilityDispatchError } from './dispatch-budget.js';
 import {
   createProviderAttemptRecord,
@@ -33,7 +34,20 @@ export interface ProviderStreamAssignment {
   readonly dispatches: readonly ProbeDispatch[];
   readonly attachmentId?: string;
   readonly deadlineAt?: number;
+  readonly council?: CouncilProviderAttemptMetadata;
 }
+
+export interface CouncilProviderAttemptMetadata {
+  readonly role: CouncilRole;
+  readonly phase: 'SHARD' | 'CONDUCTOR_COMMIT';
+  readonly snapshotHash: string;
+  readonly promptHash: string;
+  readonly declaredDispatchOrdinal: number;
+}
+
+export type ProviderLedgerAttemptRecord = ProviderAttemptRecord & {
+  readonly council?: CouncilProviderAttemptMetadata;
+};
 
 export interface ProviderDispatchLedgerOptions {
   readonly runId: string;
@@ -46,7 +60,7 @@ export interface ProviderDispatchLedgerOptions {
 export interface ProviderDispatchLedger {
   readonly sentDispatches: number;
   assignSession(assignment: ProviderStreamAssignment): void;
-  attemptRecords(): readonly ProviderAttemptRecord[];
+  attemptRecords(): readonly ProviderLedgerAttemptRecord[];
   assertComplete(): ProviderDispatchLedgerSummary;
 }
 
@@ -69,6 +83,12 @@ interface PendingRetry {
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+const codeOf = (error: unknown): string | undefined => {
+  if (error === null || typeof error !== 'object') return undefined;
+  const code = (error as { readonly code?: unknown }).code;
+  return typeof code === 'string' && code.length > 0 ? code : undefined;
+};
 
 const detailCode = (value: string): string => {
   const normalized = value.toUpperCase().replaceAll(/[^A-Z0-9_]/g, '_')
@@ -105,7 +125,10 @@ const envelopeFinish = (
   thrown: unknown,
 ): ProviderCallEnvelope['finish'] => {
   if (thrown !== undefined) {
-    return { kind: 'error', detailCode: detailCode(messageOf(thrown)) };
+    return {
+      kind: 'error',
+      detailCode: detailCode(codeOf(thrown) ?? messageOf(thrown)),
+    };
   }
   if (chunk === null) return { kind: 'error', detailCode: 'FINISH_MISSING' };
   switch (chunk.reason.kind) {
@@ -135,13 +158,25 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
   private readonly currentAssignmentBySession =
     new Map<string, AssignmentState>();
   private readonly assignmentStates: AssignmentState[] = [];
-  private readonly records: ProviderAttemptRecord[] = [];
+  private readonly records: ProviderLedgerAttemptRecord[] = [];
   private readonly latestRecordBySession = new Map<string, number>();
   private readonly recordByRawToolCallId = new Map<string, number>();
   private readonly pendingAcceptedDomainTools =
     new Map<string, (readonly string[])[]>();
   private readonly pendingRetryBySession = new Map<string, PendingRetry>();
   private readonly retriedProviders = new Set<CompatibilityProvider>();
+  private readonly councilInitialOrdinalsByProvider = new Map<
+    CompatibilityProvider,
+    Set<number>
+  >();
+  private readonly councilInitialCompletedByProvider = new Map<
+    CompatibilityProvider,
+    Set<number>
+  >();
+  private readonly councilWaveWaiters = new Map<
+    CompatibilityProvider,
+    Array<() => void>
+  >();
   private readonly now: () => number;
   private readonly deadlineAt: number;
 
@@ -156,7 +191,7 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
       this.intercept(request, next)
     );
     ctx.on('agent/request-error', async (payload, next) => {
-      if (this.authorizeRetry(
+      if (await this.authorizeRetry(
         String(payload.agent.id),
         payload.provider,
         payload.failure,
@@ -194,6 +229,10 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
         ]);
       } else if (event.type === 'pact/draft') {
         this.observeAcceptedDomainTool(sessionId, ['pact_submit_draft']);
+      } else if (event.type === 'pact/council-shard') {
+        this.observeAcceptedDomainTool(sessionId, ['pact_submit_council_shard']);
+      } else if (event.type === 'pact/conductor-commit') {
+        this.observeAcceptedDomainTool(sessionId, ['pact_submit_conductor_commit']);
       } else if (event.type === 'pact/quarantine') {
         this.observeQuarantinedDomainTool(sessionId);
       }
@@ -230,9 +269,22 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     };
     this.currentAssignmentBySession.set(sessionId, state);
     this.assignmentStates.push(state);
+    if (assignment.council?.phase === 'SHARD') {
+      const expected = this.councilInitialOrdinalsByProvider.get(
+        assignment.provider,
+      ) ?? new Set<number>();
+      expected.add(assignment.council.declaredDispatchOrdinal);
+      this.councilInitialOrdinalsByProvider.set(assignment.provider, expected);
+      if (!this.councilInitialCompletedByProvider.has(assignment.provider)) {
+        this.councilInitialCompletedByProvider.set(
+          assignment.provider,
+          new Set<number>(),
+        );
+      }
+    }
   }
 
-  attemptRecords(): readonly ProviderAttemptRecord[] {
+  attemptRecords(): readonly ProviderLedgerAttemptRecord[] {
     return [...this.records];
   }
 
@@ -383,7 +435,8 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
         `${state.assignment.probeId} retry has no previous attempt record`,
       );
     }
-    const record = createProviderAttemptRecord({
+    const record: ProviderLedgerAttemptRecord = {
+      ...createProviderAttemptRecord({
       probeId: state.assignment.probeId,
       provider: state.assignment.provider,
       route: state.assignment.route,
@@ -398,10 +451,14 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
           state.assignment.attachmentId !== undefined
         ? { attachmentId: state.assignment.attachmentId }
         : {}),
-    }, this.options.runId, previousRecord === undefined
+      }, this.options.runId, previousRecord === undefined
       ? 1
       : previousRecord.attempt + 1, nextOrdinal, assignmentDeadlineAt,
-    startedAt, previousRecord?.contract.callId ?? null);
+      startedAt, previousRecord?.contract.callId ?? null),
+      ...(state.assignment.council === undefined
+        ? {}
+        : { council: state.assignment.council }),
+    };
     this.sent = nextOrdinal;
     if (retry === undefined) {
       state.nextDispatch += 1;
@@ -412,14 +469,14 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     state.recordIndexes[dispatchIndex] = recordIndex;
     state.allRecordIndexes.push(recordIndex);
     this.latestRecordBySession.set(sessionId, recordIndex);
-    return this.observeStream(recordIndex, next());
+    return this.observeStream(recordIndex, state, next());
   }
 
-  private authorizeRetry(
+  private async authorizeRetry(
     sessionId: string,
     providerRoute: string,
     failure: LlmFailure,
-  ): boolean {
+  ): Promise<boolean> {
     if (failure.code !== 'TRANSPORT') return false;
     const state = this.currentAssignmentBySession.get(sessionId);
     if (
@@ -433,6 +490,10 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
       ) ||
       this.sent >= this.options.maximumDispatches
     ) return false;
+    if (state.assignment.council?.phase === 'SHARD') {
+      await this.waitForCouncilWave(state.assignment.provider);
+      if (this.retriedProviders.has(state.assignment.provider)) return false;
+    }
     const dispatchIndex = state.nextDispatch - 1;
     const previousRecordIndex = state.recordIndexes[dispatchIndex];
     const previousRecord = previousRecordIndex === undefined
@@ -450,6 +511,10 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
       ) === true
     );
     if (sideEffectAccepted) return false;
+    if (state.assignment.council?.phase === 'SHARD') {
+      const winner = this.councilRetryWinner(state.assignment.provider);
+      if (winner !== state) return false;
+    }
     this.retriedProviders.add(state.assignment.provider);
     this.pendingRetryBySession.set(sessionId, {
       dispatchIndex,
@@ -460,6 +525,7 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
 
   private async *observeStream(
     recordIndex: number,
+    state: AssignmentState,
     stream: AsyncIterable<StreamChunk>,
   ): AsyncIterable<StreamChunk> {
     let firstChunkAt: string | null = null;
@@ -493,7 +559,79 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
             record.contract.lateQuarantined || this.now() > record.deadlineAt,
         });
       }
+      const council = state.assignment.council;
+      if (council?.phase === 'SHARD' && record?.attempt === 1) {
+        this.markCouncilInitialCompleted(
+          state.assignment.provider,
+          council.declaredDispatchOrdinal,
+        );
+      }
     }
+  }
+
+  private markCouncilInitialCompleted(
+    provider: CompatibilityProvider,
+    declaredDispatchOrdinal: number,
+  ): void {
+    const completed = this.councilInitialCompletedByProvider.get(provider) ??
+      new Set<number>();
+    completed.add(declaredDispatchOrdinal);
+    this.councilInitialCompletedByProvider.set(provider, completed);
+    const expected = this.councilInitialOrdinalsByProvider.get(provider);
+    if (expected === undefined || [...expected].some((ordinal) => !completed.has(ordinal))) {
+      return;
+    }
+    for (const resolve of this.councilWaveWaiters.get(provider) ?? []) resolve();
+    this.councilWaveWaiters.delete(provider);
+  }
+
+  private async waitForCouncilWave(provider: CompatibilityProvider): Promise<void> {
+    const expected = this.councilInitialOrdinalsByProvider.get(provider);
+    const completed = this.councilInitialCompletedByProvider.get(provider);
+    if (
+      expected === undefined ||
+      completed === undefined ||
+      [...expected].every((ordinal) => completed.has(ordinal))
+    ) return;
+    await new Promise<void>((resolve) => {
+      const waiters = this.councilWaveWaiters.get(provider) ?? [];
+      waiters.push(resolve);
+      this.councilWaveWaiters.set(provider, waiters);
+    });
+  }
+
+  private councilRetryWinner(
+    provider: CompatibilityProvider,
+  ): AssignmentState | undefined {
+    const candidates = this.assignmentStates
+      .filter((candidate) =>
+        candidate.assignment.provider === provider &&
+        candidate.assignment.council?.phase === 'SHARD' &&
+        candidate.assignment.council.declaredDispatchOrdinal !== undefined)
+      .map((candidate) => {
+        const index = candidate.recordIndexes[0];
+        const record = index === undefined ? undefined : this.records[index];
+        return { candidate, record };
+      })
+      .filter(({ candidate, record }) =>
+        record !== undefined &&
+        record.attempt === 1 &&
+        record.contract.finish.kind === 'error' &&
+        record.contract.finish.detailCode === 'TRANSPORT' &&
+        candidate.allRecordIndexes.every((recordIndex) =>
+          this.records[recordIndex]?.contract.toolCalls.some((receipt) =>
+            receipt.status === 'accepted'
+          ) !== true
+        ) &&
+        this.now() < Math.min(
+          this.deadlineAt,
+          candidate.assignment.deadlineAt ?? this.deadlineAt,
+        )
+      )
+      .sort((left, right) =>
+        (left.candidate.assignment.council?.declaredDispatchOrdinal ?? Infinity) -
+        (right.candidate.assignment.council?.declaredDispatchOrdinal ?? Infinity));
+    return candidates[0]?.candidate;
   }
 
   private observeToolCall(
@@ -531,8 +669,10 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
         receipt.toolCallId === toolCallId
           ? {
               ...receipt,
-              status: rejected || receipt.status === 'rejected'
-                ? 'rejected'
+              status: receipt.status === 'accepted'
+                ? 'accepted'
+                : rejected || receipt.status === 'rejected'
+                  ? 'rejected'
                 : 'accepted',
             }
           : receipt

@@ -114,3 +114,13 @@ export {
   type FreezeCouncilTurnInput,
   type FrozenCouncilTurn,
 } from './council-turn.js';
+export {
+  runCouncilRuntime,
+  type CouncilAttemptRecord,
+  type CouncilDispatchPhase,
+  type CouncilPublicTrace,
+  type CouncilRuntimeOptions,
+  type CouncilRuntimeOrchestration,
+  type CouncilRuntimeResult,
+  type CouncilRuntimeTiming,
+} from './council-runtime.js';
