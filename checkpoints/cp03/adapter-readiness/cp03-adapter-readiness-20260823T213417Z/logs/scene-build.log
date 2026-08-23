@@ -1,0 +1,38 @@
+commandId: scene-build
+cwd: apps/scene-builder
+command: npm run build
+exitCode: 0
+signal: none
+--- stdout ---
+
+> blockout-studio@0.1.0 build
+> vite build
+
+vite v8.2.1 building client environment for production...
+[2Ktransforming...✓ 149 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                          56.83 kB │ gzip:    13.24 kB
+dist/assets/cp02-mutable-room.blockout-CQbr75jP.json  3,362.35 kB │ gzip: 2,224.68 kB
+dist/assets/index-Ck276f8w.css                           67.14 kB │ gzip:    13.65 kB
+dist/assets/SkeletonUtils-Bs1bXnap.js                     0.07 kB │ gzip:     0.08 kB
+dist/assets/asset-runtime-BcpNktDj.js                     0.10 kB │ gzip:     0.11 kB
+dist/assets/preload-helper-Czpn1I53.js                    1.19 kB │ gzip:     0.67 kB
+dist/assets/SkeletonUtils-BN3wkecJ.js                     3.99 kB │ gzip:     1.53 kB
+dist/assets/rapier-runtime-BYyiv7rl.js                    4.03 kB │ gzip:     1.75 kB
+dist/assets/OBJLoader-BAS9YXua.js                         8.60 kB │ gzip:     2.84 kB
+dist/assets/spatial-bridge-runtime-BIPBLFV0.js            9.62 kB │ gzip:     4.55 kB
+dist/assets/browser-DURwjvFn.js                          15.23 kB │ gzip:     7.24 kB
+dist/assets/asset-runtime-dAQOwqSp.js                    27.53 kB │ gzip:    10.20 kB
+dist/assets/GLTFLoader-DgeoEIjI.js                       43.86 kB │ gzip:    13.05 kB
+dist/assets/project-io-Xea2WahT.js                       49.84 kB │ gzip:    16.20 kB
+dist/assets/agent-governance-SCZZAKDn.js                 52.70 kB │ gzip:    17.32 kB
+dist/assets/scene-engine-BNphpE0E.js                     84.31 kB │ gzip:    25.48 kB
+dist/assets/schema-runtime-Buzc0lFo.js                  168.22 kB │ gzip:    44.27 kB
+dist/assets/three.core-CLeYSeyB.js                      249.70 kB │ gzip:    66.94 kB
+dist/assets/index-B6eYtRMx.js                           480.85 kB │ gzip:   122.93 kB
+dist/assets/rapier-C20MrDoZ.js                        2,853.74 kB │ gzip: 1,094.44 kB
+
+✓ built in 224ms
+
+--- stderr ---

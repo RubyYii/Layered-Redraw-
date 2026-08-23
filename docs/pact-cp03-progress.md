@@ -38,7 +38,7 @@ The viewer does not directly drive a character with keyboard/game controls in th
 | CP00 Reference Grammar | visual/theoretical grammar and checkpoint media | `ARCHIVED`; human visual direction recorded | preserve as source, not final 3D proof |
 | CP01 Asset Bake-off | compare public and generated 3D candidates | `PARTIAL`; preflight and fixed public candidates exist, formal model bake-off incomplete | decide whether a generated challenger is still needed |
 | CP02 Mutable Room / One Reframe | source-locked room, governed add/move/undo/reject, real local assets | `CHECKPOINT_ARCHIVED`, runtime tested, artistic `R2 KEEP`, public release false | frozen; do not rewrite its evidence |
-| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `MERGED_LOCAL_SCRIPTED_VERIFIED + REMOTE_SYNC_VERIFIED + RUBY_FIVE_EFFECT_UI_ENGINEERING_VERIFIED + GEMINI_37_ADAPTER_STAGE_A_LOCAL_VERIFIED_PENDING_MEDIA_ARCHIVE + THREE_FAILED_LIVE_RUNS`; the combined tree passes council, exact viewer approval, Ruby interaction/rollback, audience UI, five Three.js effects, rig, physics, persistence, archive-contract gates and the zero-call Gemini 3.7 catalog audit; no new provider call or formal checkpoint capture occurred | archive the Stage A engineering report, then complete the separately gated model/preflight/provider/human decisions and formal five-class encounter archive |
+| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `MERGED_LOCAL_SCRIPTED_VERIFIED + REMOTE_SYNC_VERIFIED + RUBY_FIVE_EFFECT_UI_ENGINEERING_VERIFIED + GEMINI_37_ADAPTER_STAGE_A_ENGINEERING_READY_ARCHIVED + THREE_FAILED_LIVE_RUNS`; the combined tree passes council, exact viewer approval, Ruby interaction/rollback, audience UI, five Three.js effects, rig, physics, persistence and archive-contract gates. Replacement Run 02 archives the zero-call Gemini 3.7 catalog audit plus reviewed local media; it made no provider call and is not a model-quality result or formal CP03 capture. | complete the separately gated Stage B model/provider/human decisions, Stage C representative 3D encounter and formal five-class archive |
 | CP04 Rights-aware Retrieval | local semantic search over cleared asset registry | `NOT_STARTED`; three fixed Case Pack assets are not a vector database | source records, embeddings, retrieval/Guardian UI |
 | CP05 Generated Gap Asset | one approved offline generated asset | `NOT_STARTED` | separately authorised model/API or local generation bake-off |
 | CP06 Four Positions | 0/1/4-person role and takeover behaviour | `NOT_STARTED` | participant protocol and role runtime |
@@ -89,7 +89,7 @@ Ruby owns the 3D execution primitives and authored stage. New CP03 code should c
 | `3bdf13f` | fixed 8 planned / 10 maximum provider contract | removes receipt-consumption streams and lowers the conservative cost ceiling |
 | `1558a01` | parallel representative wave and settlement isolation | verifies one-stream tool probes, parked settlement sinks, 2.5/8/12 timing facts and fail-fast late quarantine with scripted providers |
 | `0941cbb`–`3ddd70e` | approved council critical-path redesign and local evidence | five typed durable shards, one minimal Conductor commit, deterministic fail-closed assembly, fixed 6/8 routing/evidence and viewer-approved Ruby vertical slice; local scripted only |
-| `73fa91a`–`515ca19` | exact Gemini 3.7 catalog-adapter lock, zero-call audit and Stage A archive machinery | direct DSH remains `0.1.0-rc.6`; installed pi-ai is overridden to `0.84.2`; local audit and regression pass; visible Stage A media archive not yet generated |
+| `73fa91a`–`2856736` | exact Gemini 3.7 catalog-adapter lock, zero-call audit, Stage A archive machinery and isolated-media repair | direct DSH remains `0.1.0-rc.6`; installed pi-ai is overridden to `0.84.2`; the failed first archive attempt is retained honestly, and approved replacement Run 02 generated the reviewed engineering packet from clean runtime commit `2856736` |
 
 Haorui/Codex owns viewer approval, governance, agent/session contracts, deterministic authority checks, evidence and checkpoint integration. It does not own Ruby's 3D authorship.
 
@@ -120,20 +120,23 @@ This is roughly the first third of the full CP00-CP08 production route. It is no
 | B2. DSH root/continuable + CaseSession durability | `COMPLETE` | scripted adapter, bounded case transition, flush and cold JSONL read |
 | B3. Real provider compatibility | `THREE FAILED LIVE RUNS / LIVE NOT PASSED` | Run 01 sent 3; Run 02 sent 10 on the old graph; Run 03 sent 6 on the replacement graph and quarantined a draft 2.215 seconds beyond the shared 12-second cutoff. The redesigned 6/8 path remains local scripted evidence; Live Run 04 is not authorised here. |
 | B4. Council critical path redesign | `CRITICAL_PATH_IMPLEMENTED_LOCAL_SCRIPTED` | immutable turn; five typed shard calls plus one minimal commit; 6 planned / 8 maximum; durable trace; Guardian constraints; deterministic assembler; no hidden provider stream; controlled 2.5/8/12 outcomes; independent evidence verifier |
+| B5. Gemini 3.7 adapter Stage A | `ENGINEERING_READY_ARCHIVED` | replacement Run 02 binds the exact installed catalog and six passing local gates to runtime commit `2856736`, plus a reviewed 1280×720 PNG and uninterrupted 18.04-second WebM; provider requests 0 and browser non-local requests 0; no model-quality claim |
 | C1. Draft/approval/Gate to Ruby role interaction | `LOCAL_SLICE_TESTED + COUNCIL_SLICE_TESTED` | historical real DSH root scripted-provider slice plus the fictional five-shard council slice cross exact viewer approval → Gate → Ruby navigation/ownership/rollback receipt → durable CaseSession transition with zero adapter requests |
 | C2. Five-action effect runtime | `MERGED LOCAL IMPLEMENTED / BROWSER VERIFIED` | Translate cyan relation, Reframe amber frame, Merge purple seam, Continue green ripples and KeepOpaque dark veil execute in the Three.js viewport and link to Ruby receipts; this remains engineering, not artistic acceptance |
 | C3. Loopback host, privacy and evidence API | `PARTIAL` | routing and formal-evidence contracts are fail-closed; a production loopback host and cleared audience media policy remain absent |
 | C4. Audience UI and proposal viewer | `LOCAL SCRIPTED VERIFIED` | desktop and 390×844 UI drove five proposal hashes, approvals, Gate results, effects and receipts with zero external requests; visibly marked 0-CALL / NOT CHECKPOINT |
 | D. Formal encounters and checkpoint archive | `CONTRACT IMPLEMENTED / ARCHIVE NOT RUN` | archive builder refuses missing interaction, visual, engineering, provenance, discourse, real-provider, rollback, technical or artistic evidence; no candidate archive has been manufactured |
 
-### Gemini 3.7 adapter Stage A — local verification on 2026-08-23
+### Gemini 3.7 adapter Stage A — archived engineering readiness on 2026-08-23
 
-**Status:** `LOCAL_VERIFIED_PENDING_MEDIA_ARCHIVE`
+**Status:** `STAGE_A_ENGINEERING_READY_ARCHIVED`
 
 - Every direct `@deepseek-ai/dsh-*` dependency remains exactly `0.1.0-rc.6`; `@deepseek-ai/dsh-llm-pi-ai` remains the DSH Google adapter, and the sole top-level transitive override locks `@earendil-works/pi-ai` to exactly `0.84.2`.
 - The installed-catalog audit passes for route `google`, exact model ID `gemini-3.7-flash`, text and image inputs, context window `1,048,576`, default maximum output `65,536`, DSH adapter `0.1.0-rc.6`, and pi-ai catalog `0.84.2`. Its canonical audit SHA-256 is `658d87f887c7a205ed9cdb71ce242eb06e8553cfd979f5f1d3c63f3280b722da`, with `providerRequestsMade: 0`.
-- This refresh passed Shared Contracts `25/25`, Agent Host `375/375` across 25 files plus typecheck/build, and Scene Builder `217/217` across 31 files plus build. The audience smoke passed five local scripted actions and five receipts with `providerRequestsMade: 0` and `checkpointEligible: false`; its first invocation stopped before any CP03 assertion because no Vite server was listening, then passed after the script's existing local-server prerequisite was supplied.
-- The Stage A manifest/verifier and visible report-capture machinery are locally implemented and tested, but the reviewed PNG/WebM packet has not yet been generated. Until that packet is generated, visually inspected and self-verified, Stage A is not `ENGINEERING_READY_ARCHIVED`.
+- The pre-archive refresh passed Shared Contracts `25/25`, Agent Host `375/375` across 25 files plus typecheck/build, and Scene Builder `217/217` across 31 files plus build. The audience smoke passed five local scripted actions and five receipts with `providerRequestsMade: 0` and `checkpointEligible: false`; its first invocation stopped before any CP03 assertion because no Vite server was listening, then passed after the script's existing local-server prerequisite was supplied.
+- Formal archive Run 01, `cp03-adapter-readiness-20260823T212422Z`, passed the six gates and zero-call audit but failed before screenshot capture because its isolated Playwright environment could not locate the recording bundle. It is retained as a failed attempt without PNG, WebM or success manifest; it is not counted as Stage A readiness.
+- After the isolated-media repair, the separately approved replacement Run 02, `cp03-adapter-readiness-20260823T213417Z`, ran once from clean runtime commit `2856736ca888b8c2c76dee443a1314a78b1ff5d2`. It passed Shared Contracts `25/25`, Agent Host `377/377` across 26 files plus typecheck/build, Scene Builder `217/217` across 31 files plus build, and the canonical catalog audit. The manifest reports `providerRequestsMade: 0` and `nonLocalBrowserRequests: 0`.
+- The replacement packet's six log hashes and two media hashes were independently matched to the manifest. Its PNG is 1280×720; its VP8 WebM is 1280×720, 25 fps and 18.04 seconds. Visual inspection confirmed all nine catalog/claim rows appear legibly and highlight in order without unrelated content. The packet is anchored by [`evidence-manifest.json`](../checkpoints/cp03/adapter-readiness/cp03-adapter-readiness-20260823T213417Z/evidence-manifest.json).
 - Production routing remains `pending-bakeoff`. Provider/model quality, the paid fixed-input Stage B bake-off, blinded human selection, an approved final routing manifest, Stage C representative 3D interaction, the formal CP03 checkpoint, deployment and public release are all still not done.
 
 ## Technology Feasibility and Current Test Boundary
@@ -181,13 +184,13 @@ session directory.
 | Layer | Result | Scope |
 |---|---|---|
 | Shared CP03 contracts | `25/25 PASS` | merged council schemas and historical execution/approval contracts |
-| PACT DSH host | `typecheck PASS`, `build PASS`, `375/375 PASS` across 25 files | council implementations, historical provider path, exact approval, Ruby integration, Gemini 3.7 catalog audit and Stage A archive contract coexist |
+| PACT DSH host | `typecheck PASS`, `build PASS`, `377/377 PASS` across 26 files | council implementations, historical provider path, exact approval, Ruby integration, Gemini 3.7 catalog audit, archive contract and isolated-media repair coexist |
 | Ruby Scene Builder | `217/217 PASS`, `build PASS` | portable assets, character rig/action boundary, navmesh/Rapier, audience effects, persistence and existing runtime |
 | Installed Gemini 3.7 catalog | `PASS / 0 PROVIDER CALLS` | exact Google route/model/modalities/limits and pinned DSH/pi-ai versions; engineering readiness only |
-| Historical provider-path non-drift | `INCLUDED IN 375/375 PASS` | no live request and no upgrade of the three archived failures |
+| Historical provider-path non-drift | `INCLUDED IN 377/377 PASS` | no live request and no upgrade of the three archived failures |
 | Browser audience smoke | `PASS` | five actions/5 receipts/0 provider requests/7 screenshots; `checkpointEligible: false`; explicit local Vite prerequisite supplied |
 | Provider network | `HISTORICAL FAILED_ARCHIVED` | no provider request in this adapter-readiness refresh |
-| Adapter Stage A media | `LOCAL_VERIFIED_PENDING_MEDIA_ARCHIVE` | capture/archive machinery exists; reviewed PNG/WebM/manifest packet not generated yet |
+| Adapter Stage A media | `ENGINEERING_READY_ARCHIVED` | Run 02's manifest, six complete logs, reviewed 1280×720 PNG and 18.04-second WebM are archived; zero provider/non-local browser requests; no model-quality result |
 | CP03 visual/archive gate | `FORMAL NOT RUN` | Stage A adapter evidence is not the Stage C encounter, a formal checkpoint, or a human CP03 decision |
 
 Remote truth was fetched immediately before Live Run 03; the local branch and
@@ -211,8 +214,8 @@ remote branch at the same full SHA with `git ls-remote`. No force push was used.
 2. Preserve Live Run 01 as `FAILED_PARTIAL`, Live Run 02 as `FAILED_RECONSTRUCTED`, and Live Run 03 as `FAILED_ARCHIVED`; none is a compatibility pass or CP03 acceptance.
 3. Keep the remote-verified `fef3a99` collaboration merge as the integration baseline; future work must fetch again before changing it.
 4. Preserve the council-v2 critical path as `LOCAL_SCRIPTED`; do not describe fictional fixtures or controlled timing as model quality.
-5. Generate and visually inspect the fixed-copy Stage A adapter-readiness packet; keep its ceiling at `zero-network adapter verification; no model-quality result`.
-6. Run the separately approved fixed-input model bake-off before replacing `pending-bakeoff` manifest identifiers.
+5. Preserve failed Stage A Run 01 and successful replacement Run 02 as separate records; keep Run 02's ceiling at `zero-network adapter verification; no model-quality result`.
+6. Run the separately approved fixed-input Stage B model bake-off before replacing `pending-bakeoff` manifest identifiers.
 7. Any zero-call 6/8 preflight or Live Run 04 requires a fresh exact scope; Live Run 04 is not authorised by this refresh.
 8. After a passing archived provider run and human quality review, harden the production loopback/privacy boundary and cleared image/audio ingestion around Ruby's existing audience/effect runtime.
 9. Run formal encounters, capture continuous 3D mutation/rollback, fill all five archive classes, then request separate technical `PASS` and artistic `KEEP` decisions.

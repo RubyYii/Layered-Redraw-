@@ -1,0 +1,62 @@
+commandId: host-test
+cwd: apps/pact-agent-host
+command: npm test
+exitCode: 0
+signal: none
+--- stdout ---
+
+> @layered-redraw/pact-agent-host@0.0.0-gate.1 test
+> vitest run
+
+
+ RUN  v4.1.10 <REPOSITORY_ROOT>/apps/pact-agent-host
+
+ ✓ test/council-registry.test.ts (53 tests) 173ms
+ ✓ test/provider-real-run-gate.test.ts (12 tests) 641ms
+     ✓ runs real mode through preflight and refuses 0/8 before transport  637ms
+ ✓ test/provider-compatibility.test.ts (15 tests) 448ms
+ ✓ test/model-catalog-audit.test.ts (17 tests) 809ms
+     ✓ prints and explicitly writes byte-identical canonical installed-catalog evidence  386ms
+ ✓ test/archive-runtime-isolation.test.ts (2 tests) 189ms
+ ✓ test/dsh-to-ruby.integration.test.js (1 test) 134ms
+ ✓ test/provider-foundation-harness.test.ts (8 tests) 774ms
+ ✓ test/dsh-foundation.test.ts (7 tests) 796ms
+ ✓ test/provider-real-command.test.ts (5 tests) 201ms
+ ✓ test/guardian-conflict.test.ts (45 tests) 38ms
+ ✓ test/critical-path-council.test.ts (8 tests) 46ms
+ ✓ test/draft-assembler.test.ts (20 tests) 61ms
+ ✓ test/case-session-persistence.test.ts (5 tests) 100ms
+ ✓ test/council-run-evidence.test.ts (54 tests) 60ms
+ ✓ test/cp03-checkpoint-archive.test.ts (3 tests) 9ms
+ ✓ test/council-turn.test.ts (10 tests) 9ms
+ ✓ test/critical-path-routing.test.ts (3 tests) 8ms
+ ✓ test/case-session.test.ts (25 tests) 6ms
+ ✓ test/provider-run-evidence.test.ts (9 tests) 9ms
+ ✓ test/submission-registry.test.ts (3 tests) 5ms
+ ✓ test/dependency-lock.test.ts (1 test) 3ms
+ ✓ test/adapter-readiness-evidence.test.ts (11 tests) 5ms
+ ✓ test/council-routing.test.ts (21 tests) 5ms
+ ✓ test/council-to-ruby.integration.test.js (6 tests) 2116ms
+     ✓ carries five durable agent shards and one minimal commit through Ruby and the root CaseSession  417ms
+     ✓ keeps Guardian WITHHOLD as a council-only state with no CaseSession execution  361ms
+     ✓ keeps omitted required dissent as a council-only state with no CaseSession execution  311ms
+     ✓ rejects stale scene drift and explicit viewer rejection without mutating or approving  501ms
+ ✓ test/provider-real-runner.test.ts (9 tests) 3612ms
+     ✓ surfaces a settled child provider failure instead of re-flushing its detached session  338ms
+     ✓ stops before later waves after a terminal provider failure  340ms
+     ✓ completes eight logical probes through exactly eight actual DSH streams  627ms
+     ✓ uses one DeepSeek pre-side-effect transport retry and records nine dispatches  482ms
+     ✓ uses at most one pre-side-effect retry per provider and records ten dispatches  430ms
+     ✓ does not open a continuation stream after a probe accepted its PACT tools  428ms
+     ✓ starts route, Rewriter, and Guardian before any representative response completes  337ms
+     ✓ records the first trace and accepted draft against the shared 2.5/8/12 clock  357ms
+ ✓ test/council-runtime.test.ts (24 tests) 4388ms
+     ✓ records one retry slot for DeepSeek, one retry slot for Gemini, and never retries a second same-provider failure  507ms
+
+ Test Files  26 passed (26)
+      Tests  377 passed (377)
+   Start at  22:34:22
+   Duration  4.93s (transform 1.49s, setup 0ms, import 4.71s, tests 14.64s, environment 1ms)
+
+
+--- stderr ---

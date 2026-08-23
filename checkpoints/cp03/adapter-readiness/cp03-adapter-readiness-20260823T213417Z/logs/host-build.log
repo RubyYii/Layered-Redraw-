@@ -1,0 +1,12 @@
+commandId: host-build
+cwd: apps/pact-agent-host
+command: npm run build
+exitCode: 0
+signal: none
+--- stdout ---
+
+> @layered-redraw/pact-agent-host@0.0.0-gate.1 build
+> tsc -p tsconfig.build.json
+
+
+--- stderr ---

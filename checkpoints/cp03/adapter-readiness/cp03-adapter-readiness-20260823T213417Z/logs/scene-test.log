@@ -1,0 +1,541 @@
+commandId: scene-test
+cwd: apps/scene-builder
+command: npm test
+exitCode: 0
+signal: none
+--- stdout ---
+
+> blockout-studio@0.1.0 test
+> vitest run
+
+
+ RUN  v4.1.10 <REPOSITORY_ROOT>/apps/scene-builder
+
+ ✓ src/portable-project-package.test.js (3 tests) 30ms
+ ✓ src/interaction-demo.test.js (6 tests) 80ms
+ ✓ src/rapier-runtime.test.js (2 tests) 134ms
+ ✓ src/camera-editor.test.js (6 tests) 217ms
+ ✓ src/agent-runtime.test.js (30 tests) 102ms
+ ✓ src/cp03/capability-gate.test.js (11 tests) 78ms
+ ✓ scripts/simulation-delivery-package.test.js (6 tests) 410ms
+ ✓ src/navmesh-runtime.test.js (3 tests) 45ms
+ ✓ src/asset-runtime.test.js (15 tests) 63ms
+ ✓ src/case-pack-runtime.test.js (18 tests) 46ms
+ ✓ src/director.test.js (13 tests) 15ms
+ ✓ scripts/derive-window-case-cp02.test.js (3 tests) 37ms
+ ✓ src/scene-patch-runtime.test.js (12 tests) 600ms
+ ✓ src/spatial-bridge-runtime.test.js (5 tests) 12ms
+ ✓ src/model.test.js (19 tests) 13ms
+ ✓ src/cp03/audience-runtime.test.js (7 tests) 54ms
+ ✓ src/cp03/visual-effects.test.js (6 tests) 8ms
+ ✓ src/navigation-runtime.test.js (2 tests) 8ms
+ ✓ src/character-rig.test.js (2 tests) 5ms
+ ✓ src/simulation-runtime.test.js (4 tests) 12ms
+ ✓ src/collision-runtime.test.js (6 tests) 12ms
+ ✓ src/cp02-ui-contract.test.js (9 tests) 12ms
+ ✓ src/interaction-runtime.test.js (3 tests) 3ms
+ ✓ src/scene-governance.test.js (5 tests) 5ms
+ ✓ src/project-persistence.test.js (3 tests) 4ms
+ ✓ src/frame-pacing.test.js (3 tests) 2ms
+ ✓ src/motion.test.js (3 tests) 4ms
+ ✓ src/character-action-runtime.test.js (2 tests) 3ms
+ ✓ src/spatial-bridge-governance.integration.test.js (2 tests) 3ms
+ ✓ scripts/smoke-test-cp02.test.js (6 tests) 5ms
+ ✓ src/window-case.test.js (2 tests) 1587ms
+     ✓ keeps all 4,981 fixed 30 fps samples free of residual proxy penetration  1578ms
+
+ Test Files  31 passed (31)
+      Tests  217 passed (217)
+   Start at  22:34:31
+   Duration  1.96s (transform 2.46s, setup 0ms, import 4.49s, tests 3.61s, environment 3ms)
+
+
+--- stderr ---
+stderr | src/asset-runtime.test.js > replaceable OBJ/GLB asset bindings > retargets compatible source clips onto the loaded skeleton
+THREE.PropertyBinding: Can not bind to bones as node does not have a skeleton. PropertyBinding {
+  path: '.bones[Hips].position',
+  parsedPath: {
+    nodeName: undefined,
+    objectName: 'bones',
+    objectIndex: 'Hips',
+    propertyName: 'position',
+    propertyIndex: undefined
+  },
+  node: Group {
+    isObject3D: true,
+    uuid: '704fb2d3-e6f0-4b63-9683-5b7b2f7c6c0f',
+    name: '',
+    type: 'Group',
+    parent: Group {
+      isObject3D: true,
+      uuid: '47effb5c-b3da-49ab-99d5-ea3bcdbb2d77',
+      name: '',
+      type: 'Group',
+      parent: [Group],
+      children: [Array],
+      up: [Vector3],
+      position: [Vector3],
+      rotation: [Euler],
+      quaternion: [Quaternion],
+      scale: [Vector3],
+      matrix: [Matrix4],
+      matrixWorld: [Matrix4],
+      matrixAutoUpdate: true,
+      matrixWorldAutoUpdate: true,
+      matrixWorldNeedsUpdate: false,
+      layers: [Layers],
+      visible: true,
+      castShadow: false,
+      receiveShadow: false,
+      frustumCulled: true,
+      renderOrder: 0,
+      animations: [],
+      customDepthMaterial: undefined,
+      customDistanceMaterial: undefined,
+      static: false,
+      userData: {},
+      pivot: null,
+      isGroup: true
+    },
+    children: [ [SkinnedMesh] ],
+    up: Vector3 { x: 0, y: 1, z: 0 },
+    position: Vector3 { x: 0, y: 0, z: 0 },
+    rotation: Euler {
+      isEuler: true,
+      _x: 0,
+      _y: 0,
+      _z: 0,
+      _order: 'XYZ',
+      _onChangeCallback: [Function: onRotationChange]
+    },
+    quaternion: Quaternion {
+      isQuaternion: true,
+      _x: 0,
+      _y: 0,
+      _z: 0,
+      _w: 1,
+      _onChangeCallback: [Function: onQuaternionChange]
+    },
+    scale: Vector3 { x: 1, y: 1, z: 1 },
+    matrix: Matrix4 { elements: [Array] },
+    matrixWorld: Matrix4 { elements: [Array] },
+    matrixAutoUpdate: true,
+    matrixWorldAutoUpdate: true,
+    matrixWorldNeedsUpdate: false,
+    layers: Layers { mask: 1 },
+    visible: true,
+    castShadow: false,
+    receiveShadow: false,
+    frustumCulled: true,
+    renderOrder: 0,
+    animations: [],
+    customDepthMaterial: undefined,
+    customDistanceMaterial: undefined,
+    static: false,
+    userData: {},
+    pivot: null,
+    isGroup: true
+  },
+  rootNode: Group {
+    isObject3D: true,
+    uuid: '704fb2d3-e6f0-4b63-9683-5b7b2f7c6c0f',
+    name: '',
+    type: 'Group',
+    parent: Group {
+      isObject3D: true,
+      uuid: '47effb5c-b3da-49ab-99d5-ea3bcdbb2d77',
+      name: '',
+      type: 'Group',
+      parent: [Group],
+      children: [Array],
+      up: [Vector3],
+      position: [Vector3],
+      rotation: [Euler],
+      quaternion: [Quaternion],
+      scale: [Vector3],
+      matrix: [Matrix4],
+      matrixWorld: [Matrix4],
+      matrixAutoUpdate: true,
+      matrixWorldAutoUpdate: true,
+      matrixWorldNeedsUpdate: false,
+      layers: [Layers],
+      visible: true,
+      castShadow: false,
+      receiveShadow: false,
+      frustumCulled: true,
+      renderOrder: 0,
+      animations: [],
+      customDepthMaterial: undefined,
+      customDistanceMaterial: undefined,
+      static: false,
+      userData: {},
+      pivot: null,
+      isGroup: true
+    },
+    children: [ [SkinnedMesh] ],
+    up: Vector3 { x: 0, y: 1, z: 0 },
+    position: Vector3 { x: 0, y: 0, z: 0 },
+    rotation: Euler {
+      isEuler: true,
+      _x: 0,
+      _y: 0,
+      _z: 0,
+      _order: 'XYZ',
+      _onChangeCallback: [Function: onRotationChange]
+    },
+    quaternion: Quaternion {
+      isQuaternion: true,
+      _x: 0,
+      _y: 0,
+      _z: 0,
+      _w: 1,
+      _onChangeCallback: [Function: onQuaternionChange]
+    },
+    scale: Vector3 { x: 1, y: 1, z: 1 },
+    matrix: Matrix4 { elements: [Array] },
+    matrixWorld: Matrix4 { elements: [Array] },
+    matrixAutoUpdate: true,
+    matrixWorldAutoUpdate: true,
+    matrixWorldNeedsUpdate: false,
+    layers: Layers { mask: 1 },
+    visible: true,
+    castShadow: false,
+    receiveShadow: false,
+    frustumCulled: true,
+    renderOrder: 0,
+    animations: [],
+    customDepthMaterial: undefined,
+    customDistanceMaterial: undefined,
+    static: false,
+    userData: {},
+    pivot: null,
+    isGroup: true
+  },
+  getValue: [Function: _getValue_unavailable],
+  setValue: [Function: _setValue_unavailable]
+}
+THREE.PropertyBinding: Can not bind to bones as node does not have a skeleton. PropertyBinding {
+  path: '.bones[Hips].quaternion',
+  parsedPath: {
+    nodeName: undefined,
+    objectName: 'bones',
+    objectIndex: 'Hips',
+    propertyName: 'quaternion',
+    propertyIndex: undefined
+  },
+  node: Group {
+    isObject3D: true,
+    uuid: '704fb2d3-e6f0-4b63-9683-5b7b2f7c6c0f',
+    name: '',
+    type: 'Group',
+    parent: Group {
+      isObject3D: true,
+      uuid: '47effb5c-b3da-49ab-99d5-ea3bcdbb2d77',
+      name: '',
+      type: 'Group',
+      parent: [Group],
+      children: [Array],
+      up: [Vector3],
+      position: [Vector3],
+      rotation: [Euler],
+      quaternion: [Quaternion],
+      scale: [Vector3],
+      matrix: [Matrix4],
+      matrixWorld: [Matrix4],
+      matrixAutoUpdate: true,
+      matrixWorldAutoUpdate: true,
+      matrixWorldNeedsUpdate: false,
+      layers: [Layers],
+      visible: true,
+      castShadow: false,
+      receiveShadow: false,
+      frustumCulled: true,
+      renderOrder: 0,
+      animations: [],
+      customDepthMaterial: undefined,
+      customDistanceMaterial: undefined,
+      static: false,
+      userData: {},
+      pivot: null,
+      isGroup: true
+    },
+    children: [ [SkinnedMesh] ],
+    up: Vector3 { x: 0, y: 1, z: 0 },
+    position: Vector3 { x: 0, y: 0, z: 0 },
+    rotation: Euler {
+      isEuler: true,
+      _x: 0,
+      _y: 0,
+      _z: 0,
+      _order: 'XYZ',
+      _onChangeCallback: [Function: onRotationChange]
+    },
+    quaternion: Quaternion {
+      isQuaternion: true,
+      _x: 0,
+      _y: 0,
+      _z: 0,
+      _w: 1,
+      _onChangeCallback: [Function: onQuaternionChange]
+    },
+    scale: Vector3 { x: 1, y: 1, z: 1 },
+    matrix: Matrix4 { elements: [Array] },
+    matrixWorld: Matrix4 { elements: [Array] },
+    matrixAutoUpdate: true,
+    matrixWorldAutoUpdate: true,
+    matrixWorldNeedsUpdate: false,
+    layers: Layers { mask: 1 },
+    visible: true,
+    castShadow: false,
+    receiveShadow: false,
+    frustumCulled: true,
+    renderOrder: 0,
+    animations: [],
+    customDepthMaterial: undefined,
+    customDistanceMaterial: undefined,
+    static: false,
+    userData: {},
+    pivot: null,
+    isGroup: true
+  },
+  rootNode: Group {
+    isObject3D: true,
+    uuid: '704fb2d3-e6f0-4b63-9683-5b7b2f7c6c0f',
+    name: '',
+    type: 'Group',
+    parent: Group {
+      isObject3D: true,
+      uuid: '47effb5c-b3da-49ab-99d5-ea3bcdbb2d77',
+      name: '',
+      type: 'Group',
+      parent: [Group],
+      children: [Array],
+      up: [Vector3],
+      position: [Vector3],
+      rotation: [Euler],
+      quaternion: [Quaternion],
+      scale: [Vector3],
+      matrix: [Matrix4],
+      matrixWorld: [Matrix4],
+      matrixAutoUpdate: true,
+      matrixWorldAutoUpdate: true,
+      matrixWorldNeedsUpdate: false,
+      layers: [Layers],
+      visible: true,
+      castShadow: false,
+      receiveShadow: false,
+      frustumCulled: true,
+      renderOrder: 0,
+      animations: [],
+      customDepthMaterial: undefined,
+      customDistanceMaterial: undefined,
+      static: false,
+      userData: {},
+      pivot: null,
+      isGroup: true
+    },
+    children: [ [SkinnedMesh] ],
+    up: Vector3 { x: 0, y: 1, z: 0 },
+    position: Vector3 { x: 0, y: 0, z: 0 },
+    rotation: Euler {
+      isEuler: true,
+      _x: 0,
+      _y: 0,
+      _z: 0,
+      _order: 'XYZ',
+      _onChangeCallback: [Function: onRotationChange]
+    },
+    quaternion: Quaternion {
+      isQuaternion: true,
+      _x: 0,
+      _y: 0,
+      _z: 0,
+      _w: 1,
+      _onChangeCallback: [Function: onQuaternionChange]
+    },
+    scale: Vector3 { x: 1, y: 1, z: 1 },
+    matrix: Matrix4 { elements: [Array] },
+    matrixWorld: Matrix4 { elements: [Array] },
+    matrixAutoUpdate: true,
+    matrixWorldAutoUpdate: true,
+    matrixWorldNeedsUpdate: false,
+    layers: Layers { mask: 1 },
+    visible: true,
+    castShadow: false,
+    receiveShadow: false,
+    frustumCulled: true,
+    renderOrder: 0,
+    animations: [],
+    customDepthMaterial: undefined,
+    customDistanceMaterial: undefined,
+    static: false,
+    userData: {},
+    pivot: null,
+    isGroup: true
+  },
+  getValue: [Function: _getValue_unavailable],
+  setValue: [Function: _setValue_unavailable]
+}
+THREE.PropertyBinding: Can not bind to bones as node does not have a skeleton. PropertyBinding {
+  path: '.bones[RightUpperArm].quaternion',
+  parsedPath: {
+    nodeName: undefined,
+    objectName: 'bones',
+    objectIndex: 'RightUpperArm',
+    propertyName: 'quaternion',
+    propertyIndex: undefined
+  },
+  node: Group {
+    isObject3D: true,
+    uuid: '704fb2d3-e6f0-4b63-9683-5b7b2f7c6c0f',
+    name: '',
+    type: 'Group',
+    parent: Group {
+      isObject3D: true,
+      uuid: '47effb5c-b3da-49ab-99d5-ea3bcdbb2d77',
+      name: '',
+      type: 'Group',
+      parent: [Group],
+      children: [Array],
+      up: [Vector3],
+      position: [Vector3],
+      rotation: [Euler],
+      quaternion: [Quaternion],
+      scale: [Vector3],
+      matrix: [Matrix4],
+      matrixWorld: [Matrix4],
+      matrixAutoUpdate: true,
+      matrixWorldAutoUpdate: true,
+      matrixWorldNeedsUpdate: false,
+      layers: [Layers],
+      visible: true,
+      castShadow: false,
+      receiveShadow: false,
+      frustumCulled: true,
+      renderOrder: 0,
+      animations: [],
+      customDepthMaterial: undefined,
+      customDistanceMaterial: undefined,
+      static: false,
+      userData: {},
+      pivot: null,
+      isGroup: true
+    },
+    children: [ [SkinnedMesh] ],
+    up: Vector3 { x: 0, y: 1, z: 0 },
+    position: Vector3 { x: 0, y: 0, z: 0 },
+    rotation: Euler {
+      isEuler: true,
+      _x: 0,
+      _y: 0,
+      _z: 0,
+      _order: 'XYZ',
+      _onChangeCallback: [Function: onRotationChange]
+    },
+    quaternion: Quaternion {
+      isQuaternion: true,
+      _x: 0,
+      _y: 0,
+      _z: 0,
+      _w: 1,
+      _onChangeCallback: [Function: onQuaternionChange]
+    },
+    scale: Vector3 { x: 1, y: 1, z: 1 },
+    matrix: Matrix4 { elements: [Array] },
+    matrixWorld: Matrix4 { elements: [Array] },
+    matrixAutoUpdate: true,
+    matrixWorldAutoUpdate: true,
+    matrixWorldNeedsUpdate: false,
+    layers: Layers { mask: 1 },
+    visible: true,
+    castShadow: false,
+    receiveShadow: false,
+    frustumCulled: true,
+    renderOrder: 0,
+    animations: [],
+    customDepthMaterial: undefined,
+    customDistanceMaterial: undefined,
+    static: false,
+    userData: {},
+    pivot: null,
+    isGroup: true
+  },
+  rootNode: Group {
+    isObject3D: true,
+    uuid: '704fb2d3-e6f0-4b63-9683-5b7b2f7c6c0f',
+    name: '',
+    type: 'Group',
+    parent: Group {
+      isObject3D: true,
+      uuid: '47effb5c-b3da-49ab-99d5-ea3bcdbb2d77',
+      name: '',
+      type: 'Group',
+      parent: [Group],
+      children: [Array],
+      up: [Vector3],
+      position: [Vector3],
+      rotation: [Euler],
+      quaternion: [Quaternion],
+      scale: [Vector3],
+      matrix: [Matrix4],
+      matrixWorld: [Matrix4],
+      matrixAutoUpdate: true,
+      matrixWorldAutoUpdate: true,
+      matrixWorldNeedsUpdate: false,
+      layers: [Layers],
+      visible: true,
+      castShadow: false,
+      receiveShadow: false,
+      frustumCulled: true,
+      renderOrder: 0,
+      animations: [],
+      customDepthMaterial: undefined,
+      customDistanceMaterial: undefined,
+      static: false,
+      userData: {},
+      pivot: null,
+      isGroup: true
+    },
+    children: [ [SkinnedMesh] ],
+    up: Vector3 { x: 0, y: 1, z: 0 },
+    position: Vector3 { x: 0, y: 0, z: 0 },
+    rotation: Euler {
+      isEuler: true,
+      _x: 0,
+      _y: 0,
+      _z: 0,
+      _order: 'XYZ',
+      _onChangeCallback: [Function: onRotationChange]
+    },
+    quaternion: Quaternion {
+      isQuaternion: true,
+      _x: 0,
+      _y: 0,
+      _z: 0,
+      _w: 1,
+      _onChangeCallback: [Function: onQuaternionChange]
+    },
+    scale: Vector3 { x: 1, y: 1, z: 1 },
+    matrix: Matrix4 { elements: [Array] },
+    matrixWorld: Matrix4 { elements: [Array] },
+    matrixAutoUpdate: true,
+    matrixWorldAutoUpdate: true,
+    matrixWorldNeedsUpdate: false,
+    layers: Layers { mask: 1 },
+    visible: true,
+    castShadow: false,
+    receiveShadow: false,
+    frustumCulled: true,
+    renderOrder: 0,
+    animations: [],
+    customDepthMaterial: undefined,
+    customDistanceMaterial: undefined,
+    static: false,
+    userData: {},
+    pivot: null,
+    isGroup: true
+  },
+  getValue: [Function: _getValue_unavailable],
+  setValue: [Function: _setValue_unavailable]
+}
+
