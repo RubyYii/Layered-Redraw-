@@ -10,6 +10,9 @@ import {
   validateApprovalRecord,
   validateConductorDraftCommit,
   validateCouncilShard,
+  validateModelBakeoffApproval,
+  validateModelBakeoffAttempt,
+  validateModelBakeoffSelection,
   validateProviderCallEnvelope,
   validateProviderRoutingManifest,
   validateViewerTurn,
@@ -21,6 +24,9 @@ import {
   validApprovalRecord,
   validConductorDraftCommit,
   validCouncilShards,
+  validModelBakeoffApproval,
+  validModelBakeoffAttempt,
+  validModelBakeoffSelection,
   validProviderCallEnvelope,
   validProviderRoutingManifest,
   validRuntimeAgentActionDraft,
@@ -343,5 +349,91 @@ describe("CP03 foundation gate contracts", () => {
       expect(error.message).not.toContain(sensitiveText);
       expect(error.message).not.toContain("Reframe");
     }
+  });
+
+  it("accepts the closed model-bakeoff approval, attempt, and author selection contracts", () => {
+    expect(validateModelBakeoffApproval(validModelBakeoffApproval))
+      .toBe(validModelBakeoffApproval);
+    expect(validateModelBakeoffAttempt(validModelBakeoffAttempt))
+      .toBe(validModelBakeoffAttempt);
+    expect(validateModelBakeoffSelection(validModelBakeoffSelection))
+      .toBe(validModelBakeoffSelection);
+  });
+
+  it("freezes the exact ordered candidate scope and approval authority", () => {
+    expect(() => validateModelBakeoffApproval({
+      ...validModelBakeoffApproval,
+      candidates: [
+        validModelBakeoffApproval.candidates[1],
+        validModelBakeoffApproval.candidates[0],
+        ...validModelBakeoffApproval.candidates.slice(2),
+      ],
+    })).toThrow(/validation failed/);
+    expect(() => validateModelBakeoffApproval({
+      ...validModelBakeoffApproval,
+      externalCapabilities: ["search"],
+    })).toThrow(/validation failed/);
+    expect(() => validateModelBakeoffApproval({
+      ...validModelBakeoffApproval,
+      automaticRerun: true,
+    })).toThrow(/validation failed/);
+  });
+
+  it("requires redacted durable attempt evidence without secret or raw-output fields", () => {
+    expect(() => validateModelBakeoffAttempt({
+      ...validModelBakeoffAttempt,
+      rawOutput: "provider response must not enter this contract",
+    })).toThrow(/additionalProperties/);
+    expect(() => validateModelBakeoffAttempt({
+      ...validModelBakeoffAttempt,
+      providerFacts: {
+        ...validModelBakeoffAttempt.providerFacts,
+        adapterPackage: "@google/generative-ai",
+      },
+    })).toThrow(/validation failed/);
+    expect(() => validateModelBakeoffAttempt({
+      ...validModelBakeoffAttempt,
+      sessionEventRange: null,
+    })).toThrow(/validation failed/);
+  });
+
+  it("records late attempt latency honestly while closing provider-phase and tool-contract pairs", () => {
+    expect(validateModelBakeoffAttempt({
+      ...validModelBakeoffAttempt,
+      latency: { completeMs: 15001, publicTraceMs: 13000 },
+      finish: { kind: "late", detailCode: "HARD_TIMEOUT_EXCEEDED" },
+      sideEffectAccepted: false,
+      toolResult: { ...validModelBakeoffAttempt.toolResult, accepted: false },
+    })).toBeTruthy();
+    expect(() => validateModelBakeoffAttempt({
+      ...validModelBakeoffAttempt,
+      phase: "Archivist",
+      role: "Archivist",
+    })).toThrow(/validation failed/);
+    expect(() => validateModelBakeoffAttempt({
+      ...validModelBakeoffAttempt,
+      toolResult: {
+        ...validModelBakeoffAttempt.toolResult,
+        name: "pact_submit_conductor_commit",
+        contract: "conductor-draft-commit/0.1",
+      },
+    })).toThrow(/validation failed/);
+  });
+
+  it("keeps the signed blind selection identity-free and exactly five-role", () => {
+    expect(() => validateModelBakeoffSelection({
+      ...validModelBakeoffSelection,
+      model: "gemini-3.7-flash",
+    })).toThrow(/additionalProperties/);
+    expect(() => validateModelBakeoffSelection({
+      ...validModelBakeoffSelection,
+      decisions: validModelBakeoffSelection.decisions.slice(0, 4),
+    })).toThrow(/validation failed/);
+    expect(() => validateModelBakeoffSelection({
+      ...validModelBakeoffSelection,
+      decisions: validModelBakeoffSelection.decisions.map((decision, index) => index === 0
+        ? { ...decision, roleDecision: "Witness" }
+        : decision),
+    })).toThrow(/validation failed/);
   });
 });

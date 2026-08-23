@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://layered-redraw.local/cp03/bakeoff/model-bakeoff-selection.schema.json",
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["roleDecision", "selectedBlindLabel", "authorNotes"],
+      "properties": {
+        "roleDecision": {
+          "enum": ["ConductorContinuity", "Witness", "Archivist", "Rewriter", "Guardian"]
+        },
+        "selectedBlindLabel": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_-]{2,31}$"
+        },
+        "authorNotes": { "type": "string", "maxLength": 4000 }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "selectionId",
+    "runId",
+    "blindPacketSha256",
+    "technicalEvidenceSha256",
+    "decisions",
+    "signedAt",
+    "authorDecision"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "cp03-model-bakeoff-selection/0.1" },
+    "selectionId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^cp03-model-bakeoff-[0-9]{8}T[0-9]{6}Z$"
+    },
+    "blindPacketSha256": { "$ref": "#/$defs/hash" },
+    "technicalEvidenceSha256": { "$ref": "#/$defs/hash" },
+    "decisions": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "prefixItems": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/decision" },
+            { "type": "object", "properties": { "roleDecision": { "const": "ConductorContinuity" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/decision" },
+            { "type": "object", "properties": { "roleDecision": { "const": "Witness" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/decision" },
+            { "type": "object", "properties": { "roleDecision": { "const": "Archivist" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/decision" },
+            { "type": "object", "properties": { "roleDecision": { "const": "Rewriter" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/decision" },
+            { "type": "object", "properties": { "roleDecision": { "const": "Guardian" } } }
+          ]
+        }
+      ],
+      "items": false
+    },
+    "signedAt": { "type": "string", "format": "date-time" },
+    "authorDecision": { "const": "SELECTED" }
+  }
+}

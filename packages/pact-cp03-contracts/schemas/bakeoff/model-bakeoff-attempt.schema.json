@@ -1,0 +1,371 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://layered-redraw.local/cp03/bakeoff/model-bakeoff-attempt.schema.json",
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "nullableTimestamp": {
+      "anyOf": [
+        { "type": "string", "format": "date-time" },
+        { "type": "null" }
+      ]
+    },
+    "nullableCode": {
+      "anyOf": [
+        { "type": "string", "pattern": "^[A-Z0-9_]{1,96}$" },
+        { "type": "null" }
+      ]
+    },
+    "providerFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "adapterPackage",
+        "adapterVersion",
+        "catalogPackage",
+        "catalogVersion"
+      ],
+      "properties": {
+        "adapterPackage": {
+          "enum": [
+            "@deepseek-ai/dsh-llm-deepseek",
+            "@deepseek-ai/dsh-llm-pi-ai"
+          ]
+        },
+        "adapterVersion": { "const": "0.1.0-rc.6" },
+        "catalogPackage": {
+          "anyOf": [
+            { "const": "@earendil-works/pi-ai" },
+            { "type": "null" }
+          ]
+        },
+        "catalogVersion": {
+          "anyOf": [
+            { "const": "0.84.2" },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runId",
+    "approvalId",
+    "caseId",
+    "attemptId",
+    "plannedOrdinal",
+    "attemptOrdinal",
+    "sentOrdinal",
+    "provider",
+    "route",
+    "model",
+    "providerFacts",
+    "phase",
+    "role",
+    "repetition",
+    "planSha256",
+    "fixtureManifestSha256",
+    "promptManifestSha256",
+    "schemaManifestSha256",
+    "pricingManifestSha256",
+    "tokenCapsSha256",
+    "startedAt",
+    "firstChunkAt",
+    "firstPublicTraceAt",
+    "endedAt",
+    "latency",
+    "usage",
+    "finish",
+    "refusal",
+    "error",
+    "preSideEffect",
+    "sideEffectAccepted",
+    "retryOf",
+    "retryEligible",
+    "toolResult",
+    "groundedInputRefs",
+    "redactedOutputSha256",
+    "durableReceiptSha256",
+    "sessionEventRange"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "cp03-model-bakeoff-attempt/0.1" },
+    "runId": {
+      "type": "string",
+      "pattern": "^cp03-model-bakeoff-[0-9]{8}T[0-9]{6}Z$"
+    },
+    "approvalId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "caseId": {
+      "type": "string",
+      "pattern": "^cp03-bakeoff-r[12]-(?:deepseek|gemini)-[a-z0-9.-]+-[a-z0-9-]+$"
+    },
+    "attemptId": {
+      "type": "string",
+      "pattern": "^attempt_[A-Za-z0-9_-]{8,120}$"
+    },
+    "plannedOrdinal": { "type": "integer", "minimum": 1, "maximum": 28 },
+    "attemptOrdinal": { "type": "integer", "minimum": 1, "maximum": 2 },
+    "sentOrdinal": { "type": "integer", "minimum": 1, "maximum": 30 },
+    "provider": { "enum": ["deepseek", "gemini"] },
+    "route": { "enum": ["deepseek-official", "google"] },
+    "model": {
+      "enum": [
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "gemini-3.5-flash",
+        "gemini-3.6-flash",
+        "gemini-3.7-flash"
+      ]
+    },
+    "providerFacts": { "$ref": "#/$defs/providerFacts" },
+    "phase": {
+      "enum": [
+        "ConductorIntent",
+        "Archivist",
+        "Guardian",
+        "ConductorCommit",
+        "Witness",
+        "Rewriter"
+      ]
+    },
+    "role": {
+      "enum": ["CaseConductor", "Archivist", "Guardian", "Witness", "Rewriter"]
+    },
+    "repetition": { "enum": [1, 2] },
+    "planSha256": { "$ref": "#/$defs/hash" },
+    "fixtureManifestSha256": { "$ref": "#/$defs/hash" },
+    "promptManifestSha256": { "$ref": "#/$defs/hash" },
+    "schemaManifestSha256": { "$ref": "#/$defs/hash" },
+    "pricingManifestSha256": { "$ref": "#/$defs/hash" },
+    "tokenCapsSha256": { "$ref": "#/$defs/hash" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "firstChunkAt": { "$ref": "#/$defs/nullableTimestamp" },
+    "firstPublicTraceAt": { "$ref": "#/$defs/nullableTimestamp" },
+    "endedAt": { "type": "string", "format": "date-time" },
+    "latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completeMs", "publicTraceMs"],
+      "properties": {
+        "completeMs": { "type": "integer", "minimum": 0 },
+        "publicTraceMs": {
+          "anyOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputTokens",
+        "outputTokens",
+        "totalTokens",
+        "estimatedCostUsd",
+        "costKind"
+      ],
+      "properties": {
+        "inputTokens": { "type": "integer", "minimum": 0 },
+        "outputTokens": { "type": "integer", "minimum": 0 },
+        "totalTokens": { "type": "integer", "minimum": 0 },
+        "estimatedCostUsd": { "type": "number", "minimum": 0 },
+        "costKind": { "const": "ESTIMATE_NOT_BILLING" }
+      }
+    },
+    "finish": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "detailCode"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "accepted",
+            "refused",
+            "transport_failure",
+            "schema_failure",
+            "content_failure",
+            "grounding_failure",
+            "late",
+            "cancelled",
+            "provider_error"
+          ]
+        },
+        "detailCode": { "$ref": "#/$defs/nullableCode" }
+      }
+    },
+    "refusal": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "messageSha256"],
+          "properties": {
+            "code": { "type": "string", "pattern": "^[A-Z0-9_]{1,96}$" },
+            "messageSha256": { "$ref": "#/$defs/hash" }
+          }
+        }
+      ]
+    },
+    "error": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "code"],
+          "properties": {
+            "kind": {
+              "enum": ["transport", "provider", "schema", "content", "grounding", "timeout", "integrity"]
+            },
+            "code": { "type": "string", "pattern": "^[A-Z0-9_]{1,96}$" }
+          }
+        }
+      ]
+    },
+    "preSideEffect": { "type": "boolean" },
+    "sideEffectAccepted": { "type": "boolean" },
+    "retryOf": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^attempt_[A-Za-z0-9_-]{8,120}$" }
+      ]
+    },
+    "retryEligible": { "type": "boolean" },
+    "toolResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "contract", "accepted", "payloadSha256"],
+      "properties": {
+        "name": {
+          "enum": ["pact_submit_council_shard", "pact_submit_conductor_commit"]
+        },
+        "contract": { "enum": ["council-shard/0.1", "conductor-draft-commit/0.1"] },
+        "accepted": { "type": "boolean" },
+        "payloadSha256": { "$ref": "#/$defs/hash" }
+      }
+    },
+    "groundedInputRefs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$"
+      }
+    },
+    "redactedOutputSha256": { "$ref": "#/$defs/hash" },
+    "durableReceiptSha256": { "$ref": "#/$defs/hash" },
+    "sessionEventRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sessionId", "fromSequence", "toSequence"],
+      "properties": {
+        "sessionId": { "type": "string", "format": "uuid" },
+        "fromSequence": { "type": "integer", "minimum": 0 },
+        "toSequence": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "provider": { "const": "deepseek" } }, "required": ["provider"] },
+      "then": {
+        "type": "object",
+        "properties": {
+          "route": { "const": "deepseek-official" },
+          "model": { "enum": ["deepseek-v4-pro", "deepseek-v4-flash"] },
+          "phase": { "enum": ["ConductorIntent", "Archivist", "Guardian", "ConductorCommit"] },
+          "providerFacts": {
+            "type": "object",
+            "properties": {
+              "adapterPackage": { "const": "@deepseek-ai/dsh-llm-deepseek" },
+              "catalogPackage": { "type": "null" },
+              "catalogVersion": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "provider": { "const": "gemini" } }, "required": ["provider"] },
+      "then": {
+        "type": "object",
+        "properties": {
+          "route": { "const": "google" },
+          "model": { "enum": ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash"] },
+          "phase": { "enum": ["Witness", "Rewriter"] },
+          "providerFacts": {
+            "type": "object",
+            "properties": {
+              "adapterPackage": { "const": "@deepseek-ai/dsh-llm-pi-ai" },
+              "catalogPackage": { "const": "@earendil-works/pi-ai" },
+              "catalogVersion": { "const": "0.84.2" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "phase": { "enum": ["ConductorIntent", "ConductorCommit"] } },
+        "required": ["phase"]
+      },
+      "then": { "type": "object", "properties": { "role": { "const": "CaseConductor" } } }
+    },
+    {
+      "if": { "properties": { "phase": { "const": "Archivist" } }, "required": ["phase"] },
+      "then": { "type": "object", "properties": { "role": { "const": "Archivist" } } }
+    },
+    {
+      "if": { "properties": { "phase": { "const": "Guardian" } }, "required": ["phase"] },
+      "then": { "type": "object", "properties": { "role": { "const": "Guardian" } } }
+    },
+    {
+      "if": { "properties": { "phase": { "const": "Witness" } }, "required": ["phase"] },
+      "then": { "type": "object", "properties": { "role": { "const": "Witness" } } }
+    },
+    {
+      "if": { "properties": { "phase": { "const": "Rewriter" } }, "required": ["phase"] },
+      "then": { "type": "object", "properties": { "role": { "const": "Rewriter" } } }
+    },
+    {
+      "if": {
+        "properties": { "phase": { "const": "ConductorCommit" } },
+        "required": ["phase"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "toolResult": {
+            "type": "object",
+            "properties": {
+              "name": { "const": "pact_submit_conductor_commit" },
+              "contract": { "const": "conductor-draft-commit/0.1" }
+            }
+          }
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "toolResult": {
+            "type": "object",
+            "properties": {
+              "name": { "const": "pact_submit_council_shard" },
+              "contract": { "const": "council-shard/0.1" }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
