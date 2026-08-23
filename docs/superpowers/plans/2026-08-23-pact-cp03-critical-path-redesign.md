@@ -10,7 +10,7 @@
 
 **Spec:** `/Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/docs/superpowers/specs/2026-08-22-pact-cp03-critical-path-redesign-design.md`
 
-**Plan status:** `merged_local_scripted_verified_pending_remote_sync`
+**Plan status:** `local_scripted_verified_remote_synced`
 
 **Local verification boundary (2026-08-23):** Tasks 1–7 and Task 8 local
 steps are implemented. A final fetch found Ruby's remote tip `b334db0`
@@ -18,9 +18,10 @@ diverged from local council-evidence tip `3ddd70e`; the resolved collaboration
 merge preserves both parents. On that combined worktree, contracts passed
 `25/25`, Agent Host passed `346/346` plus typecheck/build, and Scene Builder
 passed `217/217` plus build. Ruby's CP03 audience, 4.446 MB autosave recovery,
-and rig-editor browser smokes also passed. Provider calls remained `0`;
-Live Run 04, formal checkpoint capture, human decisions, public release, and
-the final merge commit/push/remote-SHA verification remain unperformed.
+and rig-editor browser smokes also passed. The two-parent integration merge
+`fef3a99` was pushed normally and `git ls-remote` matched its full local SHA.
+Provider calls remained `0`; Live Run 04, formal checkpoint capture, human
+decisions, deployment, and public release remain unperformed.
 
 ## Global Constraints
 
@@ -1299,7 +1300,7 @@ git add -- checkpoints/cp03/critical-path/2026-08-23-local-scripted-evidence.md 
 git commit -m "docs(cp03): record local council critical-path evidence"
 ```
 
-- [ ] **Step 8: Synchronize and push only after all verification remains green**
+- [x] **Step 8: Synchronize and push only after all verification remains green**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03

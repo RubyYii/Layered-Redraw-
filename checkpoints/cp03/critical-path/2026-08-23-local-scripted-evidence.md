@@ -9,8 +9,8 @@
 **Implementation range:** `888db07..90b7edd` (`22` commits)
 
 **Collaboration merge gate:** local council evidence tip `3ddd70e` reconciled
-with Ruby remote tip `b334db0`; final merge commit and remote verification are
-pending below.
+with Ruby remote tip `b334db0` in merge `fef3a99`; normal push and remote-SHA
+verification passed.
 
 ## Claim ceiling
 
@@ -202,6 +202,9 @@ These labels are archival boundaries. They do not accept CP03 as a checkpoint.
 ## Repository synchronization state
 
 The shared branch was fetched and Ruby's `b334db0` tip was reconciled with the
-local `3ddd70e` tip. All combined release-gate checks above remain local at
-this point in the record. The merge commit, normal push, and final remote-SHA
-verification are still pending; no force push is permitted.
+local `3ddd70e` tip in two-parent merge
+`fef3a9924a49ee4b95bfed9cb35851e721c19cfb`. The merge was pushed normally;
+`git ls-remote --heads origin codex/pact-cp03-agent-native` returned that exact
+full SHA. No force push was used. This proves GitHub synchronization only; it
+does not upgrade the provider, checkpoint, human-decision, deployment, or
+public-release gates.

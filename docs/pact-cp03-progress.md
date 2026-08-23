@@ -38,7 +38,7 @@ The viewer does not directly drive a character with keyboard/game controls in th
 | CP00 Reference Grammar | visual/theoretical grammar and checkpoint media | `ARCHIVED`; human visual direction recorded | preserve as source, not final 3D proof |
 | CP01 Asset Bake-off | compare public and generated 3D candidates | `PARTIAL`; preflight and fixed public candidates exist, formal model bake-off incomplete | decide whether a generated challenger is still needed |
 | CP02 Mutable Room / One Reframe | source-locked room, governed add/move/undo/reject, real local assets | `CHECKPOINT_ARCHIVED`, runtime tested, artistic `R2 KEEP`, public release false | frozen; do not rewrite its evidence |
-| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `MERGED_LOCAL_SCRIPTED_VERIFIED + RUBY_FIVE_EFFECT_UI_ENGINEERING_VERIFIED + THREE_FAILED_LIVE_RUNS`; the combined tree passes council, exact viewer approval, Ruby interaction/rollback, audience UI, five Three.js effects, rig, physics, persistence and archive-contract gates; no new provider call or formal checkpoint capture occurred | remote-verify the merge, then complete the separately gated model/preflight/provider/human decisions and formal five-class encounter archive |
+| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `MERGED_LOCAL_SCRIPTED_VERIFIED + REMOTE_SYNC_VERIFIED + RUBY_FIVE_EFFECT_UI_ENGINEERING_VERIFIED + THREE_FAILED_LIVE_RUNS`; the combined tree passes council, exact viewer approval, Ruby interaction/rollback, audience UI, five Three.js effects, rig, physics, persistence and archive-contract gates; no new provider call or formal checkpoint capture occurred | complete the separately gated model/preflight/provider/human decisions and formal five-class encounter archive |
 | CP04 Rights-aware Retrieval | local semantic search over cleared asset registry | `NOT_STARTED`; three fixed Case Pack assets are not a vector database | source records, embeddings, retrieval/Guardian UI |
 | CP05 Generated Gap Asset | one approved offline generated asset | `NOT_STARTED` | separately authorised model/API or local generation bake-off |
 | CP06 Four Positions | 0/1/4-person role and takeover behaviour | `NOT_STARTED` | participant protocol and role runtime |
@@ -187,11 +187,16 @@ introduce a parallel Ruby execution, navigation, collision, ownership, camera
 or rendering backend; the CaseSession ledger records existing Gate/Ruby receipt
 facts only.
 
+The later collaboration sync fetched Ruby's shared-branch tip `b334db0`,
+reconciled it with local council-evidence tip `3ddd70e` in two-parent merge
+`fef3a99`, reran the combined release gate, pushed normally, and confirmed the
+remote branch at the same full SHA with `git ls-remote`. No force push was used.
+
 ## Immediate Sequence
 
 1. Keep Ruby's merged 3D/camera/delivery work and the viewer approval → Gate → Ruby seam frozen as the integration baseline.
 2. Preserve Live Run 01 as `FAILED_PARTIAL`, Live Run 02 as `FAILED_RECONSTRUCTED`, and Live Run 03 as `FAILED_ARCHIVED`; none is a compatibility pass or CP03 acceptance.
-3. Commit the verified collaboration merge, push normally, and require `git ls-remote` to equal local `HEAD`; never force push.
+3. Keep the remote-verified `fef3a99` collaboration merge as the integration baseline; future work must fetch again before changing it.
 4. Preserve the council-v2 critical path as `LOCAL_SCRIPTED`; do not describe fictional fixtures or controlled timing as model quality.
 5. Run the separately approved fixed-input model bake-off before replacing `pending-bakeoff` manifest identifiers.
 6. Any zero-call 6/8 preflight or Live Run 04 requires a fresh exact scope; Live Run 04 is not authorised by this merge.
