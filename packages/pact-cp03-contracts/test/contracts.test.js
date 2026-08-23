@@ -34,7 +34,7 @@ const allRoutingAssignmentsFor = (provider) => {
     : "gemini-model-pending-bakeoff";
   const adapterPackage = provider === "deepseek"
     ? "@deepseek-ai/dsh-llm-deepseek"
-    : "@google/generative-ai";
+    : "@deepseek-ai/dsh-llm-pi-ai";
   return Object.fromEntries(Object.keys(validProviderRoutingManifest.assignments).map((role) => [
     role,
     {
@@ -192,6 +192,19 @@ describe("CP03 foundation gate contracts", () => {
         CaseConductor: {
           ...validProviderRoutingManifest.assignments.CaseConductor,
           ...override,
+        },
+      },
+    })).toThrow(/validation failed/);
+  });
+
+  it("rejects the legacy Google Gemini adapter instead of the installed DSH PI adapter", () => {
+    expect(() => validateProviderRoutingManifest({
+      ...validProviderRoutingManifest,
+      assignments: {
+        ...validProviderRoutingManifest.assignments,
+        Witness: {
+          ...validProviderRoutingManifest.assignments.Witness,
+          adapterPackage: "@google/generative-ai",
         },
       },
     })).toThrow(/validation failed/);

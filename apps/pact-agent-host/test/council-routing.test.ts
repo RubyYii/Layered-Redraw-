@@ -31,7 +31,7 @@ const validAssignment = (
     : 'gemini-model-pending-bakeoff',
   adapterPackage: provider === 'deepseek'
     ? '@deepseek-ai/dsh-llm-deepseek'
-    : '@google/generative-ai',
+    : '@deepseek-ai/dsh-llm-pi-ai',
   adapterVersion: '0.1.0-rc.6',
   promptHash: 'a'.repeat(64),
   toolProfile: 'council-v2',
@@ -88,6 +88,8 @@ describe('council routing manifest validation', () => {
     const manifest = validManifest();
     const result = requireCouncilRoutingManifest(manifest);
     expect(result).toEqual(manifest);
+    expect(result.assignments.Witness.adapterPackage).toBe('@deepseek-ai/dsh-llm-pi-ai');
+    expect(result.assignments.Rewriter.adapterPackage).toBe('@deepseek-ai/dsh-llm-pi-ai');
   });
 
   it('accepts a valid manifest together with a matching turn snapshot', () => {

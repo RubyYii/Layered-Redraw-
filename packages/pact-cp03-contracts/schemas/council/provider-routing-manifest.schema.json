@@ -113,8 +113,7 @@
                 "pattern": "^gemini-[A-Za-z0-9][A-Za-z0-9._-]*$"
               },
               "adapterPackage": {
-                "type": "string",
-                "pattern": "^@google/[A-Za-z0-9][A-Za-z0-9._-]*$"
+                "const": "@deepseek-ai/dsh-llm-pi-ai"
               }
             }
           }

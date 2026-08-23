@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+
+import { canonicalJson } from '@layered-redraw/pact-cp03-contracts';
 import { describe, expect, it } from 'vitest';
 
 import type {
@@ -45,7 +48,7 @@ const routingAssignment = (
     : 'gemini-model-pending-bakeoff',
   adapterPackage: provider === 'deepseek'
     ? '@deepseek-ai/dsh-llm-deepseek'
-    : '@google/generative-ai',
+    : '@deepseek-ai/dsh-llm-pi-ai',
   adapterVersion: '0.1.0-rc.6',
   promptHash,
   toolProfile: 'council-v2',
@@ -124,8 +127,6 @@ const createAttemptRecords = (
       ...finalized,
       contract: {
         ...finalized.contract,
-        adapterPackage: assignment.adapterPackage,
-        adapterVersion: assignment.adapterVersion,
         sessionEventRange: role === 'CaseConductor'
           ? {
               sessionId: '00000000-0000-4000-8000-000000000001',
@@ -171,8 +172,6 @@ const createAttemptRecords = (
     ...finalizedCommit,
     contract: {
       ...finalizedCommit.contract,
-      adapterPackage: conductorAssignment.adapterPackage,
-      adapterVersion: conductorAssignment.adapterVersion,
       sessionEventRange: {
         sessionId: '00000000-0000-4000-8000-000000000001',
         fromSequence: 2,
@@ -197,6 +196,45 @@ const createAttemptRecords = (
   return [...shardRecords, commitRecord];
 };
 
+const asTransportFailure = (
+  record: CouncilAttemptRecord,
+): CouncilAttemptRecord => ({
+  ...record,
+  contract: {
+    ...record.contract,
+    firstChunkAt: null,
+    firstPublicTraceAt: null,
+    finish: { kind: 'error', detailCode: 'TRANSPORT' },
+    toolCalls: [],
+  },
+});
+
+const asSuccessfulRetry = (
+  initial: CouncilAttemptRecord,
+  sentOrdinal: number,
+): CouncilAttemptRecord => ({
+  ...initial,
+  attempt: 2,
+  sentOrdinal,
+  contract: {
+    ...initial.contract,
+    callId: `call_council_retry_${initial.council.role.toLowerCase()}_${sentOrdinal}`,
+    retryOf: initial.contract.callId,
+  },
+});
+
+const withSentOrdinal = (
+  record: CouncilAttemptRecord,
+  sentOrdinal: number,
+): CouncilAttemptRecord => ({
+  ...record,
+  sentOrdinal,
+  contract: {
+    ...record.contract,
+    callId: `call_council_initial_${record.council.role.toLowerCase()}_${sentOrdinal}`,
+  },
+});
+
 const defaultWitnessShardHash = '2'.repeat(64);
 
 const firstPublicTrace = (): CouncilPublicTrace => ({
@@ -206,7 +244,7 @@ const firstPublicTrace = (): CouncilPublicTrace => ({
   role: 'Witness',
   sourceContributionHash: defaultWitnessShardHash,
   acceptanceSequence: 2,
-  projectedAtMonotonicMs: 1_900,
+  projectedAtMonotonicMs: 2_000,
   durableAtMonotonicMs: 2_000,
 });
 
@@ -391,22 +429,29 @@ const draft = () => ({
   },
 });
 
+const canonicalSha256 = (value: unknown): string => createHash('sha256')
+  .update(canonicalJson(value))
+  .digest('hex');
+
 const validCompletedResult = (
   runId: string,
   snapshotHash: string,
-): CouncilRuntimeResult => ({
-  status: 'COMPLETED',
-  draft: draft(),
-  draftHash: 'd'.repeat(64),
-  firstPublicTrace: firstPublicTrace(),
-  providerRequestsMade: 6,
-  attemptRecords: createAttemptRecords(runId, snapshotHash),
-  durableShardReceipts: durableShardReceipts(),
-  durableConductorCommitReceipt: durableConductorCommitReceipt(),
-  selectionBarrierClosed: true,
-  timing: completedTiming(),
-  orchestration: completedOrchestration(),
-});
+): CouncilRuntimeResult => {
+  const completedDraft = draft();
+  return {
+    status: 'COMPLETED',
+    draft: completedDraft,
+    draftHash: canonicalSha256(completedDraft),
+    firstPublicTrace: firstPublicTrace(),
+    providerRequestsMade: 6,
+    attemptRecords: createAttemptRecords(runId, snapshotHash),
+    durableShardReceipts: durableShardReceipts(),
+    durableConductorCommitReceipt: durableConductorCommitReceipt(),
+    selectionBarrierClosed: true,
+    timing: completedTiming(),
+    orchestration: completedOrchestration(),
+  };
+};
 
 const validCouncilRunArchive = (): CouncilRunArchive => {
   const runId = 'run_council_test_01';
@@ -462,6 +507,22 @@ describe('verifyCouncilRunEvidence', () => {
       },
       findings: [],
     });
+  });
+
+  it('binds the valid archive to adapter metadata produced by createProviderAttemptRecord', () => {
+    const archive = validCouncilRunArchive();
+    const geminiRecords = archive.result.attemptRecords.filter(
+      (record) => record.provider === 'gemini',
+    );
+
+    expect(geminiRecords).toHaveLength(2);
+    for (const record of geminiRecords) {
+      expect(record.contract.adapterPackage).toBe('@deepseek-ai/dsh-llm-pi-ai');
+      expect(record.contract.adapterVersion).toBe(
+        archive.routingManifest.assignments[record.council.role].adapterVersion,
+      );
+    }
+    expect(verifyCouncilRunEvidence(JSON.stringify(archive), []).status).toBe('PASS');
   });
 
   it('rejects malformed JSON', () => {
@@ -864,40 +925,21 @@ describe('verifyCouncilRunEvidence', () => {
     });
   });
 
-  it('accepts a valid 7-attempt run with one properly linked retry on attempt 2', () => {
+  it('accepts a valid retry before the Conductor commit without requiring commit sentOrdinal 6', () => {
     const archive = validCouncilRunArchive();
     const initialAttempts = archive.result.attemptRecords;
     const witnessInitial = initialAttempts[1]!;
-    const failedWitnessAttempt = {
-      ...witnessInitial,
-      contract: {
-        ...witnessInitial.contract,
-        finish: { kind: 'error' as const, detailCode: 'PROVIDER_RATE_LIMITED' },
-      },
-    };
-    const retryWitnessAttempt: CouncilAttemptRecord = {
-      ...witnessInitial,
-      attempt: 2,
-      sentOrdinal: 7,
-      contract: {
-        ...witnessInitial.contract,
-        callId: 'call_run_council_test_01_witness_retry_2',
-        retryOf: witnessInitial.contract.callId,
-        finish: { kind: 'stop' as const },
-      },
-      council: {
-        ...witnessInitial.council,
-        declaredDispatchOrdinal: 2,
-      },
-    };
+    const failedWitnessAttempt = asTransportFailure(witnessInitial);
+    const retryWitnessAttempt = asSuccessfulRetry(witnessInitial, 6);
+    const shiftedCommit = withSentOrdinal(initialAttempts[5]!, 7);
     const sevenAttempts = [
       initialAttempts[0]!,
       failedWitnessAttempt,
       initialAttempts[2]!,
       initialAttempts[3]!,
       initialAttempts[4]!,
-      initialAttempts[5]!,
       retryWitnessAttempt,
+      shiftedCommit,
     ];
     const sevenArchive = {
       ...archive,
@@ -911,6 +953,207 @@ describe('verifyCouncilRunEvidence', () => {
     expect(report.status).toBe('PASS');
     expect(report.counts.sentDispatches).toBe(7);
     expect(report.counts.attemptRecords).toBe(7);
+  });
+
+  it('rejects unsupported role and phase pairs', () => {
+    const archive = validCouncilRunArchive();
+    const records = archive.result.attemptRecords.map((record, index) =>
+      index === 1
+        ? {
+            ...record,
+            council: {
+              ...record.council,
+              phase: 'CONDUCTOR_COMMIT' as const,
+            },
+          }
+        : record
+    );
+    const report = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: { ...archive.result, attemptRecords: records },
+    }), []);
+
+    expect(report.status).toBe('FAIL');
+    expect(report.findings).toContainEqual({
+      code: 'UNSUPPORTED_ROLE_PHASE_PAIR',
+      path: 'result.attemptRecords[1].council.phase',
+    });
+  });
+
+  it('rejects duplicate or missing initial declared slots', () => {
+    const archive = validCouncilRunArchive();
+    const duplicateWitness = withSentOrdinal(archive.result.attemptRecords[1]!, 7);
+    const duplicateReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: {
+        ...archive.result,
+        providerRequestsMade: 7,
+        attemptRecords: [...archive.result.attemptRecords, duplicateWitness],
+      },
+    }), []);
+    expect(duplicateReport.findings).toContainEqual({
+      code: 'INITIAL_SLOT_DUPLICATE',
+      path: 'result.attemptRecords.Witness.SHARD',
+    });
+
+    const replacedGuardian = archive.result.attemptRecords.map((record, index) =>
+      index === 4
+        ? {
+            ...record,
+            provider: 'gemini' as const,
+            contract: {
+              ...record.contract,
+              providerRoute: archive.routingManifest.assignments.Witness.route,
+              modelId: archive.routingManifest.assignments.Witness.model,
+              adapterPackage: archive.routingManifest.assignments.Witness.adapterPackage,
+              adapterVersion: archive.routingManifest.assignments.Witness.adapterVersion,
+            },
+            council: {
+              ...record.council,
+              role: 'Witness' as const,
+              promptHash: archive.routingManifest.assignments.Witness.promptHash,
+              declaredDispatchOrdinal: 2,
+            },
+          }
+        : record
+    );
+    const missingReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: { ...archive.result, attemptRecords: replacedGuardian },
+    }), []);
+    expect(missingReport.findings).toEqual(expect.arrayContaining([
+      {
+        code: 'INITIAL_SLOT_DUPLICATE',
+        path: 'result.attemptRecords.Witness.SHARD',
+      },
+      {
+        code: 'INITIAL_SLOT_MISSING',
+        path: 'result.attemptRecords.Guardian.SHARD',
+      },
+    ]));
+  });
+
+  it('rejects a retry unless its prior attempt is a completed TRANSPORT error without an accepted tool', () => {
+    const archive = validCouncilRunArchive();
+    const witnessInitial = archive.result.attemptRecords[1]!;
+    const retry = asSuccessfulRetry(witnessInitial, 7);
+    const nonTransportReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: {
+        ...archive.result,
+        providerRequestsMade: 7,
+        attemptRecords: [...archive.result.attemptRecords, retry],
+      },
+    }), []);
+    expect(nonTransportReport.findings).toContainEqual({
+      code: 'RETRY_PRIOR_NOT_TRANSPORT_ERROR',
+      path: 'result.attemptRecords[6].contract.retryOf',
+    });
+
+    const acceptedTransport = {
+      ...asTransportFailure(witnessInitial),
+      contract: {
+        ...asTransportFailure(witnessInitial).contract,
+        toolCalls: witnessInitial.contract.toolCalls,
+      },
+    };
+    const acceptedReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: {
+        ...archive.result,
+        providerRequestsMade: 7,
+        attemptRecords: [
+          archive.result.attemptRecords[0]!,
+          acceptedTransport,
+          ...archive.result.attemptRecords.slice(2),
+          retry,
+        ],
+      },
+    }), []);
+    expect(acceptedReport.findings).toContainEqual({
+      code: 'RETRY_PRIOR_SIDE_EFFECT_ACCEPTED',
+      path: 'result.attemptRecords[6].contract.retryOf',
+    });
+  });
+
+  it('rejects attempt greater than 2 and more than one retry per provider', () => {
+    const archive = validCouncilRunArchive();
+    const witnessInitial = archive.result.attemptRecords[1]!;
+    const retryTwo = asTransportFailure(asSuccessfulRetry(witnessInitial, 7));
+    const retryThree: CouncilAttemptRecord = {
+      ...asSuccessfulRetry(witnessInitial, 8),
+      attempt: 3,
+      contract: {
+        ...asSuccessfulRetry(witnessInitial, 8).contract,
+        callId: 'call_council_retry_witness_8_third',
+        retryOf: retryTwo.contract.callId,
+      },
+    };
+    const attemptThreeReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: {
+        ...archive.result,
+        providerRequestsMade: 8,
+        attemptRecords: [
+          ...archive.result.attemptRecords.slice(0, 1),
+          asTransportFailure(witnessInitial),
+          ...archive.result.attemptRecords.slice(2),
+          retryTwo,
+          retryThree,
+        ],
+      },
+    }), []);
+    expect(attemptThreeReport.findings).toContainEqual({
+      code: 'ATTEMPT_NUMBER_INVALID',
+      path: 'result.attemptRecords[7].attempt',
+    });
+
+    const conductorInitial = archive.result.attemptRecords[0]!;
+    const archivistInitial = archive.result.attemptRecords[2]!;
+    const twoRetryReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: {
+        ...archive.result,
+        providerRequestsMade: 8,
+        attemptRecords: [
+          asTransportFailure(conductorInitial),
+          archive.result.attemptRecords[1]!,
+          asTransportFailure(archivistInitial),
+          ...archive.result.attemptRecords.slice(3),
+          asSuccessfulRetry(conductorInitial, 7),
+          asSuccessfulRetry(archivistInitial, 8),
+        ],
+      },
+    }), []);
+    expect(twoRetryReport.findings).toContainEqual({
+      code: 'PROVIDER_RETRY_LIMIT_EXCEEDED',
+      path: 'result.attemptRecords[7]',
+    });
+  });
+
+  it('gives the lower declared ordinal the sole provider retry slot', () => {
+    const archive = validCouncilRunArchive();
+    const conductorInitial = archive.result.attemptRecords[0]!;
+    const archivistInitial = archive.result.attemptRecords[2]!;
+    const report = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: {
+        ...archive.result,
+        providerRequestsMade: 7,
+        attemptRecords: [
+          asTransportFailure(conductorInitial),
+          archive.result.attemptRecords[1]!,
+          asTransportFailure(archivistInitial),
+          ...archive.result.attemptRecords.slice(3),
+          asSuccessfulRetry(archivistInitial, 7),
+        ],
+      },
+    }), []);
+
+    expect(report.findings).toContainEqual({
+      code: 'PROVIDER_RETRY_PRIORITY_INVALID',
+      path: 'result.attemptRecords[6].contract.retryOf',
+    });
   });
 
   it('rejects duplicate call IDs in attempt records', () => {
@@ -1115,6 +1358,26 @@ describe('verifyCouncilRunEvidence', () => {
       code: 'DURABLE_SHARD_RECEIPT_DUPLICATE',
       path: 'result.durableShardReceipts[1].shardId',
     });
+
+    const duplicateTraceHash = archive.result.durableShardReceipts.map((receipt, index) =>
+      index === 3
+        ? { ...receipt, payloadHash: archive.result.firstPublicTrace!.sourceContributionHash }
+        : receipt
+    );
+    const hashReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: { ...archive.result, durableShardReceipts: duplicateTraceHash },
+    }), []);
+    expect(hashReport.findings).toEqual(expect.arrayContaining([
+      {
+        code: 'DURABLE_SHARD_RECEIPT_DUPLICATE',
+        path: 'result.durableShardReceipts[3].payloadHash',
+      },
+      {
+        code: 'PUBLIC_TRACE_RECEIPT_NOT_UNIQUE',
+        path: 'result.firstPublicTrace.sourceContributionHash',
+      },
+    ]));
   });
 
   it('rejects public trace when linked receipt is not projected or not durable', () => {
@@ -1131,6 +1394,193 @@ describe('verifyCouncilRunEvidence', () => {
     expect(report.findings).toContainEqual({
       code: 'PUBLIC_TRACE_RECEIPT_NOT_PROJECTED',
       path: 'result.firstPublicTrace.sourceContributionHash',
+    });
+  });
+
+  it('binds every firstPublicTrace identity and timing field to its durable projected receipt', () => {
+    const archive = validCouncilRunArchive();
+    const trace = archive.result.firstPublicTrace!;
+    const variants = [
+      {
+        path: 'result.firstPublicTrace.acceptanceSequence',
+        result: { ...archive.result, firstPublicTrace: { ...trace, acceptanceSequence: 3 } },
+      },
+      {
+        path: 'result.firstPublicTrace.turnId',
+        result: { ...archive.result, firstPublicTrace: { ...trace, turnId: 'turn_other01' } },
+      },
+      {
+        path: 'result.firstPublicTrace.projectedAtMonotonicMs',
+        result: { ...archive.result, firstPublicTrace: { ...trace, projectedAtMonotonicMs: 1_999 } },
+      },
+      {
+        path: 'result.firstPublicTrace.durableAtMonotonicMs',
+        result: { ...archive.result, firstPublicTrace: { ...trace, durableAtMonotonicMs: 1_999 } },
+      },
+      {
+        path: 'result.timing.firstPublicTraceAtMonotonicMs',
+        result: {
+          ...archive.result,
+          timing: { ...archive.result.timing, firstPublicTraceAtMonotonicMs: 2_001 },
+        },
+      },
+    ];
+
+    for (const variant of variants) {
+      const report = verifyCouncilRunEvidence(JSON.stringify({
+        ...archive,
+        result: variant.result,
+      }), []);
+      expect(report.findings).toContainEqual({
+        code: 'PUBLIC_TRACE_RECEIPT_BINDING_MISMATCH',
+        path: variant.path,
+      });
+    }
+  });
+
+  it('requires exactly one projected receipt and unique strictly increasing acceptance sequences', () => {
+    const archive = validCouncilRunArchive();
+    const twiceProjected = archive.result.durableShardReceipts.map((receipt, index) =>
+      index === 3
+        ? { ...receipt, projectedTrace: true, traceEventSeq: 8 }
+        : receipt
+    );
+    const projectedReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: { ...archive.result, durableShardReceipts: twiceProjected },
+    }), []);
+    expect(projectedReport.findings).toContainEqual({
+      code: 'PROJECTED_TRACE_RECEIPT_COUNT_INVALID',
+      path: 'result.durableShardReceipts',
+    });
+
+    const duplicateSequence = archive.result.durableShardReceipts.map((receipt, index) =>
+      index === 2 ? { ...receipt, acceptanceSequence: 2 } : receipt
+    );
+    const duplicateReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: { ...archive.result, durableShardReceipts: duplicateSequence },
+    }), []);
+    expect(duplicateReport.findings).toContainEqual({
+      code: 'DURABLE_SHARD_ACCEPTANCE_SEQUENCE_DUPLICATE',
+      path: 'result.durableShardReceipts[2].acceptanceSequence',
+    });
+
+    const outOfOrder = archive.result.durableShardReceipts.map((receipt, index) => {
+      if (index === 2) return { ...receipt, acceptanceSequence: 4 };
+      if (index === 3) return { ...receipt, acceptanceSequence: 3 };
+      return receipt;
+    });
+    const orderReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: { ...archive.result, durableShardReceipts: outOfOrder },
+    }), []);
+    expect(orderReport.findings).toContainEqual({
+      code: 'DURABLE_SHARD_ACCEPTANCE_SEQUENCE_ORDER_INVALID',
+      path: 'result.durableShardReceipts',
+    });
+  });
+
+  it('binds receipt, trace, and completed draft turn and case identities', () => {
+    const archive = validCouncilRunArchive();
+    if (archive.result.status !== 'COMPLETED') {
+      throw new Error('fixture must be completed');
+    }
+    const changedDraft = {
+      ...archive.result.draft,
+      identity: { ...archive.result.draft.identity, turnId: 'turn_other01' },
+    };
+    const variants = [
+      {
+        path: 'result.durableShardReceipts[2].turnId',
+        result: {
+          ...archive.result,
+          durableShardReceipts: archive.result.durableShardReceipts.map((receipt, index) =>
+            index === 2 ? { ...receipt, turnId: 'turn_other01' } : receipt
+          ),
+        },
+      },
+      {
+        path: 'result.durableConductorCommitReceipt.turnId',
+        result: {
+          ...archive.result,
+          durableConductorCommitReceipt: {
+            ...archive.result.durableConductorCommitReceipt,
+            turnId: 'turn_other01',
+          },
+        },
+      },
+      {
+        path: 'result.firstPublicTrace.turnId',
+        result: {
+          ...archive.result,
+          firstPublicTrace: { ...archive.result.firstPublicTrace!, turnId: 'turn_other01' },
+        },
+      },
+      {
+        path: 'result.draft.identity.turnId',
+        result: {
+          ...archive.result,
+          draft: changedDraft,
+          draftHash: canonicalSha256(changedDraft),
+        },
+      },
+    ];
+    for (const variant of variants) {
+      const report = verifyCouncilRunEvidence(JSON.stringify({
+        ...archive,
+        result: variant.result,
+      }), []);
+      expect(report.findings).toContainEqual({
+        code: 'TURN_ID_MISMATCH',
+        path: variant.path,
+      });
+    }
+
+    const caseReport = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: {
+        ...archive.result,
+        firstPublicTrace: {
+          ...archive.result.firstPublicTrace!,
+          caseSessionId: 'case_other01',
+        },
+      },
+    }), []);
+    expect(caseReport.findings).toContainEqual({
+      code: 'CASE_SESSION_ID_MISMATCH',
+      path: 'result.firstPublicTrace.caseSessionId',
+    });
+  });
+
+  it('binds the durable Conductor commit session to a Conductor shard receipt session', () => {
+    const archive = validCouncilRunArchive();
+    const receipts = archive.result.durableShardReceipts.map((receipt, index) =>
+      index === 0
+        ? { ...receipt, sessionId: '00000000-0000-4000-8000-000000000099' }
+        : receipt
+    );
+    const report = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: { ...archive.result, durableShardReceipts: receipts },
+    }), []);
+
+    expect(report.findings).toContainEqual({
+      code: 'CONDUCTOR_SESSION_MISMATCH',
+      path: 'result.durableConductorCommitReceipt.sessionId',
+    });
+  });
+
+  it('rejects a fabricated but well-formed draftHash', () => {
+    const archive = validCouncilRunArchive();
+    const report = verifyCouncilRunEvidence(JSON.stringify({
+      ...archive,
+      result: { ...archive.result, draftHash: '0'.repeat(64) },
+    }), []);
+
+    expect(report.findings).toContainEqual({
+      code: 'DRAFT_HASH_MISMATCH',
+      path: 'result.draftHash',
     });
   });
 
@@ -1278,5 +1728,74 @@ describe('verifyCouncilRunEvidence', () => {
       path: '$serialized',
     });
     expect(JSON.stringify(report)).not.toContain(shortSecret);
+  });
+
+  it('detects supplied secrets in decoded string leaves when JSON escaping hides the raw value', () => {
+    const escapedSecret = 'fictional"quoted\\secret';
+    const archive = {
+      ...validCouncilRunArchive(),
+      diagnostics: { info: `prefix:${escapedSecret}:suffix` },
+    };
+    const serialized = JSON.stringify(archive);
+    expect(serialized).not.toContain(escapedSecret);
+
+    const report = verifyCouncilRunEvidence(serialized, [escapedSecret]);
+    expect(report.findings).toContainEqual({
+      code: 'SECRET_VALUE_PRESENT',
+      path: 'diagnostics.info',
+    });
+    expect(JSON.stringify(report)).not.toContain(escapedSecret);
+  });
+
+  it('redacts runId when it contains an exact supplied secret value', () => {
+    const archive = validCouncilRunArchive();
+    const report = verifyCouncilRunEvidence(JSON.stringify(archive), [archive.runId]);
+
+    expect(report.runId).toBe('REDACTED');
+    expect(JSON.stringify(report)).not.toContain(archive.runId);
+  });
+
+  it('nulls cost and aggregates tokens only from complete non-late valid envelopes', () => {
+    const archive = validCouncilRunArchive();
+    const variants = [
+      archive.result.attemptRecords.map((record, index) =>
+        index === 0
+          ? { ...record, contract: { ...record.contract, toolCalls: null } }
+          : record
+      ),
+      archive.result.attemptRecords.map((record, index) =>
+        index === 0
+          ? {
+              ...record,
+              contract: {
+                ...record.contract,
+                endedAt: null,
+                latencyMs: null,
+                finish: { kind: 'pending' as const },
+              },
+            }
+          : record
+      ),
+      archive.result.attemptRecords.map((record, index) =>
+        index === 0
+          ? { ...record, contract: { ...record.contract, lateQuarantined: true } }
+          : record
+      ),
+    ];
+
+    for (const records of variants) {
+      const report = verifyCouncilRunEvidence(JSON.stringify({
+        ...archive,
+        result: { ...archive.result, attemptRecords: records },
+      }), []);
+      expect(report.status).toBe('FAIL');
+      expect(report.usageEstimate).toEqual({
+        inputTokens: 500,
+        outputTokens: 250,
+        totalTokens: 750,
+        estimatedCostUsd: null,
+        billingConfirmed: false,
+      });
+    }
   });
 });

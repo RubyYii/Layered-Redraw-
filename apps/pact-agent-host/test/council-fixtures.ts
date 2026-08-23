@@ -78,7 +78,7 @@ export const scriptedDualProviderManifest = deepFreeze({
       'gemini',
       'gemini-official',
       'gemini-model-pending-bakeoff',
-      '@google/generative-ai',
+      '@deepseek-ai/dsh-llm-pi-ai',
       'f'.repeat(64),
     ),
     Archivist: routingAssignment(
@@ -92,7 +92,7 @@ export const scriptedDualProviderManifest = deepFreeze({
       'gemini',
       'gemini-official',
       'gemini-model-pending-bakeoff',
-      '@google/generative-ai',
+      '@deepseek-ai/dsh-llm-pi-ai',
       '2'.repeat(64),
     ),
     Guardian: routingAssignment(

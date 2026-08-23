@@ -1,4 +1,7 @@
+import { createHash } from 'node:crypto';
+
 import {
+  canonicalJson,
   validateAgentActionDraft,
   validateProviderCallEnvelope,
 } from '@layered-redraw/pact-cp03-contracts';
@@ -90,6 +93,24 @@ const REQUIRED_COUNCIL_ROLES: readonly CouncilRole[] = [
   'Guardian',
 ];
 
+const INITIAL_COUNCIL_SLOTS = [
+  { role: 'CaseConductor', phase: 'SHARD', declaredDispatchOrdinal: 1 },
+  { role: 'Witness', phase: 'SHARD', declaredDispatchOrdinal: 2 },
+  { role: 'Archivist', phase: 'SHARD', declaredDispatchOrdinal: 3 },
+  { role: 'Rewriter', phase: 'SHARD', declaredDispatchOrdinal: 4 },
+  { role: 'Guardian', phase: 'SHARD', declaredDispatchOrdinal: 5 },
+  { role: 'CaseConductor', phase: 'CONDUCTOR_COMMIT', declaredDispatchOrdinal: 6 },
+] as const;
+
+const councilSlotKey = (role: string, phase: string): string => `${role}:${phase}`;
+
+const INITIAL_COUNCIL_SLOT_BY_KEY = new Map(
+  INITIAL_COUNCIL_SLOTS.map((slot) => [
+    councilSlotKey(slot.role, slot.phase),
+    slot,
+  ]),
+);
+
 const forbiddenSecretFields = new Set([
   'apikey',
   'authorization',
@@ -133,6 +154,42 @@ const scanSecretFields = (
     scanSecretFields(child, childPath, add);
   }
 };
+
+const scanSecretValues = (
+  value: unknown,
+  path: string,
+  secretValues: readonly string[],
+  add: (code: string, path: string) => void,
+): void => {
+  if (typeof value === 'string') {
+    if (secretValues.some((secret) => value.includes(secret))) {
+      add('SECRET_VALUE_PRESENT', path.length === 0 ? '$' : path);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => scanSecretValues(
+      item,
+      `${path}[${index}]`,
+      secretValues,
+      add,
+    ));
+    return;
+  }
+  if (!isRecord(value)) return;
+  for (const [key, child] of Object.entries(value)) {
+    const childPath = path.length === 0 ? key : `${path}.${key}`;
+    scanSecretValues(child, childPath, secretValues, add);
+  }
+};
+
+const hasAcceptedToolSideEffect = (record: CouncilAttemptRecord): boolean =>
+  record.contract.toolCalls.some((toolCall) => toolCall.status === 'accepted');
+
+const isCompletedTransportError = (record: CouncilAttemptRecord): boolean =>
+  record.contract.endedAt !== null &&
+  record.contract.finish.kind === 'error' &&
+  record.contract.finish.detailCode === 'TRANSPORT';
 
 export const verifyCouncilRunEvidence = (
   serialized: string,
@@ -214,6 +271,9 @@ export const verifyCouncilRunEvidence = (
   scanSecretFields(parsed, '', (code, path) => {
     add('secretScan', code, path);
   });
+  scanSecretValues(parsed, '', materialSecrets, (code, path) => {
+    add('secretScan', code, path);
+  });
 
   if (!isRecord(parsed)) {
     add('archive', 'ARCHIVE_OBJECT_REQUIRED', '$');
@@ -225,6 +285,9 @@ export const verifyCouncilRunEvidence = (
   const runId = typeof root.runId === 'string' && root.runId.trim().length > 0
     ? root.runId
     : 'UNRESOLVED';
+  const reportedRunId = materialSecrets.some((secret) => runId.includes(secret))
+    ? 'REDACTED'
+    : runId;
   if (runId === 'UNRESOLVED') {
     add('archive', 'RUN_ID_MISSING', 'runId');
   }
@@ -275,7 +338,7 @@ export const verifyCouncilRunEvidence = (
     add('dispatchLedger', 'ATTEMPT_COUNT_MISMATCH', 'result.attemptRecords');
   }
 
-  const typedRecords: CouncilAttemptRecord[] = [];
+  const typedEntries: Array<{ record: CouncilAttemptRecord; index: number }> = [];
   const seenCallIds = new Set<string>();
   const recordsByCallId = new Map<string, { record: CouncilAttemptRecord; index: number }>();
 
@@ -313,54 +376,20 @@ export const verifyCouncilRunEvidence = (
       return;
     }
     const typedRecord = value as unknown as CouncilAttemptRecord;
-    typedRecords.push(typedRecord);
+    typedEntries.push({ record: typedRecord, index });
 
     const callId = typedRecord.contract.callId;
     if (seenCallIds.has(callId)) {
       add('dispatchLedger', 'DUPLICATE_CALL_ID', `${path}.contract.callId`);
+    } else {
+      recordsByCallId.set(callId, { record: typedRecord, index });
     }
     seenCallIds.add(callId);
-    recordsByCallId.set(callId, { record: typedRecord, index });
-
-    const attempt = typeof typedRecord.attempt === 'number'
-      ? typedRecord.attempt
-      : (typedRecord.contract as unknown as Record<string, unknown>)?.attempt;
-    if (typeof attempt !== 'number' || !Number.isInteger(attempt) || attempt < 1) {
-      add('dispatchLedger', 'ATTEMPT_NUMBER_INVALID', `${path}.attempt`);
-    } else if (attempt === 1) {
-      if (typedRecord.contract.retryOf !== null) {
-        add('dispatchLedger', 'RETRY_OF_ON_INITIAL_ATTEMPT', `${path}.contract.retryOf`);
-      }
-    } else {
-      const retryOf = typedRecord.contract.retryOf;
-      if (typeof retryOf !== 'string' || retryOf.trim().length === 0) {
-        add('dispatchLedger', 'RETRY_CHAIN_BROKEN', `${path}.contract.retryOf`);
-      } else {
-        const prior = recordsByCallId.get(retryOf);
-        if (!prior || prior.index >= index) {
-          add('dispatchLedger', 'RETRY_CHAIN_BROKEN', `${path}.contract.retryOf`);
-        } else {
-          const priorAttempt = typeof prior.record.attempt === 'number'
-            ? prior.record.attempt
-            : (prior.record.contract as unknown as Record<string, unknown>)?.attempt;
-          if (priorAttempt !== attempt - 1) {
-            add('dispatchLedger', 'ATTEMPT_NUMBER_INVALID', `${path}.attempt`);
-          }
-          if (
-            typedRecord.council.role !== prior.record.council.role ||
-            typedRecord.council.phase !== prior.record.council.phase ||
-            typedRecord.provider !== prior.record.provider ||
-            typedRecord.council.declaredDispatchOrdinal !== prior.record.council.declaredDispatchOrdinal
-          ) {
-            add('dispatchLedger', 'RETRY_BINDING_MISMATCH', path);
-          }
-        }
-      }
-    }
   });
 
-  const ordinals = typedRecords.map((r) => r.sentOrdinal);
-  if (ordinals.length !== typedRecords.length || ordinals.some((ord, idx) => ord !== idx + 1)) {
+  const typedRecords = typedEntries.map(({ record }) => record);
+  const ordinals = records.map((record) => isRecord(record) ? record.sentOrdinal : undefined);
+  if (ordinals.some((ordinal, index) => ordinal !== index + 1)) {
     add('dispatchLedger', 'SENT_ORDINAL_SEQUENCE_INVALID', 'result.attemptRecords');
   }
 
@@ -369,13 +398,126 @@ export const verifyCouncilRunEvidence = (
     add('providerKind', 'PROVIDER_KIND_MISMATCH', 'result.attemptRecords');
   }
 
+  const initialEntriesBySlot = new Map<string, Array<{ record: CouncilAttemptRecord; index: number }>>();
+  const retryEntries: Array<{ record: CouncilAttemptRecord; index: number }> = [];
+
+  for (const entry of typedEntries) {
+    const { record, index } = entry;
+    const path = `result.attemptRecords[${index}]`;
+    const slotKey = councilSlotKey(record.council.role, record.council.phase);
+    const slot = INITIAL_COUNCIL_SLOT_BY_KEY.get(slotKey);
+    if (slot === undefined) {
+      add('dispatchLedger', 'UNSUPPORTED_ROLE_PHASE_PAIR', `${path}.council.phase`);
+    }
+
+    if (!Number.isInteger(record.attempt) || record.attempt < 1 || record.attempt > 2) {
+      add('dispatchLedger', 'ATTEMPT_NUMBER_INVALID', `${path}.attempt`);
+      continue;
+    }
+    if (record.attempt === 1) {
+      if (record.contract.retryOf !== null) {
+        add('dispatchLedger', 'RETRY_OF_ON_INITIAL_ATTEMPT', `${path}.contract.retryOf`);
+      }
+      if (slot !== undefined) {
+        const initialEntries = initialEntriesBySlot.get(slotKey) ?? [];
+        initialEntries.push(entry);
+        initialEntriesBySlot.set(slotKey, initialEntries);
+        if (record.council.declaredDispatchOrdinal !== slot.declaredDispatchOrdinal) {
+          add('dispatchLedger', 'DISPATCH_ORDINAL_MISMATCH', `${path}.council.declaredDispatchOrdinal`);
+        }
+        if (record.council.phase === 'SHARD' && record.sentOrdinal !== slot.declaredDispatchOrdinal) {
+          add('dispatchLedger', 'DISPATCH_ORDINAL_MISMATCH', `${path}.sentOrdinal`);
+        }
+      }
+    } else {
+      retryEntries.push(entry);
+    }
+  }
+
+  if (resultStatus === 'COMPLETED') {
+    for (const slot of INITIAL_COUNCIL_SLOTS) {
+      const key = councilSlotKey(slot.role, slot.phase);
+      const initialEntries = initialEntriesBySlot.get(key) ?? [];
+      const slotPath = `result.attemptRecords.${slot.role}.${slot.phase}`;
+      if (initialEntries.length === 0) {
+        add('dispatchLedger', 'INITIAL_SLOT_MISSING', slotPath);
+      } else if (initialEntries.length > 1) {
+        add('dispatchLedger', 'INITIAL_SLOT_DUPLICATE', slotPath);
+      }
+    }
+  }
+
+  const retryCountByProvider = new Map<string, number>();
+  for (const { record, index } of retryEntries) {
+    const path = `result.attemptRecords[${index}]`;
+    const providerRetryCount = (retryCountByProvider.get(record.provider) ?? 0) + 1;
+    retryCountByProvider.set(record.provider, providerRetryCount);
+    if (providerRetryCount > 1) {
+      add('dispatchLedger', 'PROVIDER_RETRY_LIMIT_EXCEEDED', path);
+    }
+
+    const retryOf = record.contract.retryOf;
+    if (typeof retryOf !== 'string' || retryOf.trim().length === 0) {
+      add('dispatchLedger', 'RETRY_CHAIN_BROKEN', `${path}.contract.retryOf`);
+      continue;
+    }
+    const prior = recordsByCallId.get(retryOf);
+    if (prior === undefined || prior.index >= index || prior.record.attempt !== 1) {
+      add('dispatchLedger', 'RETRY_CHAIN_BROKEN', `${path}.contract.retryOf`);
+      continue;
+    }
+
+    if (
+      record.council.role !== prior.record.council.role ||
+      record.council.phase !== prior.record.council.phase ||
+      record.provider !== prior.record.provider ||
+      record.council.declaredDispatchOrdinal !== prior.record.council.declaredDispatchOrdinal ||
+      record.contract.providerRoute !== prior.record.contract.providerRoute ||
+      record.contract.modelId !== prior.record.contract.modelId ||
+      record.contract.adapterPackage !== prior.record.contract.adapterPackage ||
+      record.contract.adapterVersion !== prior.record.contract.adapterVersion ||
+      record.council.promptHash !== prior.record.council.promptHash
+    ) {
+      add('dispatchLedger', 'RETRY_BINDING_MISMATCH', path);
+    }
+    if (!isCompletedTransportError(prior.record)) {
+      add('dispatchLedger', 'RETRY_PRIOR_NOT_TRANSPORT_ERROR', `${path}.contract.retryOf`);
+    }
+    if (hasAcceptedToolSideEffect(prior.record)) {
+      add('dispatchLedger', 'RETRY_PRIOR_SIDE_EFFECT_ACCEPTED', `${path}.contract.retryOf`);
+    }
+
+    if (
+      prior.record.council.phase === 'SHARD' &&
+      isCompletedTransportError(prior.record) &&
+      !hasAcceptedToolSideEffect(prior.record)
+    ) {
+      const eligibleFailures = typedEntries
+        .filter(({ record: candidate }) =>
+          candidate.attempt === 1 &&
+          candidate.provider === record.provider &&
+          candidate.council.phase === 'SHARD' &&
+          isCompletedTransportError(candidate) &&
+          !hasAcceptedToolSideEffect(candidate)
+        )
+        .map(({ record: candidate }) => candidate.council.declaredDispatchOrdinal);
+      const lowestEligibleOrdinal = Math.min(...eligibleFailures);
+      if (
+        eligibleFailures.length > 1 &&
+        prior.record.council.declaredDispatchOrdinal !== lowestEligibleOrdinal
+      ) {
+        add('dispatchLedger', 'PROVIDER_RETRY_PRIORITY_INVALID', `${path}.contract.retryOf`);
+      }
+    }
+  }
+
   const coveredRoles = new Set<string>();
   let conductorCommitAttempt: CouncilAttemptRecord | undefined;
   let conductorIntentAttempt: CouncilAttemptRecord | undefined;
   let conductorIntentIndex = -1;
   let conductorCommitIndex = -1;
 
-  typedRecords.forEach((record, index) => {
+  typedEntries.forEach(({ record, index }) => {
     const path = `result.attemptRecords[${index}]`;
     if (record.runId !== runId) {
       add('archive', 'RUN_ID_MISMATCH', `${path}.runId`);
@@ -386,10 +528,7 @@ export const verifyCouncilRunEvidence = (
 
     const role = record.council.role;
     const phase = record.council.phase;
-    const recordAttempt = typeof record.attempt === 'number'
-      ? record.attempt
-      : (record.contract as unknown as Record<string, unknown>)?.attempt;
-    if (recordAttempt === 1) {
+    if (record.attempt === 1) {
       if (phase === 'SHARD') {
         coveredRoles.add(role);
         if (role === 'CaseConductor') {
@@ -401,23 +540,6 @@ export const verifyCouncilRunEvidence = (
         conductorCommitIndex = index;
       }
 
-      const initialSlotOrdinals: Record<string, number> = {
-        'CaseConductor:SHARD': 1,
-        'Witness:SHARD': 2,
-        'Archivist:SHARD': 3,
-        'Rewriter:SHARD': 4,
-        'Guardian:SHARD': 5,
-        'CaseConductor:CONDUCTOR_COMMIT': 6,
-      };
-      const expectedDeclared = initialSlotOrdinals[`${role}:${phase}`];
-      if (expectedDeclared !== undefined) {
-        if (record.council.declaredDispatchOrdinal !== expectedDeclared) {
-          add('dispatchLedger', 'DISPATCH_ORDINAL_MISMATCH', `${path}.council.declaredDispatchOrdinal`);
-        }
-        if (index < 6 && record.sentOrdinal !== expectedDeclared) {
-          add('dispatchLedger', 'DISPATCH_ORDINAL_MISMATCH', `${path}.sentOrdinal`);
-        }
-      }
     }
 
     if (manifest !== undefined) {
@@ -457,6 +579,7 @@ export const verifyCouncilRunEvidence = (
     }
   });
 
+  let conductorSessionId: string | undefined;
   if (resultStatus === 'COMPLETED') {
     for (const role of REQUIRED_COUNCIL_ROLES) {
       if (!coveredRoles.has(role)) {
@@ -479,8 +602,6 @@ export const verifyCouncilRunEvidence = (
 
     const shardSessionRange = conductorIntentAttempt?.contract.sessionEventRange;
     const commitSessionRange = conductorCommitAttempt?.contract.sessionEventRange;
-    let conductorSessionId: string | undefined;
-
     if (
       !isRecord(shardSessionRange) ||
       typeof shardSessionRange.sessionId !== 'string' ||
@@ -528,12 +649,27 @@ export const verifyCouncilRunEvidence = (
     }
   }
 
+  const completedDraft = resultStatus === 'COMPLETED' && isRecord(resultRecord.draft)
+    ? resultRecord.draft
+    : undefined;
+  const completedDraftIdentity = completedDraft !== undefined && isRecord(completedDraft.identity)
+    ? completedDraft.identity
+    : undefined;
+  const completedTurnId = typeof completedDraftIdentity?.turnId === 'string'
+    ? completedDraftIdentity.turnId
+    : undefined;
+  const completedCaseSessionId = typeof completedDraftIdentity?.caseSessionId === 'string'
+    ? completedDraftIdentity.caseSessionId
+    : undefined;
+
   const durableShards = Array.isArray(resultRecord.durableShardReceipts)
     ? resultRecord.durableShardReceipts
     : [];
-  const shardPayloadHashes = new Set<string>();
   const seenReceiptShardIds = new Set<string>();
   const seenReceiptPayloadHashes = new Set<string>();
+  const seenReceiptAcceptanceSequences = new Set<number>();
+  let previousAcceptanceSequence = 0;
+  let projectedReceiptCount = 0;
 
   durableShards.forEach((receipt, index) => {
     const path = `result.durableShardReceipts[${index}]`;
@@ -582,13 +718,57 @@ export const verifyCouncilRunEvidence = (
         add('contracts', 'DURABLE_SHARD_RECEIPT_DUPLICATE', `${path}.payloadHash`);
       }
       seenReceiptPayloadHashes.add(receipt.payloadHash);
-      shardPayloadHashes.add(receipt.payloadHash);
+    }
+    if (
+      typeof receipt.acceptanceSequence === 'number' &&
+      Number.isInteger(receipt.acceptanceSequence)
+    ) {
+      if (seenReceiptAcceptanceSequences.has(receipt.acceptanceSequence)) {
+        add(
+          'contracts',
+          'DURABLE_SHARD_ACCEPTANCE_SEQUENCE_DUPLICATE',
+          `${path}.acceptanceSequence`,
+        );
+      }
+      seenReceiptAcceptanceSequences.add(receipt.acceptanceSequence);
+      if (receipt.acceptanceSequence <= previousAcceptanceSequence) {
+        add(
+          'contracts',
+          'DURABLE_SHARD_ACCEPTANCE_SEQUENCE_ORDER_INVALID',
+          'result.durableShardReceipts',
+        );
+      }
+      previousAcceptanceSequence = receipt.acceptanceSequence;
+    }
+    if (receipt.projectedTrace === true) {
+      projectedReceiptCount += 1;
+    }
+    if (completedTurnId !== undefined && receipt.turnId !== completedTurnId) {
+      add('contracts', 'TURN_ID_MISMATCH', `${path}.turnId`);
     }
   });
+
+  const durableTurnId = durableShards.find((receipt) =>
+    isRecord(receipt) && typeof receipt.turnId === 'string'
+  );
+  if (
+    completedTurnId !== undefined &&
+    isRecord(durableTurnId) &&
+    durableTurnId.turnId !== completedTurnId
+  ) {
+    add('draftAuthority', 'TURN_ID_MISMATCH', 'result.draft.identity.turnId');
+  }
 
   if (resultStatus === 'COMPLETED') {
     if (durableShards.length !== 5) {
       add('roleCoverage', 'DURABLE_SHARD_RECEIPT_COUNT_INVALID', 'result.durableShardReceipts');
+    }
+    if (projectedReceiptCount !== 1) {
+      add(
+        'draftAuthority',
+        'PROJECTED_TRACE_RECEIPT_COUNT_INVALID',
+        'result.durableShardReceipts',
+      );
     }
     const commitReceipt = resultRecord.durableConductorCommitReceipt;
     if (!isRecord(commitReceipt)) {
@@ -611,6 +791,21 @@ export const verifyCouncilRunEvidence = (
         commitReceipt.commitEventSeq < 0
       ) {
         add('contracts', 'DURABLE_COMMIT_RECEIPT_INVALID', 'result.durableConductorCommitReceipt');
+      }
+      if (completedTurnId !== undefined && commitReceipt.turnId !== completedTurnId) {
+        add('contracts', 'TURN_ID_MISMATCH', 'result.durableConductorCommitReceipt.turnId');
+      }
+      if (
+        typeof commitReceipt.sessionId === 'string' &&
+        !durableShards.some((receipt) =>
+          isRecord(receipt) && receipt.sessionId === commitReceipt.sessionId
+        )
+      ) {
+        add(
+          'contracts',
+          'CONDUCTOR_SESSION_MISMATCH',
+          'result.durableConductorCommitReceipt.sessionId',
+        );
       }
     }
   }
@@ -649,13 +844,30 @@ export const verifyCouncilRunEvidence = (
         add('draftAuthority', 'PUBLIC_TRACE_INVALID', 'result.firstPublicTrace');
       }
 
-      const matchingReceipt = durableShards.find(
-        (r) => isRecord(r) && r.payloadHash === trace.sourceContributionHash,
-      ) as Record<string, unknown> | undefined;
+      if (completedTurnId !== undefined && trace.turnId !== completedTurnId) {
+        add('draftAuthority', 'TURN_ID_MISMATCH', 'result.firstPublicTrace.turnId');
+      }
+      if (
+        completedCaseSessionId !== undefined &&
+        trace.caseSessionId !== completedCaseSessionId
+      ) {
+        add(
+          'draftAuthority',
+          'CASE_SESSION_ID_MISMATCH',
+          'result.firstPublicTrace.caseSessionId',
+        );
+      }
 
-      if (!matchingReceipt) {
+      const matchingReceipts = durableShards.filter(
+        (receipt) => isRecord(receipt) && receipt.payloadHash === trace.sourceContributionHash,
+      ) as Record<string, unknown>[];
+
+      if (matchingReceipts.length === 0) {
         add('draftAuthority', 'PUBLIC_TRACE_SHARD_HASH_UNLINKED', 'result.firstPublicTrace.sourceContributionHash');
+      } else if (matchingReceipts.length > 1) {
+        add('draftAuthority', 'PUBLIC_TRACE_RECEIPT_NOT_UNIQUE', 'result.firstPublicTrace.sourceContributionHash');
       } else {
+        const matchingReceipt = matchingReceipts[0]!;
         if (matchingReceipt.projectedTrace !== true) {
           add('draftAuthority', 'PUBLIC_TRACE_RECEIPT_NOT_PROJECTED', 'result.firstPublicTrace.sourceContributionHash');
         }
@@ -665,20 +877,81 @@ export const verifyCouncilRunEvidence = (
         if (matchingReceipt.traceEventSeq === null || typeof matchingReceipt.traceEventSeq !== 'number') {
           add('draftAuthority', 'PUBLIC_TRACE_INVALID', 'result.firstPublicTrace.sourceContributionHash');
         }
+        if (trace.acceptanceSequence !== matchingReceipt.acceptanceSequence) {
+          add(
+            'draftAuthority',
+            'PUBLIC_TRACE_RECEIPT_BINDING_MISMATCH',
+            'result.firstPublicTrace.acceptanceSequence',
+          );
+        }
+        if (trace.turnId !== matchingReceipt.turnId) {
+          add(
+            'draftAuthority',
+            'PUBLIC_TRACE_RECEIPT_BINDING_MISMATCH',
+            'result.firstPublicTrace.turnId',
+          );
+        }
+        if (trace.projectedAtMonotonicMs !== matchingReceipt.acceptedAtMonotonicMs) {
+          add(
+            'draftAuthority',
+            'PUBLIC_TRACE_RECEIPT_BINDING_MISMATCH',
+            'result.firstPublicTrace.projectedAtMonotonicMs',
+          );
+        }
+        if (
+          typeof matchingReceipt.acceptedAtMonotonicMs === 'number' &&
+          typeof trace.durableAtMonotonicMs === 'number' &&
+          trace.durableAtMonotonicMs < matchingReceipt.acceptedAtMonotonicMs
+        ) {
+          add(
+            'draftAuthority',
+            'PUBLIC_TRACE_RECEIPT_BINDING_MISMATCH',
+            'result.firstPublicTrace.durableAtMonotonicMs',
+          );
+        }
+        const traceTiming = isRecord(resultRecord.timing) ? resultRecord.timing : undefined;
+        if (
+          traceTiming !== undefined &&
+          traceTiming.firstPublicTraceAtMonotonicMs !== trace.durableAtMonotonicMs
+        ) {
+          add(
+            'draftAuthority',
+            'PUBLIC_TRACE_RECEIPT_BINDING_MISMATCH',
+            'result.timing.firstPublicTraceAtMonotonicMs',
+          );
+        }
       }
     }
 
-    if (!isRecord(resultRecord.draft)) {
+    if (completedDraft === undefined) {
       add('completion', 'DRAFT_MISSING_ON_COMPLETED_STATUS', 'result.draft');
     } else {
+      let draftContractValid = true;
       try {
-        validateAgentActionDraft(resultRecord.draft);
+        validateAgentActionDraft(completedDraft);
       } catch {
+        draftContractValid = false;
         add('draftAuthority', 'DRAFT_INVALID', 'result.draft');
       }
-      const draftDecision = isRecord(resultRecord.draft.decision) ? resultRecord.draft.decision : {};
+      const draftDecision = isRecord(completedDraft.decision) ? completedDraft.decision : {};
       if (draftDecision.status !== 'PROPOSED') {
         add('draftAuthority', 'DRAFT_DECISION_STATUS_INVALID', 'result.draft.decision.status');
+      }
+      if (
+        draftContractValid &&
+        typeof resultRecord.draftHash === 'string' &&
+        /^[0-9a-f]{64}$/.test(resultRecord.draftHash)
+      ) {
+        try {
+          const computedDraftHash = createHash('sha256')
+            .update(canonicalJson(completedDraft))
+            .digest('hex');
+          if (resultRecord.draftHash !== computedDraftHash) {
+            add('draftAuthority', 'DRAFT_HASH_MISMATCH', 'result.draftHash');
+          }
+        } catch {
+          add('draftAuthority', 'DRAFT_INVALID', 'result.draft');
+        }
       }
     }
     if (typeof resultRecord.draftHash !== 'string' || !/^[0-9a-f]{64}$/.test(resultRecord.draftHash)) {
@@ -812,16 +1085,25 @@ export const verifyCouncilRunEvidence = (
   let totalOutputTokens = 0;
   let totalTokens = 0;
   let costSum: number | null = 0;
-  let hasCompleteUsage = true;
+  let costAggregationSupported = typedEntries.length === records.length;
 
-  typedRecords.forEach((record, index) => {
+  typedEntries.forEach(({ record, index }) => {
     const path = `result.attemptRecords[${index}].contract.usage`;
+    if (
+      record.contract.endedAt === null ||
+      record.contract.finish.kind === 'pending' ||
+      record.contract.lateQuarantined
+    ) {
+      costAggregationSupported = false;
+      costSum = null;
+      return;
+    }
     const usage = record.contract?.usage;
     if (!isRecord(usage)) {
       if (resultStatus === 'COMPLETED') {
         add('usageEstimate', 'USAGE_RECORD_MISSING', path);
       }
-      hasCompleteUsage = false;
+      costAggregationSupported = false;
       costSum = null;
       return;
     }
@@ -836,13 +1118,15 @@ export const verifyCouncilRunEvidence = (
       typeof tot !== 'number' || !Number.isInteger(tot) || tot < 0
     ) {
       add('usageEstimate', 'USAGE_TOKENS_INVALID', path);
-      hasCompleteUsage = false;
+      costAggregationSupported = false;
       costSum = null;
       return;
     }
     if (tot !== inp + out) {
       add('usageEstimate', 'USAGE_TOKENS_INCONSISTENT', path);
+      costAggregationSupported = false;
       costSum = null;
+      return;
     }
     totalInputTokens += inp;
     totalOutputTokens += out;
@@ -863,14 +1147,14 @@ export const verifyCouncilRunEvidence = (
     }
   });
 
-  if (typedRecords.length === 0 || !hasCompleteUsage) {
+  if (typedRecords.length === 0 || !costAggregationSupported) {
     costSum = null;
   }
 
   return {
     schemaVersion: 'cp03-council-evidence-report/0.1',
     status: findings.length === 0 ? 'PASS' : 'FAIL',
-    runId,
+    runId: reportedRunId,
     counts: {
       plannedDispatches: 6,
       maximumDispatches: 8,
