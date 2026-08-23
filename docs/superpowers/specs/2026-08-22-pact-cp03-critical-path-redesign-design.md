@@ -1,12 +1,19 @@
 # PACT CP03 Critical-Path Redesign
 
-**Status:** `author_approved`
+**Status:** `verified`
 
 **Decision date:** 2026-08-22
 
-**Implementation status:** `not_started`
+**Implementation status:** `critical_path_verified_local_scripted`
 
 **Live Run 04 status:** `not_authorized`
+
+**Verification boundary (2026-08-23):** The approved council critical path is
+implemented and passes local scripted contracts, timing/failure cases, real
+local JSONL durability, evidence verification, exact viewer approval, and the
+existing Ruby interaction seam. This status does not claim final provider/model
+selection, Live Run 04, audience UI, five visual effects, checkpoint media,
+human technical acceptance, artistic `KEEP`, deployment, or public release.
 
 **Supersession boundary:** This document supersedes the future CP03
 interaction architecture in

@@ -10,7 +10,15 @@
 
 **Spec:** `/Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/docs/superpowers/specs/2026-08-22-pact-cp03-critical-path-redesign-design.md`
 
-**Plan status:** `ready_for_execution_review`
+**Plan status:** `local_scripted_verified_pending_remote_sync`
+
+**Local verification boundary (2026-08-23):** Tasks 1–7 and Task 8 local
+steps are implemented and verified at implementation source HEAD `90b7edd`.
+Contracts passed `25/25`, Agent Host passed `332/332` plus typecheck/build,
+Scene Builder passed `170/170` plus build, and the historical provider-path
+non-drift selection passed `38/38`. Provider calls remained `0`; Live Run 04,
+visual capture, human decisions, public release, and final fetch/push/SHA
+verification remain unperformed.
 
 ## Global Constraints
 
@@ -72,7 +80,7 @@
 - Consumes: existing `canonicalJson`, `sha256Canonical`, stable-ref/hash patterns, action-sequence rules, and registered-interaction argument shape.
 - Produces: `CouncilShard`, `ConductorDraftCommit`, `ProviderRoutingManifest`, their JSON schemas, and `validateCouncilShard`, `validateConductorDraftCommit`, `validateProviderRoutingManifest`.
 
-- [ ] **Step 1: Add red contract tests and complete fixtures**
+- [x] **Step 1: Add red contract tests and complete fixtures**
 
 Add frozen fixtures for all five shard kinds, one minimal commit, and one dual-provider manifest. Use these exact kind/role pairs:
 
@@ -111,7 +119,7 @@ expect(() => validateProviderRoutingManifest({
 })).toThrow(/validation failed/);
 ```
 
-- [ ] **Step 2: Run the red shared-contract suite**
+- [x] **Step 2: Run the red shared-contract suite**
 
 Run:
 
@@ -122,7 +130,7 @@ npx vitest run test/contracts.test.js
 
 Expected: FAIL because the council schema imports and validator exports do not exist.
 
-- [ ] **Step 3: Add the council schema version and exact TypeScript contracts**
+- [x] **Step 3: Add the council schema version and exact TypeScript contracts**
 
 Export `CP03_COUNCIL_SCHEMA_VERSION = "cp03-council/0.2"`. Add these discriminated contracts to `contract-types.ts` and expose them through `pact-contracts.d.ts`:
 
@@ -201,7 +209,7 @@ Define the five `content` variants exactly as approved:
 
 The JSON schemas must use `additionalProperties: false`, bind each role to its matching content kind, reuse the existing terminal-action ordering, and permit only `performRegisteredInteraction` capability arguments. Do not add generic JSON creative blobs.
 
-- [ ] **Step 4: Register the three Ajv validators**
+- [x] **Step 4: Register the three Ajv validators**
 
 In `packages/pact-cp03-contracts/src/index.js`, import, export, compile, and wrap all three schemas using the existing `checked()` error path:
 
@@ -217,7 +225,7 @@ export const validateProviderRoutingManifest = checked(
 );
 ```
 
-- [ ] **Step 5: Run contract tests and both dependent typechecks**
+- [x] **Step 5: Run contract tests and both dependent typechecks**
 
 Run:
 
@@ -232,7 +240,7 @@ npx vitest run src/cp03/capability-gate.test.js
 
 Expected: all existing contracts remain valid; new variants pass; malformed role/kind, creative commit, raw control, and invalid provider values fail.
 
-- [ ] **Step 6: Commit Task 1**
+- [x] **Step 6: Commit Task 1**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03
@@ -254,7 +262,7 @@ git commit -m "feat(cp03): define typed council contracts"
 - Consumes: `CouncilRole`, `ProviderRoutingManifest`, `sha256Canonical`, existing CaseSession action state, and a caller-supplied monotonic `now()`.
 - Produces: `COUNCIL_TIMING_LIMITS`, `CouncilTurnSnapshot`, `FrozenCouncilTurn`, `freezeCouncilTurn()`, `requiredRolesForTurn()`, and `isBeforeCouncilDeadline()`.
 
-- [ ] **Step 1: Write red snapshot, policy, and strict-deadline tests**
+- [x] **Step 1: Write red snapshot, policy, and strict-deadline tests**
 
 Use a full representative fixture with image input, scene observation claims, scene mutation, asset/spatial change, and rights sensitivity. Assert:
 
@@ -273,7 +281,7 @@ expect(isBeforeCouncilDeadline(12_001, 12_000)).toBe(false);
 
 Also prove that a text-only non-mutating turn requires only CaseConductor, and that identical JSON inputs produce identical snapshot hashes while a different scene hash or routing version changes the hash.
 
-- [ ] **Step 2: Run the red test**
+- [x] **Step 2: Run the red test**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/pact-agent-host
@@ -282,7 +290,7 @@ npx vitest run test/council-turn.test.ts
 
 Expected: FAIL because `council-turn.ts` does not exist.
 
-- [ ] **Step 3: Implement immutable snapshot and timing constants**
+- [x] **Step 3: Implement immutable snapshot and timing constants**
 
 Use these exact boundaries:
 
@@ -345,7 +353,7 @@ export const isBeforeCouncilDeadline = (
 
 `CouncilTurnSnapshot` must contain case/turn IDs, parent scene hash, source-lock state, input references/classes, registry version, allowed semantic capability IDs, current action-state snapshot, explicit turn scope, its locally derived `requiredRoles`, routing-manifest version, deadline ID, and `deadlineMs: 12_000`. It must also freeze the bounded registry facts required by later deterministic checks: `registeredAssetIds`, `registeredSpatialBridgeIds`, `registeredRightsIds`, `sourceLockIds`, and `supportedRollbackCapabilityIds`. Derive required roles before hashing, require `FrozenCouncilTurn.requiredRoles` to equal the hashed snapshot field, and deep-freeze the snapshot, registry arrays, and required-role array before returning.
 
-- [ ] **Step 4: Implement the local required-role matrix**
+- [x] **Step 4: Implement the local required-role matrix**
 
 Use deterministic insertion order and no model classification:
 
@@ -370,7 +378,7 @@ export const requiredRolesForTurn = (
 
 If a later commit requests a capability that requires an omitted role, Task 4 must return `NEEDS_CLARIFICATION`; Task 2 must not spawn that role dynamically.
 
-- [ ] **Step 5: Add canonical reusable fixtures and run tests**
+- [x] **Step 5: Add canonical reusable fixtures and run tests**
 
 `council-fixtures.ts` must export complete frozen fixtures for one snapshot, all five role shards, one `PROPOSED` commit, one `WITHHELD` Guardian variant, and one scripted dual-provider manifest. Do not include private content or real artwork assets.
 
@@ -382,7 +390,7 @@ npx vitest run test/council-turn.test.ts
 npm run typecheck
 ```
 
-- [ ] **Step 6: Commit Task 2**
+- [x] **Step 6: Commit Task 2**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03
@@ -407,7 +415,7 @@ git commit -m "feat(cp03): freeze council turn authority"
 - Consumes: `FrozenCouncilTurn`, base `SubmissionRegistry` role bindings, council validators, DSH `Session`, `Context`, and canonical hashes.
 - Produces: `CouncilRegistry`, `CouncilShardReceipt`, `CouncilCommitReceipt`, `registerCouncilTools()`, `durableCouncilShard()`, and `durableConductorCommit()`.
 
-- [ ] **Step 1: Write red registry tests for identity, order, projection, duplicate, barrier, and deadline behavior**
+- [x] **Step 1: Write red registry tests for identity, order, projection, duplicate, barrier, and deadline behavior**
 
 Assert this exact accepted event order for the first eligible Rewriter/Witness shard:
 
@@ -446,7 +454,7 @@ Also prove:
 - a shard arriving after the commit selection barrier cannot alter the proposal set.
 - a crash state containing the durable shard but no trace projection is repaired once, uses the actual recovery monotonic time, and a second repair appends nothing.
 
-- [ ] **Step 2: Run the red registry test**
+- [x] **Step 2: Run the red registry test**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/pact-agent-host
@@ -455,7 +463,7 @@ npx vitest run test/council-registry.test.ts
 
 Expected: FAIL because the registry, event vocabulary, and tools do not exist.
 
-- [ ] **Step 3: Extend the append-only event vocabulary without invalidating historical events**
+- [x] **Step 3: Extend the append-only event vocabulary without invalidating historical events**
 
 Add:
 
@@ -486,7 +494,7 @@ Define the council-state payload exactly as:
 
 Extend `pact/public-trace` so historical `{turnId, role, text}` events remain readable while council-v2 events additionally carry `caseSessionId`, `sourceContributionHash`, `acceptanceSequence`, `phase: 'COUNCIL'`, `provisional: true`, and the locally measured `projectedAtMonotonicMs`. Do not rewrite archived JSONL.
 
-- [ ] **Step 4: Implement CouncilRegistry admission and selection barrier**
+- [x] **Step 4: Implement CouncilRegistry admission and selection barrier**
 
 Expose these exact constructor options and methods:
 
@@ -593,7 +601,7 @@ export interface CouncilProposalSnapshot {
 
 Use one per-turn monotonic acceptance counter. Registry acceptance may append events, but only `markShardDurable()` and `markCommitDurable()` may expose inputs to the assembler. Required non-durable shards keep the turn out of `COMMIT_READY`.
 
-- [ ] **Step 5: Register only two council-v2 model tools**
+- [x] **Step 5: Register only two council-v2 model tools**
 
 `council-tools.ts` must define:
 
@@ -610,7 +618,7 @@ export const COUNCIL_ROLE_TOOLS = [
 
 The shard tool validates schema plus runtime-bound role/session. The commit tool requires CaseConductor. Neither tool accepts or generates a complete `AgentActionDraft`; neither exposes `pact_publish_trace`, `pact_route_turn`, or `pact_submit_draft` in the council-v2 tool filter.
 
-- [ ] **Step 6: Implement flush/inspect durability receipts**
+- [x] **Step 6: Implement flush/inspect durability receipts**
 
 `durableCouncilShard()` must prove the accepted `pact/council-shard` event exists at the expected sequence/hash and, when `projectedTrace === true`, prove the linked `pact/public-trace` event exists with the same source hash. `durableConductorCommit()` must prove the commit event/hash. Both fail with `PactDurabilityError` and never mark the registry durable if flush or cold inspection fails.
 
@@ -629,7 +637,7 @@ export const recoverCouncilTraceProjection = async (input: {
 
 Recovery must cold-inspect the durable shard first, append only a missing eligible Witness/Rewriter projection, use the actual recovery monotonic time, flush/inspect it, and remain idempotent. It may not backdate trace latency or make the `2.5s` target pass retroactively.
 
-- [ ] **Step 7: Run focused and historical durability tests**
+- [x] **Step 7: Run focused and historical durability tests**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/pact-agent-host
@@ -639,7 +647,7 @@ npm run typecheck
 
 Expected: council events survive flush/inspect; historical contribution/draft behavior remains unchanged.
 
-- [ ] **Step 8: Commit Task 3**
+- [x] **Step 8: Commit Task 3**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03
@@ -662,7 +670,7 @@ git commit -m "feat(cp03): persist honest council shards"
 - Consumes: one `FrozenCouncilTurn`, `CouncilProposalSnapshot`, all required durable shard payloads/hashes, and one durable `ConductorDraftCommit`.
 - Produces: `evaluateGuardianConflict()` and `assembleCouncilDraft()` returning a discriminated result with no model call.
 
-- [ ] **Step 1: Write red Guardian conflict tests**
+- [x] **Step 1: Write red Guardian conflict tests**
 
 Use this exact result boundary:
 
@@ -695,7 +703,7 @@ Prove:
 - fully matching typed constraints yield `ALLOW`;
 - prose is never heuristically compared or rewritten.
 
-- [ ] **Step 2: Write red assembler tests**
+- [x] **Step 2: Write red assembler tests**
 
 Use this exact public result:
 
@@ -729,7 +737,7 @@ export const assembleCouncilDraft = async (
 
 Assert identical inputs produce byte-identical canonical JSON and the same draft hash. Reject missing required roles, an unselected required shard, stale snapshot/hash, omitted required dissent ID, unknown asset/capability reference, terminal-action mismatch, and assembly finishing at the hard deadline.
 
-- [ ] **Step 3: Run the red conflict and assembler tests**
+- [x] **Step 3: Run the red conflict and assembler tests**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/pact-agent-host
@@ -738,7 +746,7 @@ npx vitest run test/guardian-conflict.test.ts test/draft-assembler.test.ts
 
 Expected: FAIL because both modules do not exist.
 
-- [ ] **Step 4: Implement typed Guardian evaluation**
+- [x] **Step 4: Implement typed Guardian evaluation**
 
 `evaluateGuardianConflict()` must compare only stable IDs and exact sets from the typed shard fields and snapshot capability/registry facts. Return sorted, stable reason codes such as:
 
@@ -753,7 +761,7 @@ const reasonCodes = [
 
 Do not call a model and do not infer that two prose strings agree.
 
-- [ ] **Step 5: Implement field-copying assembly**
+- [x] **Step 5: Implement field-copying assembly**
 
 `assembleCouncilDraft()` must:
 
@@ -768,7 +776,7 @@ Do not call a model and do not infer that two prose strings agree.
 
 The assembler must contain no fallback creative strings. Every non-empty creative field must be copied from a named shard.
 
-- [ ] **Step 6: Run focused contracts and assembler tests**
+- [x] **Step 6: Run focused contracts and assembler tests**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/pact-agent-host
@@ -777,7 +785,7 @@ npm run typecheck
 npm run build
 ```
 
-- [ ] **Step 7: Commit Task 4**
+- [x] **Step 7: Commit Task 4**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03
@@ -803,7 +811,7 @@ git commit -m "feat(cp03): assemble council drafts deterministically"
 - Consumes: `FrozenCouncilTurn`, `ProviderRoutingManifest`, council registries/tools/durability, `assembleCouncilDraft()`, DSH adapter mounting, and the existing provider ledger.
 - Produces: `runCouncilRuntime()` with complete/failed typed results and six-to-eight attempt records.
 
-- [ ] **Step 1: Write red six-dispatch, concurrency, retry, and no-hidden-stream tests**
+- [x] **Step 1: Write red six-dispatch, concurrency, retry, and no-hidden-stream tests**
 
 Expose:
 
@@ -922,7 +930,7 @@ Assert:
 - malformed/late/missing required shard stops before commit and records no draft;
 - Guardian WITHHOLD may record a withheld result but no current executable draft.
 
-- [ ] **Step 2: Run the red runtime suite**
+- [x] **Step 2: Run the red runtime suite**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/pact-agent-host
@@ -931,7 +939,7 @@ npx vitest run test/council-runtime.test.ts test/provider-real-runner.test.ts te
 
 Expected: the new runtime tests fail; all historical tests still pass.
 
-- [ ] **Step 3: Add an opt-in council tool profile to the existing harness**
+- [x] **Step 3: Add an opt-in council tool profile to the existing harness**
 
 Keep the current profile as default. Add:
 
@@ -941,7 +949,7 @@ export type PactToolProfile = 'foundation-v1' | 'council-v2';
 
 For `council-v2`, instantiate `CouncilRegistry`, register council tools, restrict the root to `COUNCIL_ROOT_TOOLS`, and let child requests allow only `COUNCIL_ROLE_TOOLS`. Do not change the historical profile's tools or test expectations.
 
-- [ ] **Step 4: Generalise only the provider-ledger tool vocabulary**
+- [x] **Step 4: Generalise only the provider-ledger tool vocabulary**
 
 Extend the shared tool-name union with:
 
@@ -954,7 +962,7 @@ Teach the ledger that `pact/council-shard` accepts the shard tool and `pact/cond
 
 Preserve historical eight-probe counts and assertions unchanged.
 
-- [ ] **Step 5: Implement the representative council wave**
+- [x] **Step 5: Implement the representative council wave**
 
 At `turn.startedAtMonotonicMs`:
 
@@ -975,7 +983,7 @@ After that admission decision, the runtime closes synthesis and opens no more pr
 
 The Conductor commit prompt must contain no raw repository file, artwork asset, private input, or application-authored creative summary.
 
-- [ ] **Step 6: Implement controlled timing outcomes**
+- [x] **Step 6: Implement controlled timing outcomes**
 
 Record local monotonic milestones for system status, first durable trace, all-required-shards durability, commit durability, assembly start/end, and draft acceptance. Tests must cover:
 
@@ -991,7 +999,7 @@ expect(result.timing).toMatchObject({
 
 Also cover a draft accepted at `8_001ms` but before `12_000ms` as completed with `draftTargetMet: false`, and assembly at exactly `12_000ms` as `LATE_QUARANTINED` with no draft promotion.
 
-- [ ] **Step 7: Run runtime and historical regression suites**
+- [x] **Step 7: Run runtime and historical regression suites**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/pact-agent-host
@@ -1000,7 +1008,7 @@ npm run typecheck
 npm run build
 ```
 
-- [ ] **Step 8: Commit Task 5**
+- [x] **Step 8: Commit Task 5**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03
@@ -1023,7 +1031,7 @@ git commit -m "feat(cp03): run parallel council critical path"
 - Consumes: validated `ProviderRoutingManifest`, `CouncilRuntimeResult`, `CouncilAttemptRecord`, and `COUNCIL_TIMING_LIMITS`.
 - Produces: `requireCouncilRoutingManifest()`, `selectionForCouncilRole()`, `CouncilRunArchive`, `CouncilRunEvidenceReport`, and `verifyCouncilRunEvidence()`.
 
-- [ ] **Step 1: Write red routing-manifest tests**
+- [x] **Step 1: Write red routing-manifest tests**
 
 Reject a manifest unless:
 
@@ -1038,7 +1046,7 @@ Reject a manifest unless:
 - every declared maximum concurrency is sufficient for the manifest's simultaneous role count;
 - no provider or model fallback list exists.
 
-- [ ] **Step 2: Write red evidence-verifier tests**
+- [x] **Step 2: Write red evidence-verifier tests**
 
 Define a separate archive version:
 
@@ -1111,24 +1119,24 @@ The verifier must reject:
 - missing/inconsistent token usage or recorded cost-estimate aggregation, while never treating the estimate as billing confirmation;
 - secret-shaped fields or any supplied exact secret value.
 
-- [ ] **Step 3: Run the red routing/evidence tests**
+- [x] **Step 3: Run the red routing/evidence tests**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/pact-agent-host
 npx vitest run test/council-routing.test.ts test/council-run-evidence.test.ts
 ```
 
-- [ ] **Step 4: Implement fixed role lookup and fail-closed manifest checks**
+- [x] **Step 4: Implement fixed role lookup and fail-closed manifest checks**
 
 `selectionForCouncilRole(manifest, role)` returns the frozen assignment for that role or throws `COUNCIL_ROUTING_ROLE_MISSING`. It never consults environment variables, model catalogs, or fallback routes at turn time.
 
 The implementation may validate scripted fixture manifests. It must not add a CLI mode, Keychain read, network adapter mount, preflight authorization record, or real-run command.
 
-- [ ] **Step 5: Implement the independent council evidence verifier**
+- [x] **Step 5: Implement the independent council evidence verifier**
 
 Return checks for archive, completion, dispatch ledger, role coverage, selection, provider kind, contracts, timing, orchestration, draft authority, usage estimate, and secret scan. Aggregate token counts and nullable cost estimates only from complete provider envelopes; keep `billingConfirmed: false`. Preserve partial failure archives as `FAIL`; never rewrite them to completed evidence.
 
-- [ ] **Step 6: Run evidence plus historical evidence regressions**
+- [x] **Step 6: Run evidence plus historical evidence regressions**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/pact-agent-host
@@ -1136,7 +1144,7 @@ npx vitest run test/council-routing.test.ts test/council-run-evidence.test.ts te
 npm run typecheck
 ```
 
-- [ ] **Step 7: Commit Task 6**
+- [x] **Step 7: Commit Task 6**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03
@@ -1158,7 +1166,7 @@ git commit -m "feat(cp03): verify fixed council routing evidence"
 - Consumes: `assembleCouncilDraft()`, `SubmissionRegistry.draftPayload()`, existing approval schema, `compileGuardedInteractionPlan()`, `applyGuardedInteractionPlan()`, `CaseSessionLedger`, and `persistCaseSessionTransition()`.
 - Produces: one zero-network proof that five agent shards and one commit reach the existing Ruby runtime without a provider-authored full draft.
 
-- [ ] **Step 1: Write the red assembled-draft vertical slice**
+- [x] **Step 1: Write the red assembled-draft vertical slice**
 
 The new integration test must:
 
@@ -1177,7 +1185,7 @@ Assert separately that Guardian `WITHHOLD`, omitted required dissent, stale pare
 
 Also prove the deadline boundary explicitly: a draft durably accepted at `11_999ms` may receive viewer approval after `12_000ms` and execute only while its approval hash and parent scene hash still match; the same delayed approval must fail closed after parent-scene drift. No provider turn reopens during either viewer path.
 
-- [ ] **Step 2: Run the red integration test**
+- [x] **Step 2: Run the red integration test**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/pact-agent-host
@@ -1186,11 +1194,11 @@ npx vitest run test/council-to-ruby.integration.test.js
 
 Expected: FAIL until the Task 3–5 exports and assembled-draft storage seam are complete.
 
-- [ ] **Step 3: Export only the approved council-v2 public interfaces**
+- [x] **Step 3: Export only the approved council-v2 public interfaces**
 
 Update `src/index.ts` to export snapshot, registry, assembler, runtime, routing, and evidence functions. Do not export internal prompt builders, mutable maps, or a bypass around viewer approval/Capability Gate.
 
-- [ ] **Step 4: Run both new and historical Ruby seams**
+- [x] **Step 4: Run both new and historical Ruby seams**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/pact-agent-host
@@ -1201,7 +1209,7 @@ npx vitest run src/cp03/capability-gate.test.js src/interaction-runtime.test.js 
 
 Expected: both old and new DSH-to-Ruby paths pass; no source-locked object or unregistered capability changes.
 
-- [ ] **Step 5: Commit Task 7**
+- [x] **Step 5: Commit Task 7**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03
@@ -1222,7 +1230,7 @@ git commit -m "test(cp03): prove assembled council draft reaches Ruby"
 - Consumes: all Task 1–7 tests, Git commit evidence, and the approved evidence ceiling.
 - Produces: a local engineering record labelled as scripted/local only; no checkpoint visual claim and no provider authorization.
 
-- [ ] **Step 1: Run the shared contract suite**
+- [x] **Step 1: Run the shared contract suite**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/packages/pact-cp03-contracts
@@ -1231,7 +1239,7 @@ npm test
 
 Expected: all contract tests pass.
 
-- [ ] **Step 2: Run the complete Agent Host gate**
+- [x] **Step 2: Run the complete Agent Host gate**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/pact-agent-host
@@ -1242,7 +1250,7 @@ npm run build
 
 Expected: full suite, typecheck, and build pass with zero provider requests.
 
-- [ ] **Step 3: Run the Ruby/Scene Builder regression gate**
+- [x] **Step 3: Run the Ruby/Scene Builder regression gate**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/scene-builder
@@ -1252,7 +1260,7 @@ npm run build
 
 Expected: all existing Ruby/Scene Builder unit and integration tests and the build pass. Do not run the headful checkpoint capture or create video/stills in this task.
 
-- [ ] **Step 4: Prove the historical provider path did not drift**
+- [x] **Step 4: Prove the historical provider path did not drift**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03/apps/pact-agent-host
@@ -1261,7 +1269,7 @@ npx vitest run test/provider-compatibility.test.ts test/provider-real-runner.tes
 
 Expected: the eight-probe historical contract remains green and still reports Live Run 03 as archived failure evidence.
 
-- [ ] **Step 5: Write the local engineering evidence record**
+- [x] **Step 5: Write the local engineering evidence record**
 
 Record exact test counts, commands, local commit SHA, `6 planned / 8 maximum`, controlled timing outcomes, no-hidden-stream result, deterministic draft hash result, Ruby receipt result, and secret scan result. State explicitly:
 
@@ -1277,11 +1285,11 @@ Public release: NOT_AUTHORIZED
 
 Include the approved five-class checkpoint matrix without pretending to satisfy it: `interaction proof = PARTIAL_LOCAL_SCRIPTED`, `visual proof = NOT_CAPTURED`, `engineering proof = LOCAL_SCRIPTED`, `provenance proof = MANIFEST_FIXTURE_ONLY`, and `artistic/curatorial proof = PENDING_HUMAN`. These labels are archival boundaries, not checkpoint acceptance.
 
-- [ ] **Step 6: Update progress without upgrading the checkpoint**
+- [x] **Step 6: Update progress without upgrading the checkpoint**
 
 Change the CP03 engineering row only after the tests pass. Use `CRITICAL_PATH_IMPLEMENTED_LOCAL_SCRIPTED` or a more conservative failure state supported by the evidence. Keep real-provider compatibility, audience UI, five visual effects, formal encounters, five-class archive, and artistic `KEEP` pending.
 
-- [ ] **Step 7: Mark this plan's completed checkboxes and commit the evidence milestone**
+- [x] **Step 7: Mark this plan's completed checkboxes and commit the evidence milestone**
 
 ```bash
 cd /Users/yhryzy/Documents/ChatGPT/.worktrees/layered-redraw-pact-cp03
