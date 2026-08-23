@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join, posix, resolve } from 'node:path';
+import { dirname, isAbsolute, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   mkdir,
@@ -25,6 +25,7 @@ import {
   type Gemini37CatalogAudit,
   verifyGemini37CatalogAudit,
 } from '../src/model-catalog-audit.js';
+import { materializePlaywrightFfmpeg } from '../src/archive-runtime-isolation.js';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const hostRoot = resolve(scriptDir, '..');
@@ -86,13 +87,39 @@ const requireSuccess = (result: ChildResult, code: string): void => {
   if (result.exitCode !== 0 || result.signal !== null) throw new Error(code);
 };
 
+const sourcePlaywrightRegistry = (): string => {
+  const explicit = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  if (explicit === '0') {
+    return join(sceneRoot, 'node_modules', 'playwright-core', '.local-browsers');
+  }
+  if (explicit) return isAbsolute(explicit) ? explicit : resolve(process.cwd(), explicit);
+  if (process.platform === 'darwin') {
+    return join(homedir(), 'Library', 'Caches', 'ms-playwright');
+  }
+  if (process.platform === 'linux') {
+    return join(process.env.XDG_CACHE_HOME ?? join(homedir(), '.cache'), 'ms-playwright');
+  }
+  if (process.platform === 'win32') {
+    return join(
+      process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'),
+      'ms-playwright',
+    );
+  }
+  throw new Error('PLAYWRIGHT_PLATFORM_UNSUPPORTED');
+};
+
 const createIsolatedEnvironment = async (temporaryRoot: string): Promise<NodeJS.ProcessEnv> => {
   const temporaryHome = join(temporaryRoot, 'home');
   const npmCache = join(temporaryRoot, 'npm-cache');
   const npmUserConfig = join(temporaryRoot, 'empty.npmrc');
+  const playwrightRegistry = join(temporaryRoot, 'playwright-browsers');
   await mkdir(temporaryHome, { recursive: true });
   await mkdir(npmCache, { recursive: true });
   await writeFile(npmUserConfig, '', 'utf8');
+  await materializePlaywrightFfmpeg({
+    sourceRegistry: sourcePlaywrightRegistry(),
+    targetRegistry: playwrightRegistry,
+  });
 
   const env: NodeJS.ProcessEnv = {
     PATH: process.env.PATH ?? '',
@@ -107,6 +134,7 @@ const createIsolatedEnvironment = async (temporaryRoot: string): Promise<NodeJS.
     NPM_CONFIG_OFFLINE: 'true',
     NPM_CONFIG_AUDIT: 'false',
     NPM_CONFIG_FUND: 'false',
+    PLAYWRIGHT_BROWSERS_PATH: playwrightRegistry,
     CI: '1',
     NO_COLOR: '1',
     FORCE_COLOR: '0',
