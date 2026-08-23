@@ -65,6 +65,16 @@ export {
   recoverCouncilTraceProjection,
 } from './council-durability.js';
 export {
+  evaluateGuardianConflict,
+  type GuardianConflictInput,
+  type GuardianConflictResult,
+} from './guardian-conflict.js';
+export {
+  assembleCouncilDraft,
+  type AssembleCouncilDraftInput,
+  type AssembleCouncilDraftResult,
+} from './draft-assembler.js';
+export {
   COMPATIBILITY_LIMITS,
   inspectCompatibilityConfig,
 } from './compatibility-config.js';
