@@ -68,3 +68,15 @@ export {
   persistCaseSessionTransition,
   type CaseSessionTransitionDurabilityReceipt,
 } from './case-session-persistence.js';
+export {
+  COUNCIL_TIMING_LIMITS,
+  freezeCouncilTurn,
+  isBeforeCouncilDeadline,
+  requiredRolesForTurn,
+  type CouncilTurnInput,
+  type CouncilTurnInputRef,
+  type CouncilTurnScope,
+  type CouncilTurnSnapshot,
+  type FreezeCouncilTurnInput,
+  type FrozenCouncilTurn,
+} from './council-turn.js';
