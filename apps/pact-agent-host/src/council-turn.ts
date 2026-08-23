@@ -95,6 +95,9 @@ const deepFreeze = <T>(value: T): T => {
   return value;
 };
 
+const hasDuplicates = <T>(values: readonly T[]): boolean =>
+  new Set(values).size !== values.length;
+
 export const requiredRolesForTurn = (
   scope: CouncilTurnScope,
 ): readonly CouncilRole[] => {
@@ -120,6 +123,12 @@ export const isBeforeCouncilDeadline = (
 export const freezeCouncilTurn = async (
   input: FreezeCouncilTurnInput,
 ): Promise<FrozenCouncilTurn> => {
+  if (hasDuplicates(input.registeredSceneObjectIds)) {
+    throw new TypeError('duplicate registered scene object ID');
+  }
+  if (hasDuplicates(input.registeredAffordanceIds)) {
+    throw new TypeError('duplicate registered affordance ID');
+  }
   const startedAtMonotonicMs = input.now();
   const turnScope: CouncilTurnScope = { ...input.turnScope };
   const requiredRoles = requiredRolesForTurn(turnScope);

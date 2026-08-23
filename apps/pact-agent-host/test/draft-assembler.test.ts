@@ -134,6 +134,25 @@ const makeInputWithShards = async (
   };
 };
 
+const withWitnessContent = (
+  shards: Readonly<Record<CouncilRole, CouncilShard>>,
+  content: Partial<WitnessShard['content']>,
+  evidenceAnchors?: readonly string[],
+): Readonly<Record<CouncilRole, CouncilShard>> => {
+  const witness = shards.Witness as WitnessShard;
+  return validShards({
+    ...shards,
+    Witness: {
+      ...witness,
+      ...(evidenceAnchors === undefined ? {} : { evidenceAnchors }),
+      content: {
+        ...witness.content,
+        ...content,
+      },
+    } as WitnessShard,
+  });
+};
+
 const retargetShards = (
   turn: FrozenCouncilTurn,
   shards: Readonly<Record<CouncilRole, CouncilShard>>,
@@ -434,6 +453,60 @@ describe('deterministic council draft assembler', () => {
     const result = await assembleCouncilDraft(await makeInputWithShards(nestedShards));
 
     expect(result.status).toBe('ASSEMBLED');
+  });
+
+  it('rejects a Witness observation input reference absent from the frozen turn', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const witness = fixtures.shards.Witness as WitnessShard;
+    const observation = witness.content.observations[0]!;
+    const shards = withWitnessContent(fixtures.shards, {
+      observations: [{
+        ...observation,
+        inputRefIds: ['input_unknown'],
+      }],
+    });
+
+    const result = await assembleCouncilDraft(await makeInputWithShards(shards));
+
+    expect(result).toMatchObject({
+      status: 'NEEDS_CLARIFICATION',
+      reasonCodes: ['ASSEMBLY_WITNESS_OBSERVATION_INPUT_UNKNOWN'],
+    });
+  });
+
+  it('rejects a Witness evidence anchor absent from the frozen evidence set', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const shards = withWitnessContent(
+      fixtures.shards,
+      {},
+      ['evidence_unknown'],
+    );
+
+    const result = await assembleCouncilDraft(await makeInputWithShards(shards));
+
+    expect(result).toMatchObject({
+      status: 'NEEDS_CLARIFICATION',
+      reasonCodes: ['ASSEMBLY_WITNESS_EVIDENCE_ANCHOR_UNKNOWN'],
+    });
+  });
+
+  it('rejects duplicate Witness observation IDs before copying evidence', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const witness = fixtures.shards.Witness as WitnessShard;
+    const observation = witness.content.observations[0]!;
+    const shards = withWitnessContent(fixtures.shards, {
+      observations: [
+        observation,
+        { ...observation, text: 'Conflicting duplicate observation.' },
+      ],
+    });
+
+    const result = await assembleCouncilDraft(await makeInputWithShards(shards));
+
+    expect(result).toMatchObject({
+      status: 'NEEDS_CLARIFICATION',
+      reasonCodes: ['ASSEMBLY_WITNESS_OBSERVATION_DUPLICATE'],
+    });
   });
 
   it('requires the semantic capability to be allowed by the frozen turn', async () => {

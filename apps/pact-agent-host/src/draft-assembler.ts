@@ -185,10 +185,12 @@ const validateReferences = (
   turn: FrozenCouncilTurn,
   byRole: ReadonlyMap<CouncilRole, CouncilShard>,
 ): ValidationFailure | undefined => {
+  const witness = byRole.get('Witness');
   const archivist = byRole.get('Archivist');
   const rewriter = byRole.get('Rewriter');
   const guardian = byRole.get('Guardian');
   if (
+    witness?.kind !== 'WITNESS' ||
     archivist?.kind !== 'ARCHIVIST' ||
     rewriter?.kind !== 'REWRITER' ||
     guardian?.kind !== 'GUARDIAN'
@@ -286,12 +288,31 @@ const validateReferences = (
     };
   }
 
-  const witness = byRole.get('Witness');
-  const witnessEvidenceIds = new Set(
-    witness?.kind === 'WITNESS'
-      ? witness.content.observations.map((observation) => observation.observationId)
-      : [],
+  const witnessObservationIds = witness.content.observations.map(
+    (observation) => observation.observationId,
   );
+  if (hasDuplicates(witnessObservationIds)) {
+    return {
+      status: NEEDS,
+      reasonCodes: ['ASSEMBLY_WITNESS_OBSERVATION_DUPLICATE'],
+    };
+  }
+  if (witness.content.observations.some((observation) =>
+    !hasEvery(observation.inputRefIds, inputRefIds))) {
+    return {
+      status: NEEDS,
+      reasonCodes: ['ASSEMBLY_WITNESS_OBSERVATION_INPUT_UNKNOWN'],
+    };
+  }
+  // Witness evidence is bound to frozen input references. Source locks are
+  // source-object restrictions, not observation evidence anchors.
+  if (!hasEvery(witness.evidenceAnchors, inputRefIds)) {
+    return {
+      status: NEEDS,
+      reasonCodes: ['ASSEMBLY_WITNESS_EVIDENCE_ANCHOR_UNKNOWN'],
+    };
+  }
+  const witnessEvidenceIds = new Set(witnessObservationIds);
   const dissentEvidenceRefs = new Set([
     ...inputRefIds,
     ...witnessEvidenceIds,

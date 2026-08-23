@@ -1,3 +1,4 @@
+import { validateCouncilShard } from '@layered-redraw/pact-cp03-contracts';
 import type { CouncilProposalSnapshot } from './council-registry.js';
 import type {
   ArchivistShard,
@@ -37,9 +38,9 @@ const orderedReasons = (
 ): readonly string[] => [...reasons].sort((left, right) =>
   reasonIndex.get(left)! - reasonIndex.get(right)!) as readonly string[];
 
-const typedInputFailure = (): GuardianConflictResult => ({
+const selectedShardFailure = (): GuardianConflictResult => ({
   status: 'NEEDS_CLARIFICATION',
-  reasonCodes: ['GUARDIAN_TYPED_INPUT_INVALID'],
+  reasonCodes: ['GUARDIAN_SELECTED_SHARD_INVALID'],
 });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -55,77 +56,15 @@ const isCouncilRole = (value: unknown): value is CouncilRole =>
   value === 'Rewriter' ||
   value === 'Guardian';
 
-const isDissentRecord = (value: unknown): boolean =>
-  isRecord(value) &&
-  typeof value.dissentId === 'string' &&
-  typeof value.text === 'string' &&
-  isStringArray(value.evidenceIds);
-
-const isGuardianContent = (
-  value: unknown,
-): value is GuardianShard['content'] =>
-  isRecord(value) &&
-  (value.disposition === 'ALLOW' ||
-    value.disposition === 'NEEDS_CLARIFICATION' ||
-    value.disposition === 'WITHHOLD') &&
-  isStringArray(value.forbiddenCapabilityIds) &&
-  isStringArray(value.requiredSourceLockIds) &&
-  isStringArray(value.requiredRightsIds) &&
-  isStringArray(value.requiredRollbackCapabilityIds) &&
-  isStringArray(value.contestedEvidenceIds) &&
-  Array.isArray(value.requiredDissentRecords) &&
-  value.requiredDissentRecords.every(isDissentRecord) &&
-  typeof value.guardianChallenge === 'string';
-
-const isArchivistContent = (
-  value: unknown,
-): value is ArchivistShard['content'] =>
-  isRecord(value) &&
-  isStringArray(value.requestedAssetIds) &&
-  isStringArray(value.requestedSpatialBridgeIds) &&
-  isStringArray(value.provenanceAnchors) &&
-  isStringArray(value.rightsRequirements) &&
-  isStringArray(value.unavailableRefs);
-
-const isRewriterContent = (
-  value: unknown,
-): value is RewriterShard['content'] =>
-  isRecord(value) &&
-  isStringArray(value.unresolvedAmbiguities) &&
-  isStringArray(value.seamsAndContradictionsToPreserve) &&
-  isStringArray(value.expectedChanges) &&
-  Array.isArray(value.semanticCapabilityCalls) &&
-  value.semanticCapabilityCalls.every((call) =>
-    isRecord(call) &&
-    typeof call.capability === 'string' &&
-    isRecord(call.arguments) &&
-    typeof call.arguments.actorId === 'string' &&
-    typeof call.arguments.targetId === 'string' &&
-    typeof call.arguments.affordance === 'string' &&
-    (call.arguments.recipientId === undefined ||
-      typeof call.arguments.recipientId === 'string') &&
-    (call.arguments.placementTargetId === undefined ||
-      typeof call.arguments.placementTargetId === 'string')
-  );
-
-const typedShardContentIsValid = (
-  shard: CouncilProposalSnapshot['durableShards'][number]['shard'],
-): boolean => {
-  if (shard.role === 'Guardian') {
-    return shard.kind === 'GUARDIAN' && isGuardianContent(shard.content);
-  }
-  if (shard.role === 'Archivist') {
-    return shard.kind === 'ARCHIVIST' && isArchivistContent(shard.content);
-  }
-  if (shard.role === 'Rewriter') {
-    return shard.kind === 'REWRITER' && isRewriterContent(shard.content);
-  }
-  return true;
-};
-
 const selectedShardsByRole = (
   proposal: CouncilProposalSnapshot,
-): ReadonlyMap<CouncilRole, CouncilProposalSnapshot['durableShards'][number]['shard']> | undefined => {
+): {
+  readonly selected: readonly CouncilProposalSnapshot['durableShards'][number]['shard'][];
+  readonly byRole: ReadonlyMap<
+    CouncilRole,
+    CouncilProposalSnapshot['durableShards'][number]['shard']
+  >;
+} | undefined => {
   if (!isRecord(proposal) || !Array.isArray(proposal.durableShards)) return undefined;
   const rawCommit = proposal.durableCommit?.commit as unknown;
   if (rawCommit !== null && rawCommit !== undefined && !isRecord(rawCommit)) {
@@ -136,6 +75,7 @@ const selectedShardsByRole = (
     return undefined;
   }
   const selectedHashes = new Set(rawSelectedHashes ?? []);
+  const selected: CouncilProposalSnapshot['durableShards'][number]['shard'][] = [];
   const byRole = new Map<CouncilRole, CouncilProposalSnapshot['durableShards'][number]['shard']>();
   for (const entry of proposal.durableShards) {
     if (!isRecord(entry) || !isRecord(entry.shard) || typeof entry.payloadHash !== 'string') {
@@ -145,9 +85,11 @@ const selectedShardsByRole = (
     const shard = entry.shard as unknown as CouncilProposalSnapshot['durableShards'][number]['shard'];
     const role = shard.role;
     if (!isCouncilRole(role)) return undefined;
-    if (!byRole.has(role)) byRole.set(role, shard);
+    selected.push(shard);
+    if (byRole.has(role)) return undefined;
+    byRole.set(role, shard);
   }
-  return byRole;
+  return { selected, byRole };
 };
 
 const hasEvery = (
@@ -186,11 +128,14 @@ export const evaluateGuardianConflict = (
   input: GuardianConflictInput,
 ): GuardianConflictResult => {
   try {
-    const shards = selectedShardsByRole(input.proposal);
-    if (shards === undefined ||
-      [...shards.values()].some((shard) => !typedShardContentIsValid(shard))) {
-      return typedInputFailure();
+    const selected = selectedShardsByRole(input.proposal);
+    if (selected === undefined) {
+      return selectedShardFailure();
     }
+    for (const shard of selected.selected) {
+      validateCouncilShard(shard);
+    }
+    const shards = selected.byRole;
     const guardian = guardianContent(shards);
     const rewriter = rewriterContent(shards);
     const archivist = archivistContent(shards);
@@ -250,6 +195,6 @@ export const evaluateGuardianConflict = (
     }
     return { status: 'ALLOW', reasonCodes: [] };
   } catch {
-    return typedInputFailure();
+    return selectedShardFailure();
   }
 };

@@ -12,6 +12,7 @@ import type {
   GuardianContent,
   CouncilShard,
   ArchivistShard,
+  ConductorIntentShard,
   GuardianShard,
   RewriterShard,
   WitnessShard,
@@ -22,6 +23,14 @@ import {
   roleOrder,
 } from './council-fixtures.js';
 
+const validChildSessionIds: Readonly<Record<CouncilRole, string>> = {
+  CaseConductor: '550e8400-e29b-41d4-a716-446655440001',
+  Witness: '550e8400-e29b-41d4-a716-446655440002',
+  Archivist: '550e8400-e29b-41d4-a716-446655440003',
+  Rewriter: '550e8400-e29b-41d4-a716-446655440004',
+  Guardian: '550e8400-e29b-41d4-a716-446655440005',
+};
+
 const makeProposal = async (
   turn: FrozenCouncilTurn,
   shards: Readonly<Record<CouncilRole, CouncilShard>>,
@@ -30,11 +39,17 @@ const makeProposal = async (
     readonly selectedDissentIds: readonly string[];
   }> = {},
 ): Promise<CouncilProposalSnapshot> => {
-  const durableShards = await Promise.all(roleOrder.map(async (role, index) => ({
-    shard: shards[role],
-    payloadHash: await sha256Canonical(shards[role]),
-    acceptanceSequence: index + 1,
-  })));
+  const durableShards = await Promise.all(roleOrder.map(async (role, index) => {
+    const shard = {
+      ...shards[role],
+      childSessionId: validChildSessionIds[role],
+    } as CouncilShard;
+    return {
+      shard,
+      payloadHash: await sha256Canonical(shard),
+      acceptanceSequence: index + 1,
+    };
+  }));
   const commit = {
     schemaVersion: 'cp03-council/0.2' as const,
     turnId: turn.snapshot.turnId,
@@ -204,27 +219,83 @@ describe('typed Guardian conflict evaluation', () => {
     });
   });
 
-  it('returns a typed clarification instead of throwing on malformed selected content', async () => {
+  it.each([
+    ['CaseConductor', (shards: Readonly<Record<CouncilRole, CouncilShard>>) => {
+      const shard = shards.CaseConductor as ConductorIntentShard;
+      return {
+        ...shards,
+        CaseConductor: {
+          ...shard,
+          content: {
+            ...shard.content,
+            candidateActionSequence: {} as unknown as readonly string[],
+          },
+        } as ConductorIntentShard,
+      };
+    }],
+    ['Witness', (shards: Readonly<Record<CouncilRole, CouncilShard>>) => {
+      const shard = shards.Witness as WitnessShard;
+      return {
+        ...shards,
+        Witness: {
+          ...shard,
+          content: {
+            ...shard.content,
+            observations: {} as unknown as WitnessShard['content']['observations'],
+          },
+        } as WitnessShard,
+      };
+    }],
+    ['Archivist', (shards: Readonly<Record<CouncilRole, CouncilShard>>) => {
+      const shard = shards.Archivist as ArchivistShard;
+      return {
+        ...shards,
+        Archivist: {
+          ...shard,
+          content: {
+            ...shard.content,
+            provenanceAnchors: {} as unknown as ArchivistShard['content']['provenanceAnchors'],
+          },
+        } as ArchivistShard,
+      };
+    }],
+    ['Rewriter', (shards: Readonly<Record<CouncilRole, CouncilShard>>) => {
+      const shard = shards.Rewriter as RewriterShard;
+      return {
+        ...shards,
+        Rewriter: {
+          ...shard,
+          content: {
+            ...shard.content,
+            semanticCapabilityCalls: {} as unknown as RewriterShard['content']['semanticCapabilityCalls'],
+          },
+        } as RewriterShard,
+      };
+    }],
+    ['Guardian', (shards: Readonly<Record<CouncilRole, CouncilShard>>) => {
+      const shard = shards.Guardian as GuardianShard;
+      return {
+        ...shards,
+        Guardian: {
+          ...shard,
+          content: {
+            ...shard.content,
+            requiredDissentRecords: {} as unknown as GuardianShard['content']['requiredDissentRecords'],
+          },
+        } as GuardianShard,
+      };
+    }],
+  ] as const)('fails closed for malformed selected %s shards', async (_role, mutate) => {
     const fixtures = await createFullCouncilFixtures();
-    const rewriter = fixtures.shards.Rewriter as RewriterShard;
-    const shards = {
-      ...fixtures.shards,
-      Rewriter: {
-        ...rewriter,
-        content: {
-          ...rewriter.content,
-          semanticCapabilityCalls: {} as unknown as RewriterShard['content']['semanticCapabilityCalls'],
-        },
-      } as RewriterShard,
-    };
-
     const result = evaluateGuardianConflict({
       turn: fixtures.turn,
-      proposal: await makeProposal(fixtures.turn, shards),
+      proposal: await makeProposal(fixtures.turn, mutate(fixtures.shards)),
     });
 
-    expect(result.status).toBe('NEEDS_CLARIFICATION');
-    expect(result.reasonCodes).toContain('GUARDIAN_TYPED_INPUT_INVALID');
+    expect(result).toEqual({
+      status: 'NEEDS_CLARIFICATION',
+      reasonCodes: ['GUARDIAN_SELECTED_SHARD_INVALID'],
+    });
   });
 
   it('ignores prose differences when the typed IDs still match', async () => {

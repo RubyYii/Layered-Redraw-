@@ -305,4 +305,34 @@ describe('council turn snapshot and required-role policy', () => {
     expect(turn.snapshot.registeredAffordanceIds).toEqual(['pickup', 'place']);
     expect(turn.snapshot.inputRefs).toHaveLength(2);
   });
+
+  it('rejects duplicate registered scene objects before reading the clock', async () => {
+    const now = vi.fn(() => 1_000);
+    const input = {
+      ...fullCouncilTurnInput,
+      registeredSceneObjectIds: [
+        ...fullCouncilTurnInput.registeredSceneObjectIds,
+        fullCouncilTurnInput.registeredSceneObjectIds[0]!,
+      ],
+      now,
+    };
+
+    await expect(freezeCouncilTurn(input)).rejects.toThrow(/duplicate.*scene object/i);
+    expect(now).not.toHaveBeenCalled();
+  });
+
+  it('rejects duplicate registered affordances before reading the clock', async () => {
+    const now = vi.fn(() => 1_000);
+    const input = {
+      ...fullCouncilTurnInput,
+      registeredAffordanceIds: [
+        ...fullCouncilTurnInput.registeredAffordanceIds,
+        fullCouncilTurnInput.registeredAffordanceIds[0]!,
+      ],
+      now,
+    };
+
+    await expect(freezeCouncilTurn(input)).rejects.toThrow(/duplicate.*affordance/i);
+    expect(now).not.toHaveBeenCalled();
+  });
 });
