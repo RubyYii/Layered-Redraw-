@@ -35,6 +35,22 @@ const recordingSession = () => {
 };
 
 describe('SubmissionRegistry strict draft deadline admission', () => {
+  it('uses the historical wall-clock epoch by default for an already-past deadline', async () => {
+    const turnId = 'turn_submission_wall_clock01';
+    const registry = new SubmissionRegistry();
+    const recorded = recordingSession();
+    registry.openTurn(turnId, Date.now() - 1);
+
+    const receipt = await registry.acceptDraft(
+      recorded.session,
+      draft(turnId),
+    );
+
+    expect(receipt.accepted).toBe(false);
+    expect(registry.currentDraft(turnId)).toBeUndefined();
+    expect(recorded.events.map((event) => event.type)).toEqual(['pact/quarantine']);
+  });
+
   it('rejects a draft that reaches exact deadline after a just-before runtime precheck', async () => {
     let now = 1_999;
     const deadlineAt = 2_000;

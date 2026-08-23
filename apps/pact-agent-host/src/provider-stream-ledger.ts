@@ -59,6 +59,7 @@ export interface ProviderDispatchLedgerOptions {
 
 export interface ProviderDispatchLedger {
   readonly sentDispatches: number;
+  readonly refusedUndeclaredStreams: number;
   declareCouncilInitialWave(
     assignments: readonly ProviderStreamAssignment[],
   ): void;
@@ -159,6 +160,7 @@ const envelopeFinish = (
 
 class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
   private sent = 0;
+  private refusedUndeclared = 0;
   private readonly currentAssignmentBySession =
     new Map<string, AssignmentState>();
   private readonly assignmentStates: AssignmentState[] = [];
@@ -250,6 +252,10 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
 
   get sentDispatches(): number {
     return this.sent;
+  }
+
+  get refusedUndeclaredStreams(): number {
+    return this.refusedUndeclared;
   }
 
   declareCouncilInitialWave(
@@ -470,6 +476,7 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
       ? undefined
       : String(request.sessionId);
     if (sessionId === undefined) {
+      this.refusedUndeclared += 1;
       throw new CompatibilityDispatchError(
         'PROVIDER_SESSION_NOT_ASSIGNED',
         'refused an unassigned DSH provider stream',
@@ -477,6 +484,7 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     }
     const state = this.currentAssignmentBySession.get(sessionId);
     if (state === undefined) {
+      this.refusedUndeclared += 1;
       throw new CompatibilityDispatchError(
         'PROVIDER_SESSION_NOT_ASSIGNED',
         'refused an unassigned DSH provider stream',
@@ -486,6 +494,7 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
     const dispatchIndex = retry?.dispatchIndex ?? state.nextDispatch;
     const dispatch = state.assignment.dispatches[dispatchIndex];
     if (dispatch === undefined) {
+      this.refusedUndeclared += 1;
       throw new CompatibilityDispatchError(
         'PROVIDER_SESSION_DISPATCH_PLAN_EXHAUSTED',
         `${state.assignment.probeId} opened an undisclosed provider dispatch`,
@@ -678,7 +687,7 @@ class InstalledProviderDispatchLedger implements ProviderDispatchLedger {
           usage: envelopeUsage(usage),
           finish: envelopeFinish(finish, thrown),
           lateQuarantined:
-            record.contract.lateQuarantined || this.now() > record.deadlineAt,
+            record.contract.lateQuarantined || this.now() >= record.deadlineAt,
         });
       }
       const council = state.assignment.council;

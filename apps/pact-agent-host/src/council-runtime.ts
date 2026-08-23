@@ -91,6 +91,7 @@ export interface CouncilRuntimeOrchestration {
   readonly undeclaredProviderStreams: number;
   readonly deadlineCancellationRequested: boolean;
   readonly harnessDisposed: boolean;
+  readonly cleanupReasonCodes: readonly string[];
 }
 
 export type CouncilRuntimeResult =
@@ -302,6 +303,7 @@ export const runCouncilRuntime = async (
   let deadlineCancellationRequested = false;
   let deadlineReached = false;
   let harnessDisposed = false;
+  const cleanupReasonCodes: string[] = [];
 
   const cancelAtDeadline = (): void => {
     if (deadlineCancellationRequested) return;
@@ -392,30 +394,52 @@ export const runCouncilRuntime = async (
     };
   };
 
-  const orchestration = (): CouncilRuntimeOrchestration => ({
-    activeConductorTurns: activeConductor === undefined
+  const orchestrationEvidence: {
+    activeConductorTurns: number;
+    settlementSinkTurns: number;
+    blockedSettlementSinkTurns: number;
+    undeclaredProviderStreams: number;
+    deadlineCancellationRequested: boolean;
+    harnessDisposed: boolean;
+    cleanupReasonCodes: readonly string[];
+  } = {
+    activeConductorTurns: 0,
+    settlementSinkTurns: 0,
+    blockedSettlementSinkTurns: 0,
+    undeclaredProviderStreams: 0,
+    deadlineCancellationRequested: false,
+    harnessDisposed: false,
+    cleanupReasonCodes: [],
+  };
+
+  const materializeOrchestration = (): void => {
+    orchestrationEvidence.activeConductorTurns = activeConductor === undefined
       ? 0
-      : activeConductor.agent.session.events.filter((event) => event.type === 'turn/start').length,
-    settlementSinkTurns: settlementSinks.reduce(
+      : activeConductor.agent.session.events.filter(
+        (event) => event.type === 'turn/start',
+      ).length;
+    orchestrationEvidence.settlementSinkTurns = settlementSinks.reduce(
       (count, sink) => count + sink.agent.session.events.filter(
         (event) => event.type === 'turn/start',
       ).length,
       0,
-    ),
-    blockedSettlementSinkTurns: settlementSinks.reduce(
+    );
+    orchestrationEvidence.blockedSettlementSinkTurns = settlementSinks.reduce(
       (count, sink) => count + sink.agent.session.events.filter(
         (event) => event.type === 'turn/end' && event.data.reason.kind === 'blocked',
       ).length,
       0,
-    ),
-    undeclaredProviderStreams: 0,
-    get deadlineCancellationRequested() {
-      return deadlineCancellationRequested;
-    },
-    get harnessDisposed() {
-      return harnessDisposed;
-    },
-  });
+    );
+    orchestrationEvidence.undeclaredProviderStreams =
+      ledger?.refusedUndeclaredStreams ?? 0;
+    orchestrationEvidence.deadlineCancellationRequested =
+      deadlineCancellationRequested;
+    orchestrationEvidence.harnessDisposed = harnessDisposed;
+    orchestrationEvidence.cleanupReasonCodes = unique(cleanupReasonCodes);
+  };
+
+  const orchestration = (): CouncilRuntimeOrchestration =>
+    orchestrationEvidence;
 
   const notifyPublicTrace = (trace: CouncilPublicTrace): void => {
     if (options.onPublicTrace === undefined) return;
@@ -836,12 +860,17 @@ export const runCouncilRuntime = async (
       try {
         councilRegistry.closeTurn(options.turn.snapshot.turnId);
       } catch {
-        // The result already carries the authoritative failure if close is unavailable.
+        cleanupReasonCodes.push('COUNCIL_TURN_CLOSE_FAILED');
       }
     }
     if (harness !== undefined) {
-      await harness.dispose();
-      harnessDisposed = true;
+      try {
+        await harness.dispose();
+        harnessDisposed = true;
+      } catch {
+        cleanupReasonCodes.push('COUNCIL_HARNESS_DISPOSE_FAILED');
+      }
     }
+    materializeOrchestration();
   }
 };

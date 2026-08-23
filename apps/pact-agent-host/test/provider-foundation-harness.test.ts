@@ -281,6 +281,113 @@ describe('provider-configurable DSH foundation harness', () => {
     }
   });
 
+  it('counts one refused unassigned stream without opening the provider adapter', async () => {
+    const persistenceRoot = join(
+      tmpdir(),
+      `pact-provider-refused-stream-${randomUUID()}`,
+    );
+    mkdirSync(persistenceRoot, { recursive: true });
+    const deepseek = new ScriptedAdapter([]);
+    const harness = await createFoundationHarness({
+      persistenceRoot,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['deepseek-official'], deepseek);
+      },
+      conductorSelection: {
+        provider: 'deepseek-official',
+        model: 'deepseek-v4-pro',
+      },
+    });
+
+    try {
+      const ledger = installProviderDispatchLedger(harness.ctx, {
+        runId: 'compat_refused_stream01',
+        maximumDispatches: 8,
+        providerKind: 'scripted',
+      });
+      const conductor = await harness.createConductor(
+        SessionId(`case_refused_${randomUUID().replaceAll('-', '')}`),
+        { parked: false },
+      );
+
+      conductor.agent.followup(createUserMessage({
+        content: [{ type: 'text', text: 'open an unassigned local stream' }],
+        source: { kind: 'user' },
+      }));
+      await conductor.agent.whenIdle();
+
+      expect(deepseek.requests).toHaveLength(0);
+      expect(ledger.sentDispatches).toBe(0);
+      expect(ledger.refusedUndeclaredStreams).toBe(1);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  it('marks a provider result ending exactly at its deadline as late', async () => {
+    const persistenceRoot = join(
+      tmpdir(),
+      `pact-provider-equal-deadline-${randomUUID()}`,
+    );
+    mkdirSync(persistenceRoot, { recursive: true });
+    let now = 1_999;
+    const deepseek = new ScriptedAdapter([
+      () => {
+        now = 2_000;
+        return textResponse('exact-deadline result');
+      },
+    ]);
+    const harness = await createFoundationHarness({
+      persistenceRoot,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['deepseek-official'], deepseek);
+      },
+      conductorSelection: {
+        provider: 'deepseek-official',
+        model: 'deepseek-v4-pro',
+      },
+    });
+
+    try {
+      const ledger = installProviderDispatchLedger(harness.ctx, {
+        runId: 'compat_equal_deadline01',
+        maximumDispatches: 8,
+        providerKind: 'scripted',
+        deadlineAt: 2_000,
+        now: () => now,
+      });
+      const conductor = await harness.createConductor(
+        SessionId(`case_equal_${randomUUID().replaceAll('-', '')}`),
+        { parked: false },
+      );
+      ledger.assignSession({
+        sessionId: conductor.agent.id,
+        probeId: 'probe-equal-deadline',
+        provider: 'deepseek',
+        route: 'deepseek-official',
+        model: 'deepseek-v4-pro',
+        deadlineAt: 2_000,
+        dispatches: [{
+          purpose: 'finish exactly at the provider deadline',
+          expectedOutcome: 'terminal-after-tool-result',
+        }],
+      });
+
+      conductor.agent.followup(createUserMessage({
+        content: [{ type: 'text', text: 'return at the exact deadline' }],
+        source: { kind: 'user' },
+      }));
+      await conductor.agent.whenIdle();
+
+      expect(ledger.attemptRecords()[0]?.contract.lateQuarantined).toBe(true);
+      expect(() => ledger.assertComplete()).toThrow(
+        /PROVIDER_RESULT_LATE_QUARANTINED/,
+      );
+    } finally {
+      await harness.dispose();
+    }
+  });
+
   it('waits for a predeclared provider wave before awarding its sole retry to the lower failed ordinal', async () => {
     const persistenceRoot = join(
       tmpdir(),

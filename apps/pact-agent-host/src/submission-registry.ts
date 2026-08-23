@@ -12,7 +12,6 @@ import type {
   AgentActionDraft,
   AgentContribution,
 } from './contract-types.js';
-import { monotonicNowMs } from './council-turn.js';
 import type { PactRole } from './events.js';
 
 export interface SubmissionReceipt {
@@ -50,7 +49,7 @@ export class SubmissionRegistry {
   private readonly currentDraftByTurn = new Map<string, string>();
   private readonly draftPayloadByHash = new Map<string, AgentActionDraft>();
 
-  constructor(private readonly now: () => number = monotonicNowMs) {}
+  constructor(private readonly now: () => number = Date.now) {}
 
   bind(sessionId: SessionId, role: PactRole): () => void {
     const key = String(sessionId);

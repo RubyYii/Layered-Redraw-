@@ -97,6 +97,7 @@ interface AdapterOptions {
   readonly omitNow?: boolean;
   readonly useProductionMonotonicClock?: boolean;
   readonly shortDeadlineMs?: number;
+  readonly disposeFailure?: boolean;
   readonly traceObserver?: (trace: CouncilPublicTrace) => void | Promise<void>;
 }
 
@@ -340,6 +341,16 @@ const startRun = async (
         ['deepseek-official', 'gemini-official'],
         adapter,
       );
+      if (adapterOptions.disposeFailure === true) {
+        const dispose = ctx.fiber.dispose;
+        Object.defineProperty(ctx.fiber, 'dispose', {
+          configurable: true,
+          value: async () => {
+            await dispose();
+            throw new Error('synthetic harness disposal failure');
+          },
+        });
+      }
       if (adapterOptions.assemblyAtMonotonicMs !== undefined) {
         ctx.on('session/event', (_session, event) => {
           if (event.type === 'pact/conductor-commit') {
@@ -371,6 +382,26 @@ const success = (result: CouncilRuntimeResult): RuntimeSuccess => {
 const failure = (result: CouncilRuntimeResult): RuntimeFailure => {
   expect(result.status).not.toBe('COMPLETED');
   return result as RuntimeFailure;
+};
+
+const expectPlainOrchestration = (
+  orchestration: CouncilRuntimeResult['orchestration'],
+): void => {
+  const descriptors = Object.getOwnPropertyDescriptors(orchestration);
+  expect(Object.keys(descriptors).sort()).toEqual([
+    'activeConductorTurns',
+    'blockedSettlementSinkTurns',
+    'cleanupReasonCodes',
+    'deadlineCancellationRequested',
+    'harnessDisposed',
+    'settlementSinkTurns',
+    'undeclaredProviderStreams',
+  ]);
+  for (const descriptor of Object.values(descriptors)) {
+    expect(descriptor.get).toBeUndefined();
+    expect(descriptor.set).toBeUndefined();
+    expect(descriptor).toHaveProperty('value');
+  }
 };
 
 describe('Task 5 council-v2 critical path', () => {
@@ -428,6 +459,40 @@ describe('Task 5 council-v2 critical path', () => {
     expect(completed.orchestration.blockedSettlementSinkTurns).toBe(4);
     expect(completed.orchestration.undeclaredProviderStreams).toBe(0);
     expect(adapter.requests.filter((request) => request.phase === 'SHARD')).toHaveLength(5);
+  });
+
+  it('materializes completed orchestration and normal cleanup as plain data', async () => {
+    const completed = success((await run()).result);
+
+    expectPlainOrchestration(completed.orchestration);
+    expect(completed.orchestration).toMatchObject({
+      deadlineCancellationRequested: false,
+      harnessDisposed: true,
+      cleanupReasonCodes: [],
+    });
+  });
+
+  it('materializes failed orchestration and normal cleanup as plain data', async () => {
+    const failed = failure((await run({ missingRole: 'Guardian' })).result);
+
+    expectPlainOrchestration(failed.orchestration);
+    expect(failed.orchestration).toMatchObject({
+      deadlineCancellationRequested: false,
+      harnessDisposed: true,
+      cleanupReasonCodes: [],
+    });
+  });
+
+  it('preserves a completed typed result when final harness disposal rejects', async () => {
+    const completed = success((await run({ disposeFailure: true })).result);
+
+    expectPlainOrchestration(completed.orchestration);
+    expect(completed.draft).not.toBeNull();
+    expect(completed.timing.hardDeadlineMet).toBe(true);
+    expect(completed.orchestration).toMatchObject({
+      harnessDisposed: false,
+      cleanupReasonCodes: ['COUNCIL_HARNESS_DISPOSE_FAILED'],
+    });
   });
 
   it('exposes only council shard/commit tools and never exposes or calls pact_submit_draft', async () => {
