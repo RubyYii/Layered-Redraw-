@@ -189,3 +189,10 @@ export {
   type ProviderRoutingAudit,
   type ProviderRoutingManifest,
 } from './critical-path-routing.js';
+export {
+  auditGemini37Catalog,
+  inspectInstalledGemini37Catalog,
+  verifyGemini37CatalogAudit,
+  type Gemini37CatalogAudit,
+  type Gemini37CatalogSource,
+} from './model-catalog-audit.js';
