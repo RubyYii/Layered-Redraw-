@@ -45,12 +45,23 @@ export type CouncilShardReceipt =
   | AcceptedCouncilShardReceipt
   | RejectedCouncilShardReceipt;
 
+/**
+ * This symbol is intentionally exported only from the implementation module,
+ * not from the package index. Durability is the sole producer of the proof.
+ */
+export const COUNCIL_DURABILITY_PROOF = Symbol('council-durability-proof');
+
+export type CouncilDurabilityProof = {
+  readonly [COUNCIL_DURABILITY_PROOF]: true;
+};
+
 export interface DurableCouncilShardReceipt
   extends AcceptedCouncilShardReceipt {
   readonly accepted: true;
   readonly status: 'DURABLE';
   readonly sessionId: string;
   readonly lastSeq: number;
+  readonly [COUNCIL_DURABILITY_PROOF]: true;
 }
 
 export interface AcceptedCouncilCommitReceipt {
@@ -78,6 +89,7 @@ export interface DurableConductorCommitReceipt
   readonly status: 'DURABLE';
   readonly sessionId: string;
   readonly lastSeq: number;
+  readonly [COUNCIL_DURABILITY_PROOF]: true;
 }
 
 export interface CouncilProposalSnapshot {
@@ -99,9 +111,21 @@ export interface CouncilRegistryOptions {
   readonly now?: () => number;
 }
 
+export interface AcceptedCouncilShardContext {
+  readonly turn: FrozenCouncilTurn;
+  readonly shard: CouncilShard;
+  readonly sessionId: string;
+}
+
+export interface AcceptedCouncilCommitContext {
+  readonly turn: FrozenCouncilTurn;
+  readonly commit: ConductorDraftCommit;
+  readonly sessionId: string;
+}
+
 interface AcceptedShard {
   readonly shard: CouncilShard;
-  readonly receipt: AcceptedCouncilShardReceipt;
+  receipt: AcceptedCouncilShardReceipt;
   readonly sessionId: string;
   durable: boolean;
 }
@@ -118,7 +142,9 @@ interface TurnState {
   acceptanceSequence: number;
   selectionBarrierClosed: boolean;
   closed: boolean;
-  firstTraceProjected: boolean;
+  firstTraceAcceptanceSequence: number | null;
+  frozenDurableShardIds: ReadonlySet<string> | null;
+  frozenDurableCommit: boolean;
   readonly shards: Map<string, AcceptedShard>;
   commit?: AcceptedCommit;
 }
@@ -149,12 +175,26 @@ const payloadHashOf = async (value: unknown): Promise<string> => {
 const traceEligible = (role: CouncilRole): role is 'Witness' | 'Rewriter' =>
   role === 'Witness' || role === 'Rewriter';
 
+const defaultMonotonicNow = (): number => {
+  if (typeof globalThis.performance?.now === 'function') {
+    return globalThis.performance.now();
+  }
+  return Number(process.hrtime.bigint()) / 1_000_000;
+};
+
+const hasDurabilityProof = (
+  value: unknown,
+): value is CouncilDurabilityProof =>
+  value !== null &&
+  typeof value === 'object' &&
+  (value as Partial<CouncilDurabilityProof>)[COUNCIL_DURABILITY_PROOF] === true;
+
 export class CouncilRegistry {
   private readonly turns = new Map<string, TurnState>();
   private readonly now: () => number;
 
   constructor(private readonly options: CouncilRegistryOptions) {
-    this.now = options.now ?? Date.now;
+    this.now = options.now ?? defaultMonotonicNow;
   }
 
   get submissions(): SubmissionRegistry {
@@ -178,7 +218,9 @@ export class CouncilRegistry {
       acceptanceSequence: 0,
       selectionBarrierClosed: false,
       closed: false,
-      firstTraceProjected: false,
+      firstTraceAcceptanceSequence: null,
+      frozenDurableShardIds: null,
+      frozenDurableCommit: false,
       shards: new Map(),
     });
   }
@@ -258,7 +300,16 @@ export class CouncilRegistry {
 
     const existing = state.shards.get(shard.shardId);
     if (existing !== undefined) {
-      if (existing.receipt.payloadHash === payloadHash) return existing.receipt;
+      if (existing.receipt.payloadHash === payloadHash) {
+        if (
+          existing.receipt.projectedTrace &&
+          existing.receipt.traceEventSeq === null &&
+          traceEligible(existing.shard.role)
+        ) {
+          return this.completeFirstTrace(state, existing, session);
+        }
+        return existing.receipt;
+      }
       return reject('PACT_COUNCIL_SHARD_ID_CONFLICT');
     }
     if (state.closed || state.selectionBarrierClosed) {
@@ -282,23 +333,9 @@ export class CouncilRegistry {
       payloadHash,
       acceptanceSequence,
     });
-    const projectedTrace = !state.firstTraceProjected && traceEligible(shard.role);
-    let traceEventSeq: number | null = null;
-    if (projectedTrace) {
-      const traceEvent = session.append('pact/public-trace', {
-        caseSessionId: shard.caseSessionId,
-        turnId: shard.turnId,
-        role: shard.role,
-        text: shard.publicTrace,
-        sourceContributionHash: payloadHash,
-        acceptanceSequence,
-        phase: 'COUNCIL' as const,
-        provisional: true as const,
-        projectedAtMonotonicMs: acceptedAtMonotonicMs,
-      });
-      traceEventSeq = traceEvent.seq;
-      state.firstTraceProjected = true;
-    }
+    const projectedTrace =
+      state.firstTraceAcceptanceSequence === null && traceEligible(shard.role);
+    if (projectedTrace) state.firstTraceAcceptanceSequence = acceptanceSequence;
     const receipt = Object.freeze({
       accepted: true as const,
       turnId: shard.turnId,
@@ -308,21 +345,83 @@ export class CouncilRegistry {
       projectedTrace,
       acceptedAtMonotonicMs,
       shardEventSeq: shardEvent.seq,
-      traceEventSeq,
+      traceEventSeq: null,
     });
-    state.shards.set(shard.shardId, {
+    const accepted: AcceptedShard = {
       shard: snapshot(shard),
       receipt,
       sessionId: String(session.id),
       durable: false,
+    };
+    state.shards.set(shard.shardId, accepted);
+    if (projectedTrace) return this.completeFirstTrace(state, accepted, session);
+    return accepted.receipt;
+  }
+
+  private completeFirstTrace(
+    state: TurnState,
+    accepted: AcceptedShard,
+    session: Session,
+  ): AcceptedCouncilShardReceipt {
+    if (!traceEligible(accepted.shard.role)) return accepted.receipt;
+    if (accepted.receipt.traceEventSeq !== null) return accepted.receipt;
+
+    const existingTrace = session.events.find((event) =>
+      event.type === 'pact/public-trace' &&
+      event.data.caseSessionId === state.turn.snapshot.caseSessionId &&
+      event.data.turnId === accepted.shard.turnId &&
+      event.data.role === accepted.shard.role &&
+      event.data.text === accepted.shard.publicTrace &&
+      event.data.sourceContributionHash === accepted.receipt.payloadHash &&
+      event.data.acceptanceSequence === accepted.receipt.acceptanceSequence &&
+      event.data.phase === 'COUNCIL' &&
+      event.data.provisional === true
+    );
+    const traceEvent = existingTrace ?? session.append('pact/public-trace', {
+      caseSessionId: accepted.shard.caseSessionId,
+      turnId: accepted.shard.turnId,
+      role: accepted.shard.role,
+      text: accepted.shard.publicTrace,
+      sourceContributionHash: accepted.receipt.payloadHash,
+      acceptanceSequence: accepted.receipt.acceptanceSequence,
+      phase: 'COUNCIL' as const,
+      provisional: true as const,
+      projectedAtMonotonicMs: accepted.receipt.acceptedAtMonotonicMs,
     });
-    return receipt;
+    accepted.receipt = Object.freeze({
+      ...accepted.receipt,
+      traceEventSeq: traceEvent.seq,
+    });
+    state.firstTraceAcceptanceSequence = accepted.receipt.acceptanceSequence;
+    return accepted.receipt;
+  }
+
+  acceptedShardContext(
+    receipt: AcceptedCouncilShardReceipt,
+  ): AcceptedCouncilShardContext {
+    const state = this.turns.get(receipt.turnId);
+    const accepted = state?.shards.get(receipt.shardId);
+    if (
+      state === undefined ||
+      accepted === undefined ||
+      accepted.receipt.payloadHash !== receipt.payloadHash ||
+      accepted.receipt.acceptanceSequence !== receipt.acceptanceSequence ||
+      accepted.receipt.shardEventSeq !== receipt.shardEventSeq
+    ) {
+      throw new Error('PACT_COUNCIL_ACCEPTED_SHARD_RECEIPT_MISMATCH');
+    }
+    return {
+      turn: state.turn,
+      shard: snapshot(accepted.shard),
+      sessionId: accepted.sessionId,
+    };
   }
 
   markShardDurable(receipt: DurableCouncilShardReceipt): void {
     const state = this.turns.get(receipt.turnId);
     const accepted = state?.shards.get(receipt.shardId);
     if (
+      !hasDurabilityProof(receipt) ||
       state === undefined ||
       accepted === undefined ||
       receipt.accepted !== true ||
@@ -405,10 +504,31 @@ export class CouncilRegistry {
     return receipt;
   }
 
+  acceptedCommitContext(
+    receipt: AcceptedCouncilCommitReceipt,
+  ): AcceptedCouncilCommitContext {
+    const state = this.turns.get(receipt.turnId);
+    const accepted = state?.commit;
+    if (
+      state === undefined ||
+      accepted === undefined ||
+      accepted.receipt.payloadHash !== receipt.payloadHash ||
+      accepted.receipt.commitEventSeq !== receipt.commitEventSeq
+    ) {
+      throw new Error('PACT_COUNCIL_ACCEPTED_COMMIT_RECEIPT_MISMATCH');
+    }
+    return {
+      turn: state.turn,
+      commit: snapshot(accepted.commit),
+      sessionId: accepted.sessionId,
+    };
+  }
+
   markCommitDurable(receipt: DurableConductorCommitReceipt): void {
     const state = this.turns.get(receipt.turnId);
     const accepted = state?.commit;
     if (
+      !hasDurabilityProof(receipt) ||
       state === undefined ||
       accepted === undefined ||
       receipt.accepted !== true ||
@@ -426,30 +546,50 @@ export class CouncilRegistry {
   closeSelectionBarrier(turnId: string): void {
     const state = this.turns.get(turnId);
     if (state === undefined) throw new Error('PACT_COUNCIL_TURN_NOT_OPEN');
+    if (state.selectionBarrierClosed) return;
     state.selectionBarrierClosed = true;
+    state.frozenDurableShardIds = new Set(
+      [...state.shards.entries()]
+        .filter(([, entry]) => entry.durable)
+        .map(([shardId]) => shardId),
+    );
+    state.frozenDurableCommit = state.commit?.durable ?? false;
   }
 
   durableProposal(turnId: string): CouncilProposalSnapshot {
     const state = this.turns.get(turnId);
     if (state === undefined) throw new Error('PACT_COUNCIL_TURN_NOT_OPEN');
-    return deepFreeze({
-      turn: state.turn,
-      selectionBarrierClosed: state.selectionBarrierClosed,
-      durableShards: [...state.shards.values()]
-        .filter((entry) => entry.durable)
-        .sort((left, right) =>
-          left.receipt.acceptanceSequence - right.receipt.acceptanceSequence)
-        .map((entry) => ({
-          shard: snapshot(entry.shard),
-          payloadHash: entry.receipt.payloadHash,
-          acceptanceSequence: entry.receipt.acceptanceSequence,
-        })),
-      durableCommit: state.commit?.durable
+    const durableEntries = [...state.shards.values()]
+      .filter((entry) =>
+        entry.durable &&
+        (!state.selectionBarrierClosed ||
+          state.frozenDurableShardIds?.has(entry.shard.shardId) === true))
+      .sort((left, right) =>
+        left.receipt.acceptanceSequence - right.receipt.acceptanceSequence);
+    const durableShards = durableEntries.map((entry) => ({
+      shard: snapshot(entry.shard),
+      payloadHash: entry.receipt.payloadHash,
+      acceptanceSequence: entry.receipt.acceptanceSequence,
+    }));
+    const requiredRolesDurable = state.turn.requiredRoles.every((role) =>
+      durableEntries.some((entry) => entry.shard.role === role));
+    const durableCommit =
+      state.commit?.durable &&
+      state.selectionBarrierClosed &&
+      state.frozenDurableCommit &&
+      requiredRolesDurable &&
+      state.commit.commit.selectedShardHashes.every((payloadHash) =>
+        durableEntries.some((entry) => entry.receipt.payloadHash === payloadHash))
         ? {
             commit: snapshot(state.commit.commit),
             payloadHash: state.commit.receipt.payloadHash,
           }
-        : null,
+        : null;
+    return deepFreeze({
+      turn: state.turn,
+      selectionBarrierClosed: state.selectionBarrierClosed,
+      durableShards,
+      durableCommit,
     });
   }
 
