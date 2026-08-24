@@ -1,0 +1,210 @@
+{
+  "schemaVersion": "cp03-stage-b-replacement-repair-gate/0.1",
+  "mode": "local-scripted",
+  "status": "PASS",
+  "banner": "LOCAL SCRIPTED REPAIR — PROVIDER UNVERIFIED — NO PREFLIGHT — NO REPLACEMENT RUN",
+  "checks": [
+    {
+      "id": "canonical-role-binding",
+      "label": "Direct role submission binds into one canonical shard",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/council-submission-binding.test.ts",
+          "title": "binds deterministic canonical shard identity without changing agent content"
+        }
+      ]
+    },
+    {
+      "id": "wrapper-rejection",
+      "label": "Wrapper-shaped tool input is rejected without repair",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/council-submission-binding.test.ts",
+          "title": "rejects wrappers, model-authored runtime fields, role-content forgery, and stale turns"
+        }
+      ]
+    },
+    {
+      "id": "runtime-schema-rejection",
+      "label": "Model-authored runtime schema and version fields are rejected",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/council-submission-binding.test.ts",
+          "title": "rejects wrappers, model-authored runtime fields, role-content forgery, and stale turns"
+        }
+      ]
+    },
+    {
+      "id": "unknown-reference-rejection",
+      "label": "Unknown rights, registry, capability, object, and evidence references fail closed",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/council-reference-validation.test.ts",
+          "title": "rejects unknown Witness and Archivist references before durability"
+        },
+        {
+          "file": "test/council-reference-validation.test.ts",
+          "title": "rejects unregistered capability, object, affordance, and effect references"
+        },
+        {
+          "file": "test/council-reference-validation.test.ts",
+          "title": "rejects unknown Guardian registries before durability and cross-shard evidence later"
+        }
+      ]
+    },
+    {
+      "id": "known-reference-identity",
+      "label": "Known references are accepted without mapping or mutation",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/council-reference-validation.test.ts",
+          "title": "accepts every known reference without changing a shard"
+        }
+      ]
+    },
+    {
+      "id": "phase-request-policy",
+      "label": "Conductor intent and commit use 1024 and 512 token caps in one session",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/model-bakeoff-execution-policy.test.ts",
+          "title": "freezes the exact phase, model, contract, and evidence policy behind one hash"
+        },
+        {
+          "file": "test/model-bakeoff-dsh-transport.test.ts",
+          "title": "uses each phase cap on the persistent CaseConductor session"
+        }
+      ]
+    },
+    {
+      "id": "gemini-low-local-serialization",
+      "label": "Gemini 3.7 LOW serializes through an intercepted in-process HTTP seam",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/model-bakeoff-dsh-transport.test.ts",
+          "title": "serializes Gemini 3.7 LOW through an in-process HTTP intercept only"
+        }
+      ]
+    },
+    {
+      "id": "terminal-provider-error",
+      "label": "Terminal HTTP 400 finish remains a non-retryable provider error",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/model-bakeoff-dsh-transport.test.ts",
+          "title": "classifies a terminal HTTP 400 finish as a non-retryable provider error"
+        },
+        {
+          "file": "test/model-bakeoff-runner.test.ts",
+          "title": "never retries a provider error"
+        }
+      ]
+    },
+    {
+      "id": "max-tokens-no-tool",
+      "label": "Max-token finish without a tool is a stable content failure",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/model-bakeoff-dsh-transport.test.ts",
+          "title": "classifies a max-token stop without a tool as content failure"
+        }
+      ]
+    },
+    {
+      "id": "hard-timeout",
+      "label": "Local hard timeout is classified late and never retried",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/model-bakeoff-dsh-transport.test.ts",
+          "title": "classifies the local hard deadline as late without waiting for a provider finish"
+        },
+        {
+          "file": "test/model-bakeoff-runner.test.ts",
+          "title": "never retries a late result"
+        }
+      ]
+    },
+    {
+      "id": "first-tool-result-one-shot",
+      "label": "First invalid expected tool result ends the attempt after one stream",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/model-bakeoff-dsh-transport.test.ts",
+          "title": "stops after the first rejected expected tool result"
+        }
+      ]
+    },
+    {
+      "id": "reference-invalid-before-durability",
+      "label": "Canonical-schema-valid but reference-invalid output fails before durability",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/model-bakeoff-dsh-transport.test.ts",
+          "title": "does not technically accept schema-valid but unregistered Archivist references"
+        }
+      ]
+    },
+    {
+      "id": "pair-local-eligibility",
+      "label": "Affected replacement pair fails without erasing an unrelated complete pair",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/model-bakeoff-evidence.test.ts",
+          "title": "keeps a complete replacement-policy Witness pair eligible when an unrelated Guardian case fails"
+        }
+      ]
+    },
+    {
+      "id": "legacy-archive-identity",
+      "label": "Committed Task 8 archive retains its legacy report and evidence hash",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/model-bakeoff-evidence.test.ts",
+          "title": "reverifies the committed Task 8 archive without changing its legacy result or hash"
+        }
+      ]
+    },
+    {
+      "id": "synthetic-secret-scan",
+      "label": "Synthetic archive and DSH evidence pass forbidden-content and exact-secret scans",
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/model-bakeoff-dsh-transport.test.ts",
+          "title": "persists DSH JSONL without leaking configured paths or credential sentinels into evidence"
+        },
+        {
+          "file": "test/model-bakeoff-evidence.test.ts",
+          "title": "verifies every bound fact while preserving the Stage B timing ceiling"
+        }
+      ]
+    },
+    {
+      "id": "zero-external-side-effects",
+      "label": "Provider, Keychain, network, preflight, and run counters are all zero",
+      "status": "PASS",
+      "evidence": []
+    }
+  ],
+  "providerRequestsMade": 0,
+  "keychainReads": 0,
+  "externalNetworkRequests": 0,
+  "preflightsCreated": 0,
+  "runsStarted": 0,
+  "providerCompatibilityProven": false,
+  "repairGateSha256": "6d01edc1e5145d4af8a5b7db830eebc74e46cc7f3c1b4b7cb04f4f3e705d005e"
+}

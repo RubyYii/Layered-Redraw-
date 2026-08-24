@@ -38,7 +38,7 @@ The viewer does not directly drive a character with keyboard/game controls in th
 | CP00 Reference Grammar | visual/theoretical grammar and checkpoint media | `ARCHIVED`; human visual direction recorded | preserve as source, not final 3D proof |
 | CP01 Asset Bake-off | compare public and generated 3D candidates | `PARTIAL`; preflight and fixed public candidates exist, formal model bake-off incomplete | decide whether a generated challenger is still needed |
 | CP02 Mutable Room / One Reframe | source-locked room, governed add/move/undo/reject, real local assets | `CHECKPOINT_ARCHIVED`, runtime tested, artistic `R2 KEEP`, public release false | frozen; do not rewrite its evidence |
-| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `MERGED_LOCAL_SCRIPTED_VERIFIED + REMOTE_SYNC_VERIFIED + RUBY_FIVE_EFFECT_UI_ENGINEERING_VERIFIED + GEMINI_37_ADAPTER_STAGE_A_ENGINEERING_READY_ARCHIVED + STAGE_B_PARTIAL_FAILED_ARCHIVED + THREE_FAILED_LIVE_RUNS`; the combined tree passes council, exact viewer approval, Ruby interaction/rollback, audience UI, five Three.js effects, rig, physics, persistence and archive-contract gates. The one approved fixed-input Stage B run ended `PARTIAL` with `24 sent / 2 accepted / 22 failed / 4 skipped`; deterministic verification returned `FAIL` and `0 / 12` technically eligible role/model pairs. No author selection, routing replacement or formal CP03 capture has occurred. | diagnose the schema/stream failures, redesign under a new spec/preflight if justified, and require a new run ID plus fresh approval before any replacement bake-off; Stage C remains blocked |
+| CP03 Five Actions / Agent-Native Encounter | free input, five DSH roles, hash approval, governed 3D effects | `MERGED_LOCAL_SCRIPTED_VERIFIED + REMOTE_SYNC_VERIFIED + RUBY_FIVE_EFFECT_UI_ENGINEERING_VERIFIED + GEMINI_37_ADAPTER_STAGE_A_ENGINEERING_READY_ARCHIVED + STAGE_B_PARTIAL_FAILED_ARCHIVED + STAGE_B_REPLACEMENT_REPAIR_LOCAL_ZERO_CALL_ARCHIVED + THREE_FAILED_LIVE_RUNS`; the combined tree passes council, exact viewer approval, Ruby interaction/rollback, audience UI, five Three.js effects, rig, physics, persistence and archive-contract gates. The one approved fixed-input Stage B run remains `PARTIAL` with `24 sent / 2 accepted / 22 failed / 4 skipped`, technical `FAIL`, and `0 / 12` eligible pairs. A separate local repair now passes 16/16 adversarial checks and has deterministic diagnostic media, but it created no replacement preflight or run. No author selection, routing replacement or formal CP03 capture has occurred. | separately authorise and execute a new preflight/provider run before claiming compatibility or model evidence; then require human selection and the Stage C 3D encounter |
 | CP04 Rights-aware Retrieval | local semantic search over cleared asset registry | `NOT_STARTED`; three fixed Case Pack assets are not a vector database | source records, embeddings, retrieval/Guardian UI |
 | CP05 Generated Gap Asset | one approved offline generated asset | `NOT_STARTED` | separately authorised model/API or local generation bake-off |
 | CP06 Four Positions | 0/1/4-person role and takeover behaviour | `NOT_STARTED` | participant protocol and role runtime |
@@ -93,6 +93,7 @@ Ruby owns the 3D execution primitives and authored stage. New CP03 code should c
 | `0941cbb`–`3ddd70e` | approved council critical-path redesign and local evidence | five typed durable shards, one minimal Conductor commit, deterministic fail-closed assembly, fixed 6/8 routing/evidence and viewer-approved Ruby vertical slice; local scripted only |
 | `73fa91a`–`2856736` | exact Gemini 3.7 catalog-adapter lock, zero-call audit, Stage A archive machinery and isolated-media repair | direct DSH remains `0.1.0-rc.6`; installed pi-ai is overridden to `0.84.2`; the failed first archive attempt is retained honestly, and approved replacement Run 02 generated the reviewed engineering packet from clean runtime commit `2856736` |
 | `08682f2`–`97251de` | fixed-input five-model bake-off inputs, preflight, approval gate, bounded runner, real DSH transport, evidence verifier, blind-review builder and capture surface | Tasks 1–6 are local/scripted only: exact 28 planned / 30 maximum, two provider-scoped retry slots, twelve role/model pairs, five anonymous author decisions and reviewed checkpoint media; no provider call or Keychain value read occurred |
+| `d17c13d`–`c6b7b6d` | author-approved Stage B replacement repair and comprehensive zero-call gate | model-facing role content is bound deterministically to runtime authority; references fail closed before durability; Conductor caps, terminal evidence, one-shot attempts, legacy identity and pair-local replacement evidence pass 16/16 local checks; provider compatibility remains unverified |
 | current 2026-08-24 combined slice | remote council, Gemini 3.7 adapter-readiness and fixed-input bakeoff chain plus Ruby's reach-constrained, batched four-limb IK/foot lock with smooth preview budgets, editable skeleton mapping and constrained seven-action Agent boundary | both authors' histories are retained by a real merge; the combined contracts, host, Scene Builder, build and available browser gates pass on Windows after portable archive-path, executable-bit assertion and deadline-record finalisation repairs; the private CP02 Case Pack is not present for a fresh CP02/Foundation browser rerun; branch/CI state must be read from Git rather than inferred from this document |
 
 Haorui/Codex owns viewer approval, governance, agent/session contracts, deterministic authority checks, evidence and checkpoint integration. It does not own Ruby's 3D authorship.
@@ -126,6 +127,7 @@ This is roughly the first third of the full CP00-CP08 production route. It is no
 | B4. Council critical path redesign | `CRITICAL_PATH_IMPLEMENTED_LOCAL_SCRIPTED` | immutable turn; five typed shard calls plus one minimal commit; 6 planned / 8 maximum; durable trace; Guardian constraints; deterministic assembler; no hidden provider stream; controlled 2.5/8/12 outcomes; independent evidence verifier |
 | B5. Gemini 3.7 adapter Stage A | `ENGINEERING_READY_ARCHIVED` | replacement Run 02 binds the exact installed catalog and six passing local gates to runtime commit `2856736`, plus a reviewed 1280×720 PNG and uninterrupted 18.04-second WebM; provider requests 0 and browser non-local requests 0; no model-quality claim |
 | B6. Fixed-input Stage B bake-off machinery | `PARTIAL_FAILED_ARCHIVED / NO_ELIGIBLE_PAIRS / ROUTING_PENDING` | run `cp03-model-bakeoff-20260824T055034Z` consumed its one exact approval and ended `24 sent / 2 accepted / 22 failed / 4 skipped`, with no retries and estimated cost USD `0.1464567` (`ESTIMATE_NOT_BILLING`). There were 21 schema failures, one late timeout and four dependency skips. Archive/approval/plan/secret checks pass, but the full technical report fails and exposes `0 / 12` selectable pairs; final 1280×720 / 26.36-second media honestly shows zero candidates and no author decision. |
+| B7. Stage B replacement repair | `LOCAL_SCRIPTED_REPAIR_ARCHIVED / PROVIDER_UNVERIFIED / NO_PREFLIGHT / NO_RUN` | 16/16 adversarial gate checks pass with provider, Keychain, external-network, preflight and run counters all `0`; deterministic 1280×720 PNG and 18.28-second VP8 WebM archive authority/reference/terminal/evidence boundaries only. No model score, selection, route or Ruby mutation is shown. |
 | C1. Draft/approval/Gate to Ruby role interaction | `LOCAL_SLICE_TESTED + COUNCIL_SLICE_TESTED` | historical real DSH root scripted-provider slice plus the fictional five-shard council slice cross exact viewer approval → Gate → Ruby navigation/ownership/rollback receipt → durable CaseSession transition with zero adapter requests |
 | C2. Five-action effect runtime | `MERGED LOCAL IMPLEMENTED / BROWSER VERIFIED` | Translate cyan relation, Reframe amber frame, Merge purple seam, Continue green ripples and KeepOpaque dark veil execute in the Three.js viewport and link to Ruby receipts; this remains engineering, not artistic acceptance |
 | C3. Loopback host, privacy and evidence API | `PARTIAL` | routing and formal-evidence contracts are fail-closed; a production loopback host and cleared audience media policy remain absent |
@@ -162,6 +164,39 @@ This is roughly the first third of the full CP00-CP08 production route. It is no
 - Post-run exact-value scanning across the raw result/session archive found zero Key matches and zero forbidden local-path matches. No Key value is serialized. The final [`review/`](../checkpoints/cp03/model-bakeoff/cp03-model-bakeoff-20260824T055034Z/review/README.md) screenshot and 26.36-second video were visually checked and explicitly show `NO ELIGIBLE CANDIDATES`, `CAPTURE REQUESTS 00`, `ELIGIBLE PAIRS 00`, zero selections and an unloaded sealed mapping. The capture's zero requests are local-media facts, separate from the run's 24 provider requests.
 
 Tasks 7–8 are complete as one consumed failed run archive. The run cannot be resumed or rerun. A replacement requires root-cause diagnosis, a new run ID, refreshed official pricing/preflight and fresh explicit approval; no generic “continue” authorises another provider call.
+
+### Stage B replacement repair — local zero-call checkpoint on 2026-08-24
+
+**Status:** `LOCAL_SCRIPTED_REPAIR_ARCHIVED / PROVIDER_UNVERIFIED`
+
+- The author-approved repair spec is implemented locally. Agent-owned role
+  submissions no longer own runtime envelope fields; a shared deterministic
+  binder and exact reference validator serve production and bake-off paths
+  without unwrapping, renaming, inferring, or replacing creative content.
+- The request policy preserves one Conductor session with 1,024-token intent
+  and 512-token commit phases. Terminal HTTP errors, max-token stops, hard
+  deadlines, and first rejected tool results retain distinct classifications
+  and receive no undeclared second stream.
+- Legacy evidence re-verifies under its original policy and hash. Replacement
+  evidence can keep an unrelated complete pair locally eligible while the
+  overall partial report remains `FAIL`; this is an evidence-policy test, not
+  a successful provider result or selectable model.
+- The deterministic repair gate passes all 16 named local checks with
+  `providerRequestsMade: 0`, `keychainReads: 0`,
+  `externalNetworkRequests: 0`, `preflightsCreated: 0`, and `runsStarted: 0`.
+  Its canonical SHA-256 is
+  `6d01edc1e5145d4af8a5b7db830eebc74e46cc7f3c1b4b7cb04f4f3e705d005e`.
+- The non-run packet is archived at
+  [`stage-b-replacement-repair`](../checkpoints/cp03/stage-b-replacement-repair/README.md).
+  Its software-raster visible-Chrome screenshot is deterministically identical
+  across two independent trial captures. The final VP8 WebM is 1280×720,
+  25 fps, 457 frames and 18.28 seconds; sampled frames preserve the six planned
+  diagnostic stages in order. Browser requests, failed requests, console errors
+  and non-local requests are all zero.
+- Provider compatibility, current pricing/credential readiness, replacement
+  preflight, replacement run, human model selection, production routing, Ruby
+  mutation, formal CP03 acceptance, deployment and public release remain
+  separately unproven or unauthorised.
 
 ## Technology Feasibility and Current Test Boundary
 
@@ -202,6 +237,18 @@ not written; non-secret but inconsistent or partial evidence is retained with
 `FAIL` and cannot be returned as a completed run. This repair post-dates Live
 Run 02 and verifies only the generated raw archive, not every byte under the DSH
 session directory.
+
+### Verification snapshot — 2026-08-24 Stage B local replacement repair
+
+| Layer | Result | Scope |
+|---|---|---|
+| Shared CP03 contracts | `48/48 PASS` across 1 file | model-facing submissions, canonical council schemas and historical approval/execution contracts coexist |
+| PACT DSH host | `492/492 PASS` across 40 files; `typecheck PASS`; `build PASS` | authority binding, reference validation, request policy, terminal evidence, pair-local replacement evidence and the zero-call gate |
+| Ruby Scene Builder | `238/238 PASS` across 34 files; `build PASS` | no Ruby scene/runtime source changed; only the isolated diagnostic capture script was added |
+| Local repair gate | `16/16 PASS` | provider, Keychain, external-network, preflight and run counters are all zero; provider compatibility remains false |
+| Repair media | `CAPTURED / HASH VERIFIED` | deterministic 1280×720 PNG; 1280×720 VP8/25 fps/18.28-second WebM; six diagnostic stages; zero browser requests/errors |
+| Historical Stage B archive | `64 FILES / COMMITTED BYTES UNCHANGED` | exact pre/post manifest SHA-256 `78ccd860ea4825c26a2390ed4233d5b3c99bad248ae8f7bbd4b6321874768b6e`; no tracked or untracked diff; legacy report/hash reverified in the host suite |
+| Replacement external gate | `NOT AUTHORISED` | no Keychain read, refreshed price check, preflight, run identity, paid call, selection, routing or Stage C claim |
 
 ### Verification snapshot — 2026-08-24 combined Windows integration
 
@@ -253,7 +300,7 @@ re-created or upgraded.
 4. Preserve the council-v2 critical path as `LOCAL_SCRIPTED`; do not describe fictional fixtures or controlled timing as model quality.
 5. Preserve failed Stage A Run 01 and successful replacement Run 02 as separate records; keep Run 02's ceiling at `zero-network adapter verification; no model-quality result`.
 6. Preserve `cp03-model-bakeoff-20260824T055034Z` as one consumed failed archive: preflight `28 eligible / 0 sent`, real run `24 sent / 2 accepted / 22 failed / 4 skipped`, technical evidence `FAIL`, eligible pairs `0`, estimated cost USD `0.1464567`, no retry and no rerun.
-7. Diagnose the observed schema/duplicate-stream/timeout evidence before proposing a replacement. Do not repair the failed archive, extract a winner from the two isolated Archivist successes, collect an author choice from the empty packet, or reuse this approval/run root.
+7. Preserve the consumed failed archive byte-for-byte and the separate local replacement-repair packet at its strict claim ceiling. Before any replacement provider attempt, refresh official prices and exact credential-presence scope, create a new preflight/run identity, set a hard USD ceiling and obtain explicit one-run approval; do not extract a winner from the historical Archivist successes or reuse the old approval/root.
 8. Keep Live Run 04 separately unauthorised. Stage B model-selection evidence does not repair or replace the three historical live-run failures.
 9. Only after a future technically eligible archive and the author's five blinded decisions may routing replace `pending-bakeoff`; model identity must remain sealed until those decisions are signed.
 10. Then harden the production loopback/privacy boundary and cleared image/audio ingestion around Ruby's existing audience/effect runtime, run the separately approved Stage C encounter, capture continuous 3D mutation/rollback, fill all five archive classes, and request separate technical `PASS` and artistic `KEEP` decisions.
