@@ -135,7 +135,7 @@ const shardFor = (
           requestedAssetIds: ['synthetic-cup-01'],
           requestedSpatialBridgeIds: ['synthetic-spatial-bridge-01'],
           provenanceAnchors: ['synthetic-scene-01'],
-          rightsRequirements: ['rights_synthetic_fixture'],
+          rightsRequirements: ['rights_synthetic_fixture_only'],
           unavailableRefs: [],
         }
         : context.role === 'Rewriter'
@@ -163,7 +163,7 @@ const shardFor = (
             disposition: 'ALLOW',
             forbiddenCapabilityIds: ['rawTransform'],
             requiredSourceLockIds: ['synthetic-source-plane-01'],
-            requiredRightsIds: ['rights_synthetic_fixture'],
+            requiredRightsIds: ['rights_synthetic_fixture_only'],
             requiredRollbackCapabilityIds: ['restore-scene-snapshot'],
             contestedEvidenceIds: ['synthetic-spatial-image-01'],
             requiredDissentRecords: [{
@@ -629,6 +629,53 @@ describe('DSH model bakeoff transport', () => {
     await transport.dispose();
 
     expect(result.kind).toBe('accepted');
+  });
+
+  it('does not technically accept schema-valid but unregistered Archivist references', async () => {
+    class ArchivedFalseGreenAdapter extends LlmAdapter {
+      async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+        const context = promptContext(options);
+        const shard = shardFor(options, context) as Record<string, unknown>;
+        const content = shard.content as Record<string, unknown>;
+        content.requestedSpatialBridgeIds = ['synthetic-scene-01'];
+        content.rightsRequirements = [
+          'rights_synthetic-fixture-only',
+          'rights_no-production-licence-claim',
+        ];
+        yield* responseFor(
+          'tool_archived_false_green_01',
+          'pact_submit_council_shard',
+          shard,
+        );
+      }
+    }
+
+    const fixtures = createModelBakeoffFixtures();
+    const entry = createModelBakeoffPlan(fixtures.manifest).find(
+      ({ model, role }) => model === 'deepseek-v4-flash' && role === 'Archivist',
+    )!;
+    const transport = await createModelBakeoffDshTransport({
+      fixtures,
+      persistenceRoot: testRoot('archivist-false-green'),
+      dshHome: testRoot('archivist-false-green-attachments'),
+      providerKind: 'scripted',
+      roleCaps,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['deepseek-official'], new ArchivedFalseGreenAdapter());
+      },
+      estimateCostUsd: () => 0,
+    });
+
+    const result = await transport.dispatch(requestFor(entry, 1));
+    await transport.dispose();
+
+    expect(result).toMatchObject({
+      kind: 'content_failure',
+      detailCode: 'MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED',
+      preSideEffect: false,
+      sideEffectAccepted: true,
+      toolResult: { accepted: false },
+    });
   });
 
   it('requests a supported low thinking level from Gemini 3.7', async () => {

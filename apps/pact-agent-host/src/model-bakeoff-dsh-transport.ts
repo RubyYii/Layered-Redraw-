@@ -31,6 +31,7 @@ import {
   type FrozenCouncilTurn,
 } from './council-turn.js';
 import type {
+  CouncilShard,
   CouncilRole,
   ProviderRoutingManifest,
 } from './contract-types.js';
@@ -415,6 +416,83 @@ const outputKindFor = (phase: ModelBakeoffPhase): string => {
   }
 };
 
+const containsEvery = (
+  values: readonly string[],
+  allowed: ReadonlySet<string>,
+): boolean => values.every((value) => allowed.has(value));
+
+const validateModelBakeoffReferences = (
+  shard: CouncilShard,
+  turn: FrozenCouncilTurn,
+): void => {
+  const snapshot = turn.snapshot;
+  const inputRefIds = new Set(snapshot.inputRefs.map(({ refId }) => refId));
+  const assetIds = new Set(snapshot.registeredAssetIds);
+  const spatialBridgeIds = new Set(snapshot.registeredSpatialBridgeIds);
+  const sceneObjectIds = new Set(snapshot.registeredSceneObjectIds);
+  const affordanceIds = new Set(snapshot.registeredAffordanceIds);
+  const rightsIds = new Set(snapshot.registeredRightsIds);
+  const rollbackIds = new Set(snapshot.supportedRollbackCapabilityIds);
+  const sourceLockIds = new Set(snapshot.sourceLockIds);
+  const semanticCapabilityIds = new Set(snapshot.allowedSemanticCapabilityIds);
+  const evidenceIds = new Set([
+    ...inputRefIds,
+    ...assetIds,
+    ...spatialBridgeIds,
+    ...sceneObjectIds,
+    ...rightsIds,
+    ...sourceLockIds,
+  ]);
+  const reject = (): never => {
+    throw new Error('MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED');
+  };
+
+  if (!containsEvery(shard.evidenceAnchors, evidenceIds)) reject();
+  switch (shard.kind) {
+    case 'CONDUCTOR_INTENT':
+      return;
+    case 'WITNESS':
+      if (shard.content.observations.some(({ inputRefIds: refs }) =>
+        !containsEvery(refs, inputRefIds)
+      )) reject();
+      return;
+    case 'ARCHIVIST':
+      if (
+        !containsEvery(shard.content.requestedAssetIds, assetIds)
+        || !containsEvery(shard.content.requestedSpatialBridgeIds, spatialBridgeIds)
+        || !containsEvery(shard.content.provenanceAnchors, evidenceIds)
+        || !containsEvery(shard.content.rightsRequirements, rightsIds)
+      ) reject();
+      return;
+    case 'REWRITER':
+      if (!containsEvery(shard.content.expectedChanges, sceneObjectIds)) reject();
+      for (const call of shard.content.semanticCapabilityCalls) {
+        if (
+          !semanticCapabilityIds.has(call.capability)
+          || !sceneObjectIds.has(call.arguments.actorId)
+          || !sceneObjectIds.has(call.arguments.targetId)
+          || !affordanceIds.has(call.arguments.affordance)
+          || (call.arguments.recipientId !== undefined
+            && !sceneObjectIds.has(call.arguments.recipientId))
+          || (call.arguments.placementTargetId !== undefined
+            && !sceneObjectIds.has(call.arguments.placementTargetId))
+        ) reject();
+      }
+      return;
+    case 'GUARDIAN':
+      if (
+        !containsEvery(shard.content.requiredSourceLockIds, sourceLockIds)
+        || !containsEvery(shard.content.requiredRightsIds, rightsIds)
+        || !containsEvery(shard.content.requiredRollbackCapabilityIds, rollbackIds)
+        || !containsEvery(shard.content.contestedEvidenceIds, evidenceIds)
+        || shard.content.requiredDissentRecords.some(({ evidenceIds: refs }) =>
+          !containsEvery(refs, evidenceIds)
+        )
+      ) reject();
+      return;
+  }
+};
+
 const eventPayload = (event: SessionEvent): unknown =>
   event.type === 'pact/council-shard' || event.type === 'pact/conductor-commit'
     ? event.data.payload
@@ -637,15 +715,15 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
       const payload = acceptedEvent === null ? null : eventPayload(acceptedEvent);
       let schemaValid = false;
       let schemaFailureCode = 'MODEL_BAKEOFF_SCHEMA_REJECTED';
+      let referencesValid = false;
+      let referenceFailureCode = 'MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED';
       if (payload !== null) {
         try {
           if (request.case.phase === 'ConductorCommit') {
             validateConductorDraftCommit(payload);
+            referencesValid = true;
           } else {
-            const shard = validateCouncilShard(payload) as {
-              readonly role: string;
-              readonly evidenceAnchors: readonly string[];
-            };
+            const shard = validateCouncilShard(payload) as CouncilShard;
             if (shard.role !== request.case.role) {
               throw new Error('MODEL_BAKEOFF_ROLE_MISMATCH');
             }
@@ -655,11 +733,20 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
             ) {
               throw new Error('MODEL_BAKEOFF_IMAGE_GROUNDING_MISSING');
             }
+            validateModelBakeoffReferences(shard, turn);
+            referencesValid = true;
           }
           schemaValid = true;
         } catch (error) {
-          schemaValid = false;
-          schemaFailureCode = detailCode(error, this.options.forbiddenSubstrings);
+          const code = detailCode(error, this.options.forbiddenSubstrings);
+          if (code === 'MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED') {
+            schemaValid = true;
+            referencesValid = false;
+            referenceFailureCode = code;
+          } else {
+            schemaValid = false;
+            schemaFailureCode = code;
+          }
         }
       } else if (acceptedEvent !== null) {
         schemaFailureCode = `MODEL_BAKEOFF_ACCEPTED_PAYLOAD_MISSING_${detailCode(acceptedEvent.type)}`;
@@ -692,6 +779,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         && accepted.length === 1
         && actualToolName === expected.name
         && schemaValid
+        && referencesValid
         && reviewText !== null
         && tokenCapValid;
       if (success && acceptedEvent?.type === 'pact/council-shard') {
@@ -754,6 +842,9 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
       } else if (!schemaValid) {
         resultKind = 'schema_failure';
         resultDetailCode = schemaFailureCode;
+      } else if (!referencesValid) {
+        resultKind = 'content_failure';
+        resultDetailCode = referenceFailureCode;
       } else {
         resultKind = 'content_failure';
         resultDetailCode = 'MODEL_BAKEOFF_EXACT_TOOL_REQUIRED';
