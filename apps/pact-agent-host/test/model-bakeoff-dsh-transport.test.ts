@@ -7,6 +7,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import {
   CallId,
   LlmAdapter,
+  ReasoningEffortId,
   type GenerateOptions,
   type StreamChunk,
 } from '@deepseek-ai/dsh-llm';
@@ -56,6 +57,30 @@ const promptContext = (options: GenerateOptions): ModelBakeoffPromptContext => {
   if (line === undefined) throw new Error('scripted adapter did not receive bakeoff context');
   return JSON.parse(line.slice(marker.length)) as ModelBakeoffPromptContext;
 };
+
+const promptJson = <T>(
+  options: GenerateOptions,
+  marker: string,
+): T | undefined => {
+  const line = options.messages.flatMap(({ content }) => content)
+    .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
+    .flatMap(({ text }) => text.split('\n'))
+    .filter((candidate) => candidate.startsWith(marker))
+    .at(-1);
+  return line === undefined ? undefined : JSON.parse(line.slice(marker.length)) as T;
+};
+
+interface PromptToolRules {
+  readonly argumentShape: string;
+  readonly outputSchemaVersion: string;
+  readonly outputKind: string;
+  readonly outputRole: string;
+  readonly semanticCapabilityId: string;
+  readonly registeredRightsIds: readonly string[];
+}
+
+const toolRules = (options: GenerateOptions): PromptToolRules | undefined =>
+  promptJson<PromptToolRules>(options, 'PACT_BAKEOFF_TOOL_ARGUMENT_RULES_JSON=');
 
 const shardFor = (
   options: GenerateOptions,
@@ -171,7 +196,34 @@ const responseFor = (
   ];
 };
 
-class BakeoffScriptedAdapter extends LlmAdapter {
+const terminalTextResponse = (
+  reason: Extract<StreamChunk, { type: 'finish' }>['reason'],
+): readonly StreamChunk[] => [
+  { type: 'usage', usage: { inputTokens: 100, outputTokens: 25 } },
+  { type: 'block-start', index: 0, blockType: 'text' },
+  { type: 'text-delta', index: 0, text: 'Synthetic response ended before a tool call.' },
+  {
+    type: 'block-end',
+    index: 0,
+    block: { type: 'text', text: 'Synthetic response ended before a tool call.' },
+  },
+  { type: 'finish', reason },
+];
+
+abstract class ReasoningAwareScriptedAdapter extends LlmAdapter {
+  override async resolveModel(provider: string, model: string) {
+    const resolved = await super.resolveModel(provider, model);
+    if (model !== 'gemini-3.7-flash') return resolved;
+    return {
+      ...resolved,
+      reasoning: {
+        efforts: [{ id: ReasoningEffortId('low'), name: 'Low' }],
+      },
+    };
+  }
+}
+
+class BakeoffScriptedAdapter extends ReasoningAwareScriptedAdapter {
   readonly requests: GenerateOptions[] = [];
 
   async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
@@ -359,6 +411,394 @@ describe('DSH model bakeoff transport', () => {
     expect(serialized).not.toContain(dshHome);
     expect(serialized).not.toContain(process.cwd());
     for (const secret of SECRET_SENTINELS) expect(serialized).not.toContain(secret);
+  });
+
+  it('uses each phase cap on the persistent CaseConductor session', async () => {
+    class CapSensitiveAdapter extends BakeoffScriptedAdapter {
+      override async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+        this.requests.push(options);
+        const context = promptContext(options);
+        if (context.phase === 'ConductorIntent' && options.maxTokens !== 1_024) {
+          yield* terminalTextResponse({ kind: 'max-tokens' });
+          return;
+        }
+        if (context.phase === 'ConductorCommit') {
+          const commit = validateConductorDraftCommit({
+            schemaVersion: 'cp03-council/0.2',
+            turnId: context.turn.turnId,
+            status: 'PROPOSED',
+            actionSequence: ['Continue'],
+            selectedShardHashes: context.priorAcceptedShardHashes,
+            selectedDissentIds: [],
+            terminalIntent: 'Continue',
+          });
+          yield* responseFor(
+            `tool_commit_${sha(context.caseId).slice(0, 16)}`,
+            'pact_submit_conductor_commit',
+            commit,
+          );
+          return;
+        }
+        const shard = validateCouncilShard(shardFor(options, context));
+        yield* responseFor(
+          `tool_shard_${sha(context.caseId).slice(0, 16)}`,
+          'pact_submit_council_shard',
+          shard,
+        );
+      }
+    }
+
+    const fixtures = createModelBakeoffFixtures();
+    const plan = createModelBakeoffPlan(fixtures.manifest);
+    const intent = plan.find(({ model, phase, repetition }) =>
+      model === 'deepseek-v4-pro' && phase === 'ConductorIntent' && repetition === 1
+    )!;
+    const commit = plan.find(({ model, phase, repetition }) =>
+      model === 'deepseek-v4-pro' && phase === 'ConductorCommit' && repetition === 1
+    )!;
+    const adapter = new CapSensitiveAdapter();
+    const transport = await createModelBakeoffDshTransport({
+      fixtures,
+      persistenceRoot: testRoot('conductor-phase-caps'),
+      dshHome: testRoot('conductor-phase-cap-attachments'),
+      providerKind: 'scripted',
+      roleCaps: {
+        ...roleCaps,
+        ConductorIntent: { maxInputTokens: 8_192, maxOutputTokens: 1_024 },
+        ConductorCommit: { maxInputTokens: 8_192, maxOutputTokens: 512 },
+      },
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['deepseek-official'], adapter);
+      },
+      estimateCostUsd: () => 0,
+    });
+
+    const intentResult = await transport.dispatch(requestFor(intent, 1));
+    const commitResult = await transport.dispatch(requestFor(commit, 2));
+    await transport.dispose();
+
+    expect(intentResult.kind).toBe('accepted');
+    expect(commitResult.kind).toBe('accepted');
+    expect(adapter.requests.map(({ maxTokens }) => maxTokens)).toEqual([1_024, 512]);
+    expect(new Set(adapter.requests.map(({ sessionId }) => String(sessionId))).size).toBe(1);
+  });
+
+  it('states the council output schema separately from prompt metadata', async () => {
+    class SchemaCopyingAdapter extends LlmAdapter {
+      async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+        const context = promptContext(options);
+        const rules = toolRules(options);
+        const contextRecord = context as unknown as Record<string, unknown>;
+        const shard = {
+          ...(shardFor(options, context) as Record<string, unknown>),
+          schemaVersion: rules?.outputSchemaVersion ?? contextRecord.schemaVersion,
+        };
+        yield* responseFor('tool_schema_copy_0001', 'pact_submit_council_shard', shard);
+      }
+    }
+
+    const fixtures = createModelBakeoffFixtures();
+    const entry = createModelBakeoffPlan(fixtures.manifest).find(
+      ({ model, role }) => model === 'gemini-3.5-flash' && role === 'Witness',
+    )!;
+    const transport = await createModelBakeoffDshTransport({
+      fixtures,
+      persistenceRoot: testRoot('schema-copy'),
+      dshHome: testRoot('schema-copy-attachments'),
+      providerKind: 'scripted',
+      roleCaps,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['google'], new SchemaCopyingAdapter());
+      },
+      estimateCostUsd: () => 0,
+    });
+
+    const result = await transport.dispatch(requestFor(entry, 1));
+    await transport.dispose();
+
+    expect(result.kind).toBe('accepted');
+  });
+
+  it('states that council tool arguments are a direct object', async () => {
+    class WrapperProneAdapter extends LlmAdapter {
+      async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+        const context = promptContext(options);
+        const shard = shardFor(options, context);
+        const args = toolRules(options)?.argumentShape === 'direct-object'
+          ? shard
+          : { shard };
+        yield* responseFor('tool_wrapper_prone_01', 'pact_submit_council_shard', args);
+      }
+    }
+
+    const fixtures = createModelBakeoffFixtures();
+    const entry = createModelBakeoffPlan(fixtures.manifest).find(
+      ({ model, role }) => model === 'deepseek-v4-pro' && role === 'Archivist',
+    )!;
+    const transport = await createModelBakeoffDshTransport({
+      fixtures,
+      persistenceRoot: testRoot('wrapper-prompt'),
+      dshHome: testRoot('wrapper-prompt-attachments'),
+      providerKind: 'scripted',
+      roleCaps,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['deepseek-official'], new WrapperProneAdapter());
+      },
+      estimateCostUsd: () => 0,
+    });
+
+    const result = await transport.dispatch(requestFor(entry, 1));
+    await transport.dispose();
+
+    expect(result.kind).toBe('accepted');
+  });
+
+  it('states the only registered semantic capability for Rewriter', async () => {
+    class CapabilityCopyingAdapter extends LlmAdapter {
+      async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+        const context = promptContext(options);
+        const shard = shardFor(options, context) as Record<string, unknown>;
+        const content = shard.content as Record<string, unknown>;
+        const calls = content.semanticCapabilityCalls as Array<Record<string, unknown>>;
+        calls[0] = {
+          ...calls[0],
+          capability: toolRules(options)?.semanticCapabilityId ?? {},
+        };
+        yield* responseFor('tool_capability_copy_01', 'pact_submit_council_shard', shard);
+      }
+    }
+
+    const fixtures = createModelBakeoffFixtures();
+    const entry = createModelBakeoffPlan(fixtures.manifest).find(
+      ({ model, role }) => model === 'gemini-3.6-flash' && role === 'Rewriter',
+    )!;
+    const transport = await createModelBakeoffDshTransport({
+      fixtures,
+      persistenceRoot: testRoot('capability-prompt'),
+      dshHome: testRoot('capability-prompt-attachments'),
+      providerKind: 'scripted',
+      roleCaps,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['google'], new CapabilityCopyingAdapter());
+      },
+      estimateCostUsd: () => 0,
+    });
+
+    const result = await transport.dispatch(requestFor(entry, 1));
+    await transport.dispose();
+
+    expect(result.kind).toBe('accepted');
+  });
+
+  it('binds fixture rights to the exact registered rights IDs', async () => {
+    class FixtureRightsAdapter extends LlmAdapter {
+      async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+        const context = promptContext(options);
+        const fixture = promptJson<{ readonly rights: readonly string[] }>(
+          options,
+          'PACT_BAKEOFF_FIXTURE_JSON=',
+        );
+        if (fixture === undefined) throw new Error('fixture missing');
+        const rules = toolRules(options);
+        if (rules === undefined) throw new Error('tool rules missing');
+        const shard = shardFor(options, context) as Record<string, unknown>;
+        const content = shard.content as Record<string, unknown>;
+        content.rightsRequirements = [...fixture.rights];
+        expect(rules.registeredRightsIds).toEqual(fixture.rights);
+        yield* responseFor('tool_fixture_rights_01', 'pact_submit_council_shard', shard);
+      }
+    }
+
+    const fixtures = createModelBakeoffFixtures();
+    const entry = createModelBakeoffPlan(fixtures.manifest).find(
+      ({ model, role }) => model === 'deepseek-v4-pro' && role === 'Archivist',
+    )!;
+    const transport = await createModelBakeoffDshTransport({
+      fixtures,
+      persistenceRoot: testRoot('fixture-rights'),
+      dshHome: testRoot('fixture-rights-attachments'),
+      providerKind: 'scripted',
+      roleCaps,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['deepseek-official'], new FixtureRightsAdapter());
+      },
+      estimateCostUsd: () => 0,
+    });
+
+    const result = await transport.dispatch(requestFor(entry, 1));
+    await transport.dispose();
+
+    expect(result.kind).toBe('accepted');
+  });
+
+  it('requests a supported low thinking level from Gemini 3.7', async () => {
+    class Gemini37Adapter extends ReasoningAwareScriptedAdapter {
+      readonly requests: GenerateOptions[] = [];
+
+      async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+        this.requests.push(options);
+        if (String(options.reasoningEffort) !== 'low') {
+          yield* terminalTextResponse({
+            kind: 'error',
+            failure: {
+              code: 'INVALID_REQUEST',
+              status: 400,
+              message: 'Thinking level MINIMAL is not supported for this model.',
+            },
+          });
+          return;
+        }
+        const context = promptContext(options);
+        const shard = validateCouncilShard(shardFor(options, context));
+        yield* responseFor('tool_gemini_37_low_01', 'pact_submit_council_shard', shard);
+      }
+    }
+
+    const fixtures = createModelBakeoffFixtures();
+    const entry = createModelBakeoffPlan(fixtures.manifest).find(
+      ({ model, role }) => model === 'gemini-3.7-flash' && role === 'Witness',
+    )!;
+    const adapter = new Gemini37Adapter();
+    const transport = await createModelBakeoffDshTransport({
+      fixtures,
+      persistenceRoot: testRoot('gemini-37-reasoning'),
+      dshHome: testRoot('gemini-37-reasoning-attachments'),
+      providerKind: 'scripted',
+      roleCaps,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['google'], adapter);
+      },
+      estimateCostUsd: () => 0,
+    });
+
+    const result = await transport.dispatch(requestFor(entry, 1));
+    await transport.dispose();
+
+    expect(result.kind).toBe('accepted');
+    expect(adapter.requests.map(({ reasoningEffort }) => String(reasoningEffort)))
+      .toEqual(['low']);
+  });
+
+  it('classifies a terminal provider error as transport failure', async () => {
+    class ProviderErrorAdapter extends LlmAdapter {
+      async *stream(): AsyncIterable<StreamChunk> {
+        yield* terminalTextResponse({
+          kind: 'error',
+          failure: {
+            code: 'INVALID_REQUEST',
+            status: 400,
+            message: 'Synthetic provider request rejected.',
+          },
+        });
+      }
+    }
+
+    const fixtures = createModelBakeoffFixtures();
+    const entry = createModelBakeoffPlan(fixtures.manifest).find(
+      ({ model, role }) => model === 'gemini-3.5-flash' && role === 'Witness',
+    )!;
+    const transport = await createModelBakeoffDshTransport({
+      fixtures,
+      persistenceRoot: testRoot('provider-error'),
+      dshHome: testRoot('provider-error-attachments'),
+      providerKind: 'scripted',
+      roleCaps,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['google'], new ProviderErrorAdapter());
+      },
+      estimateCostUsd: () => 0,
+    });
+
+    const result = await transport.dispatch(requestFor(entry, 1));
+    await transport.dispose();
+
+    expect(result).toMatchObject({
+      kind: 'transport_failure',
+      detailCode: 'MODEL_BAKEOFF_PROVIDER_INVALID_REQUEST',
+      preSideEffect: true,
+      sideEffectAccepted: false,
+    });
+  });
+
+  it('classifies a max-token stop without a tool as content failure', async () => {
+    class MaxTokenAdapter extends LlmAdapter {
+      async *stream(): AsyncIterable<StreamChunk> {
+        yield* terminalTextResponse({ kind: 'max-tokens' });
+      }
+    }
+
+    const fixtures = createModelBakeoffFixtures();
+    const entry = createModelBakeoffPlan(fixtures.manifest).find(
+      ({ model, role }) => model === 'deepseek-v4-flash' && role === 'Guardian',
+    )!;
+    const transport = await createModelBakeoffDshTransport({
+      fixtures,
+      persistenceRoot: testRoot('max-token'),
+      dshHome: testRoot('max-token-attachments'),
+      providerKind: 'scripted',
+      roleCaps,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['deepseek-official'], new MaxTokenAdapter());
+      },
+      estimateCostUsd: () => 0,
+    });
+
+    const result = await transport.dispatch(requestFor(entry, 1));
+    await transport.dispose();
+
+    expect(result).toMatchObject({
+      kind: 'content_failure',
+      detailCode: 'MODEL_BAKEOFF_OUTPUT_MAX_TOKENS',
+      preSideEffect: true,
+      sideEffectAccepted: false,
+    });
+  });
+
+  it('stops after the first rejected expected tool result', async () => {
+    class AlwaysWrappedAdapter extends LlmAdapter {
+      readonly requests: GenerateOptions[] = [];
+
+      async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+        this.requests.push(options);
+        const context = promptContext(options);
+        yield* responseFor(
+          'tool_always_wrapped_01',
+          'pact_submit_council_shard',
+          { shard: shardFor(options, context) },
+        );
+      }
+    }
+
+    const fixtures = createModelBakeoffFixtures();
+    const entry = createModelBakeoffPlan(fixtures.manifest).find(
+      ({ model, role }) => model === 'deepseek-v4-pro' && role === 'Archivist',
+    )!;
+    const adapter = new AlwaysWrappedAdapter();
+    const transport = await createModelBakeoffDshTransport({
+      fixtures,
+      persistenceRoot: testRoot('rejected-one-shot'),
+      dshHome: testRoot('rejected-one-shot-attachments'),
+      providerKind: 'scripted',
+      roleCaps,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['deepseek-official'], adapter);
+      },
+      estimateCostUsd: () => 0,
+    });
+
+    const result = await transport.dispatch(requestFor(entry, 1));
+    const [diagnostic] = transport.diagnostics();
+    await transport.dispose();
+
+    expect(result.kind).toBe('schema_failure');
+    expect(adapter.requests).toHaveLength(1);
+    expect(diagnostic).toMatchObject({
+      streamCount: 1,
+      undeclaredStreamCount: 0,
+      toolCallCount: 1,
+      acceptedDomainEventCount: 0,
+      turnEndReason: 'aborted',
+    });
   });
 
   it('fails closed when the adapter calls the wrong council tool', async () => {

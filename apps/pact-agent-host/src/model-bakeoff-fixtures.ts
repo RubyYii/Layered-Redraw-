@@ -174,7 +174,10 @@ export function createModelBakeoffFixtures(): ModelBakeoffFixtures {
     },
     sceneSnapshot,
     registry,
-    rights: ['synthetic-fixture-only', 'no-production-licence-claim'] as const,
+    rights: [
+      'rights_synthetic_fixture_only',
+      'rights_no_production_licence_claim',
+    ] as const,
     rollbackCapabilities: [
       'restore-scene-snapshot',
       'release-object-claim',

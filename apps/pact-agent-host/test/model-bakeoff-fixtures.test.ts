@@ -29,7 +29,7 @@ describe('model bakeoff fixtures', () => {
       schemaManifestSha256:
         '831f7c184ac418f15683bccf34b0e21a7b985f789791f1708bf74b4a02a16f16',
       fixtureManifestSha256:
-        '92f94e735e37b51cd0c33e4cd6dd8b6c65b2dbae439aa8bd0f175261090ba524',
+        '62246223ddbe6e86de584639c4058c192a38bdda108fe60734f49ddf98d1c7ef',
     });
     expect(sha256(fixtures.syntheticImage)).toBe(fixtures.manifest.syntheticImage.sha256);
     expect(sha256(canonicalJson(fixtures.promptManifest))).toBe(
@@ -65,8 +65,8 @@ describe('model bakeoff fixtures', () => {
       entry.provenance === 'programmatic-test-fixture' && !entry.productionAsset
     )).toBe(true);
     expect(manifest.rights).toEqual([
-      'synthetic-fixture-only',
-      'no-production-licence-claim',
+      'rights_synthetic_fixture_only',
+      'rights_no_production_licence_claim',
     ]);
     expect(manifest.rollbackCapabilities).toEqual([
       'restore-scene-snapshot',

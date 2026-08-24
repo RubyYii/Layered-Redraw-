@@ -3,14 +3,18 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Context } from '@deepseek-ai/cordis';
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local';
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent';
-import type {
-  ContentBlock,
-  GenerateOptions,
-  StreamChunk,
-  TokenUsage,
+import {
+  createUserMessage,
+  ReasoningEffortId,
+  type ContentBlock,
+  type GenerateOptions,
+  type StreamChunk,
+  type TokenUsage,
 } from '@deepseek-ai/dsh-llm';
-import { createUserMessage } from '@deepseek-ai/dsh-llm';
-import type { Session, SessionEvent } from '@deepseek-ai/dsh-session';
+import type {
+  Session,
+  SessionEvent,
+} from '@deepseek-ai/dsh-session';
 import { SessionId } from '@deepseek-ai/dsh-session';
 import {
   canonicalJson,
@@ -188,7 +192,10 @@ const turnFor = async (
       'synthetic-actor-01',
     ],
     registeredAffordanceIds: ['pickup', 'place'],
-    registeredRightsIds: ['rights_synthetic_fixture'],
+    registeredRightsIds: [
+      'rights_synthetic_fixture_only',
+      'rights_no_production_licence_claim',
+    ],
     supportedRollbackCapabilityIds: [
       'restore-scene-snapshot',
       'release-object-claim',
@@ -214,7 +221,7 @@ const turnFor = async (
 };
 
 export interface ModelBakeoffPromptContext {
-  readonly schemaVersion: 'cp03-model-bakeoff-prompt-context/0.1';
+  readonly contextVersion: 'cp03-model-bakeoff-prompt-context/0.2';
   readonly runId: string;
   readonly approvalId: string;
   readonly caseId: string;
@@ -324,11 +331,8 @@ const appendObserved = (
 ): void => {
   if (observation.capture.sessionId !== String(session.id)) return;
   if (event.type === 'tool/call') observation.toolCallCount += 1;
-  if (event.type === 'tool/result' && observation.acceptedEvents.length > 0) {
-    const block = event.data.message.content[0];
-    if (block?.type === 'tool-result' && block.isError !== true) {
-      observation.agent?.cancel({ kind: 'user' });
-    }
+  if (event.type === 'tool/result' && observation.toolCallCount > 0) {
+    observation.agent?.cancel({ kind: 'user' });
   }
   if (event.type === 'pact/quarantine') observation.quarantineCount += 1;
   if (
@@ -365,6 +369,7 @@ const observeStream = async function* (
 const latestTurnRange = (session: Session): {
   readonly range: ModelBakeoffSessionEventRange;
   readonly reason: string | null;
+  readonly providerFailureCode: string | null;
 } => {
   const starts = session.events.filter((event) => event.type === 'turn/start');
   const start = starts.at(-1);
@@ -377,6 +382,7 @@ const latestTurnRange = (session: Session): {
         toSequence: sequence,
       },
       reason: null,
+      providerFailureCode: null,
     };
   }
   const end = session.events.find((event) =>
@@ -391,7 +397,22 @@ const latestTurnRange = (session: Session): {
       toSequence: end?.seq ?? session.events.at(-1)?.seq ?? start.seq,
     },
     reason: end?.type === 'turn/end' ? end.data.reason.kind : null,
+    providerFailureCode:
+      end?.type === 'turn/end' && end.data.reason.kind === 'error'
+        ? end.data.reason.error.code
+        : null,
   };
+};
+
+const outputKindFor = (phase: ModelBakeoffPhase): string => {
+  switch (phase) {
+    case 'ConductorIntent': return 'CONDUCTOR_INTENT';
+    case 'Archivist': return 'ARCHIVIST';
+    case 'Guardian': return 'GUARDIAN';
+    case 'Witness': return 'WITNESS';
+    case 'Rewriter': return 'REWRITER';
+    case 'ConductorCommit': return 'CONDUCTOR_DRAFT_COMMIT';
+  }
 };
 
 const eventPayload = (event: SessionEvent): unknown =>
@@ -516,12 +537,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
           expectedRoute: request.case.route,
           expectedModel: request.case.model,
           expectedToolName: expected.name,
-          maxOutputTokens: request.case.role === 'CaseConductor'
-            ? Math.min(
-              this.options.roleCaps.ConductorIntent.maxOutputTokens,
-              this.options.roleCaps.ConductorCommit.maxOutputTokens,
-            )
-            : this.options.roleCaps[request.case.phase].maxOutputTokens,
+          maxOutputTokens: this.options.roleCaps[request.case.phase].maxOutputTokens,
           streamCount: 0,
           undeclaredStreamCount: 0,
           firstChunkAtMs: null,
@@ -706,31 +722,45 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         });
       }
 
-      const { range, reason } = latestTurnRange(session);
+      const { range, reason, providerFailureCode } = latestTurnRange(session);
+      const providerTerminalFailure = providerFailureCode !== null;
+      const maxTokenTerminal = reason === 'max-tokens';
+      let resultKind: ModelBakeoffTransportResult['kind'];
+      let resultDetailCode: string | null;
+      if (success) {
+        resultKind = 'accepted';
+        resultDetailCode = null;
+      } else if (timedOut) {
+        resultKind = 'late';
+        resultDetailCode = 'MODEL_BAKEOFF_ATTEMPT_TIMEOUT';
+      } else if (observation.capture.thrown !== undefined) {
+        resultKind = 'transport_failure';
+        resultDetailCode = detailCode(
+          observation.capture.thrown,
+          this.options.forbiddenSubstrings,
+        );
+      } else if (providerTerminalFailure) {
+        resultKind = 'transport_failure';
+        resultDetailCode = `MODEL_BAKEOFF_PROVIDER_${detailCode(providerFailureCode)}`;
+      } else if (maxTokenTerminal) {
+        resultKind = 'content_failure';
+        resultDetailCode = 'MODEL_BAKEOFF_OUTPUT_MAX_TOKENS';
+      } else if (!tokenCapValid) {
+        resultKind = 'content_failure';
+        resultDetailCode = 'MODEL_BAKEOFF_TOKEN_CAP_EXCEEDED';
+      } else if (observation.toolCallCount === 0) {
+        resultKind = 'content_failure';
+        resultDetailCode = 'MODEL_BAKEOFF_EXACT_TOOL_REQUIRED';
+      } else if (!schemaValid) {
+        resultKind = 'schema_failure';
+        resultDetailCode = schemaFailureCode;
+      } else {
+        resultKind = 'content_failure';
+        resultDetailCode = 'MODEL_BAKEOFF_EXACT_TOOL_REQUIRED';
+      }
       const result: ModelBakeoffTransportResult = deepFreeze({
-        kind: success
-          ? 'accepted' as const
-          : timedOut
-            ? 'late' as const
-            : observation.capture.thrown !== undefined
-              ? 'transport_failure' as const
-              : !schemaValid
-                ? 'schema_failure' as const
-                : 'content_failure' as const,
-        detailCode: success
-          ? null
-          : timedOut
-            ? 'MODEL_BAKEOFF_ATTEMPT_TIMEOUT'
-            : observation.capture.thrown !== undefined
-              ? detailCode(
-                observation.capture.thrown,
-                this.options.forbiddenSubstrings,
-              )
-              : !tokenCapValid
-                ? 'MODEL_BAKEOFF_TOKEN_CAP_EXCEEDED'
-                : !schemaValid
-                ? schemaFailureCode
-                : 'MODEL_BAKEOFF_EXACT_TOOL_REQUIRED',
+        kind: resultKind,
+        detailCode: resultDetailCode,
         preSideEffect: accepted.length === 0,
         sideEffectAccepted: accepted.length > 0,
         providerRequestMade:
@@ -907,10 +937,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
       conductorSelection: {
         provider: entry.route,
         model: entry.model,
-        maxTokens: Math.min(
-          this.options.roleCaps.ConductorIntent.maxOutputTokens,
-          this.options.roleCaps.ConductorCommit.maxOutputTokens,
-        ),
+        maxTokens: this.options.roleCaps.ConductorIntent.maxOutputTokens,
       },
       mountAdapters: async (ctx) => {
         await ctx.plugin(LocalAttachmentStore, {
@@ -983,6 +1010,22 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         const active = scope?.active;
         if (active !== null && active !== undefined) appendObserved(active, session, event);
       });
+      harness.ctx.on('agent/request', async ({ agent }, next) => {
+        const config = await next();
+        const active = scope?.active;
+        if (
+          active === null
+          || active === undefined
+          || active.capture.sessionId !== String(agent.id)
+        ) return config;
+        return {
+          ...config,
+          maxTokens: active.capture.maxOutputTokens,
+          ...(active.capture.expectedModel === 'gemini-3.7-flash'
+            ? { reasoningEffort: ReasoningEffortId('low') }
+            : {}),
+        };
+      });
       harness.ctx.on('llm/stream', (request: GenerateOptions, next) => {
         const active = scope?.active;
         if (
@@ -1032,7 +1075,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
     }
     const snapshot = turn.snapshot;
     const context: ModelBakeoffPromptContext = deepFreeze({
-      schemaVersion: 'cp03-model-bakeoff-prompt-context/0.1',
+      contextVersion: 'cp03-model-bakeoff-prompt-context/0.2',
       runId: request.runId,
       approvalId: request.approvalId,
       caseId: request.case.caseId,
@@ -1052,6 +1095,14 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
       imageInputRefId: imageRole ? SYNTHETIC_IMAGE_REF : null,
       priorAcceptedShardHashes: [...scope.acceptedShardHashes],
     });
+    const toolArgumentRules = deepFreeze({
+      argumentShape: 'direct-object',
+      outputSchemaVersion: 'cp03-council/0.2',
+      outputKind: outputKindFor(request.case.phase),
+      outputRole: request.case.role,
+      semanticCapabilityId: 'performRegisteredInteraction',
+      registeredRightsIds: [...snapshot.registeredRightsIds],
+    });
     const template = this.options.fixtures.promptManifest.templates[request.case.phase];
     if (template === undefined) throw new Error('MODEL_BAKEOFF_PROMPT_TEMPLATE_MISSING');
     const prompt: ContentBlock[] = [{
@@ -1059,6 +1110,10 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
       text: [
         template,
         'Use only the immutable fictional fixture below. Call the phase tool exactly once.',
+        'Pass one JSON object directly as the tool arguments: never wrap it under shard or argument and never JSON-stringify it.',
+        'For the tool argument field schemaVersion, copy outputSchemaVersion from PACT_BAKEOFF_TOOL_ARGUMENT_RULES_JSON; never copy a context or fixture version.',
+        'For Rewriter semanticCapabilityCalls, capability must equal semanticCapabilityId from the same rules object.',
+        `PACT_BAKEOFF_TOOL_ARGUMENT_RULES_JSON=${canonicalJson(toolArgumentRules)}`,
         `PACT_BAKEOFF_CONTEXT_JSON=${canonicalJson(context)}`,
         `PACT_BAKEOFF_FIXTURE_JSON=${canonicalJson(this.options.fixtures.manifest)}`,
       ].join('\n'),
