@@ -41,6 +41,40 @@ export { type PactRole } from './events.js';
 export { registerPactTools } from './pact-tools.js';
 export { SubmissionRegistry } from './submission-registry.js';
 export {
+  CouncilRegistry,
+  type AcceptedCouncilCommitReceipt,
+  type AcceptedCouncilShardReceipt,
+  type CouncilCommitReceipt,
+  type CouncilProposalSnapshot,
+  type CouncilRegistryOptions,
+  type CouncilShardReceipt,
+  type DurableConductorCommitReceipt,
+  type DurableCouncilShardReceipt,
+  type RejectedCouncilCommitReceipt,
+  type RejectedCouncilShardReceipt,
+} from './council-registry.js';
+export {
+  COUNCIL_ROLE_TOOLS,
+  COUNCIL_ROOT_TOOLS,
+  councilToolDefinitions,
+  registerCouncilTools,
+} from './council-tools.js';
+export {
+  durableConductorCommit,
+  durableCouncilShard,
+  recoverCouncilTraceProjection,
+} from './council-durability.js';
+export {
+  evaluateGuardianConflict,
+  type GuardianConflictInput,
+  type GuardianConflictResult,
+} from './guardian-conflict.js';
+export {
+  assembleCouncilDraft,
+  type AssembleCouncilDraftInput,
+  type AssembleCouncilDraftResult,
+} from './draft-assembler.js';
+export {
   COMPATIBILITY_LIMITS,
   inspectCompatibilityConfig,
 } from './compatibility-config.js';
@@ -68,6 +102,43 @@ export {
   persistCaseSessionTransition,
   type CaseSessionTransitionDurabilityReceipt,
 } from './case-session-persistence.js';
+export {
+  COUNCIL_TIMING_LIMITS,
+  freezeCouncilTurn,
+  isBeforeCouncilDeadline,
+  requiredRolesForTurn,
+  type CouncilTurnInput,
+  type CouncilTurnInputRef,
+  type CouncilTurnScope,
+  type CouncilTurnSnapshot,
+  type FreezeCouncilTurnInput,
+  type FrozenCouncilTurn,
+} from './council-turn.js';
+export {
+  runCouncilRuntime,
+  type CouncilAttemptRecord,
+  type CouncilDispatchPhase,
+  type CouncilPublicTrace,
+  type CouncilRuntimeOptions,
+  type CouncilRuntimeOrchestration,
+  type CouncilRuntimeResult,
+  type CouncilRuntimeTiming,
+} from './council-runtime.js';
+export {
+  CouncilRoutingError,
+  requireCouncilRoutingManifest,
+  selectionForCouncilRole,
+  type CouncilRoutingErrorCode,
+} from './council-routing.js';
+export {
+  CouncilRunEvidenceError,
+  verifyCouncilRunEvidence,
+  type CouncilEvidenceCheck,
+  type CouncilRunArchive,
+  type CouncilRunEvidenceErrorCode,
+  type CouncilRunEvidenceFinding,
+  type CouncilRunEvidenceReport,
+} from './council-run-evidence.js';
 export {
   auditCp03CheckpointCandidate,
   canonicalCheckpointJson,
@@ -102,7 +173,7 @@ export {
   type CouncilShardDispatchRequest,
   type CouncilSuccessResult,
   type CouncilTiming,
-  type CouncilTurnSnapshot,
+  type CouncilTurnSnapshot as CriticalPathCouncilTurnSnapshot,
   type DurableCouncilShard,
   type GuardianDisposition,
   type GuardianShard,
@@ -118,3 +189,111 @@ export {
   type ProviderRoutingAudit,
   type ProviderRoutingManifest,
 } from './critical-path-routing.js';
+export {
+  auditGemini37Catalog,
+  inspectInstalledGemini37Catalog,
+  verifyGemini37CatalogAudit,
+  type Gemini37CatalogAudit,
+  type Gemini37CatalogSource,
+} from './model-catalog-audit.js';
+export {
+  ADAPTER_READINESS_CLAIM_CEILING,
+  ADAPTER_READINESS_VERIFICATION_IDS,
+  createAdapterReadinessManifest,
+  verifyAdapterReadinessManifest,
+  type AdapterReadinessManifest,
+} from './adapter-readiness-evidence.js';
+export { createSyntheticSpatialImage } from './synthetic-spatial-image.js';
+export {
+  createModelBakeoffFixtures,
+  type ModelBakeoffFixtureManifest,
+  type ModelBakeoffFixtures,
+  type ModelBakeoffPromptManifest,
+  type ModelBakeoffSchemaManifest,
+} from './model-bakeoff-fixtures.js';
+export {
+  BAKEOFF_DEEPSEEK_MODELS,
+  BAKEOFF_DEEPSEEK_PHASES,
+  BAKEOFF_GEMINI_MODELS,
+  BAKEOFF_GEMINI_PHASES,
+  BAKEOFF_MAXIMUM_DISPATCHES,
+  BAKEOFF_PLANNED_DISPATCHES,
+  BAKEOFF_REPETITIONS,
+  createModelBakeoffPlan,
+  summarizeModelBakeoffPlan,
+  type ModelBakeoffCase,
+  type ModelBakeoffInputClass,
+  type ModelBakeoffPhase,
+  type ModelBakeoffPlanSummary,
+  type ModelBakeoffProvider,
+  type ModelBakeoffRole,
+} from './model-bakeoff-plan.js';
+export {
+  MODEL_BAKEOFF_PRICING_URLS,
+  createModelBakeoffPricingManifest,
+  createModelBakeoffRoleCapsManifest,
+  estimateModelBakeoffWorstCaseUsd,
+  verifyModelBakeoffPricingManifest,
+  verifyModelBakeoffRoleCapsManifest,
+  type ModelBakeoffCostEstimate,
+  type ModelBakeoffPricingAudit,
+  type ModelBakeoffPricingManifest,
+  type ModelBakeoffPricingRate,
+  type ModelBakeoffRoleCapsManifest,
+  type ModelBakeoffRoleTokenCap,
+} from './model-bakeoff-pricing.js';
+export {
+  buildKeychainPresenceCommand,
+  createModelBakeoffKeychainReferenceManifest,
+  createModelBakeoffPreflight,
+  inspectInstalledModelBakeoffCandidateFacts,
+  inspectModelBakeoffCredentialPresence,
+  resolveModelBakeoffRunRoot,
+  verifyModelBakeoffKeychainReferenceManifest,
+  verifyModelBakeoffPreflight,
+  type CandidateCatalogFact,
+  type KeychainPresenceCommand,
+  type ModelBakeoffCredentialPresence,
+  type ModelBakeoffKeychainReference,
+  type ModelBakeoffKeychainReferenceManifest,
+  type ModelBakeoffPreflight,
+} from './model-bakeoff-preflight.js';
+export {
+  runModelBakeoff,
+  type ModelBakeoffAttemptRecord,
+  type ModelBakeoffCaseOutcome,
+  type ModelBakeoffDispatchRequest,
+  type ModelBakeoffProviderFacts,
+  type ModelBakeoffRunResult,
+  type ModelBakeoffSessionEventRange,
+  type ModelBakeoffToolResult,
+  type ModelBakeoffTransport,
+  type ModelBakeoffTransportResult,
+  type ModelBakeoffTransportResultKind,
+} from './model-bakeoff-runner.js';
+export {
+  createModelBakeoffDshTransport,
+  type ModelBakeoffDshDiagnostic,
+  type ModelBakeoffDshTransport,
+  type ModelBakeoffDshTransportOptions,
+  type ModelBakeoffPromptContext,
+} from './model-bakeoff-dsh-transport.js';
+export {
+  verifyModelBakeoffEvidence,
+  type ModelBakeoffEvidenceCheck,
+  type ModelBakeoffEvidenceReport,
+  type ModelBakeoffPairEvidence,
+  type ModelBakeoffPairRepetitionEvidence,
+  type ModelBakeoffRoleDecision,
+  type ModelBakeoffTechnicalArchive,
+} from './model-bakeoff-evidence.js';
+export {
+  MODEL_BAKEOFF_REVIEW_CRITERIA,
+  createModelBakeoffBlindReview,
+  type ModelBakeoffBlindCandidate,
+  type ModelBakeoffBlindIdentityMapping,
+  type ModelBakeoffBlindOutput,
+  type ModelBakeoffBlindPacket,
+  type ModelBakeoffBlindRoleSection,
+  type ModelBakeoffSealedMapping,
+} from './model-bakeoff-blind-review.js';

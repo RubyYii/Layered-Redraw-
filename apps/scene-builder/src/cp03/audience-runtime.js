@@ -82,6 +82,7 @@ export async function buildLocalScriptedProposal({ action, project, viewerText, 
       }],
       expectedChanges: ["interaction-actor-a", "interaction-cup"],
       forbiddenChanges: ["interaction-backdrop", "interaction-floor"],
+      forbiddenCapabilityIds: [],
       rollbackRequirements: ["丢弃瞬态导演覆盖并恢复提案前场景哈希。"],
       terminalIntent: terminal,
     },
@@ -89,6 +90,20 @@ export async function buildLocalScriptedProposal({ action, project, viewerText, 
       contributions: [],
       disagreements: ["这是零调用本地脚本轨迹，不是 Gemini 或 DeepSeek 输出。"],
       guardianChallenge: "只有观众批准当前精确哈希后，Capability Gate 才可执行。",
+      witnessEvidence: {
+        observations: [{
+          observationId: `observation_local${token}`,
+          text: `观众输入被保留为未验证文本引用：“${input}”`,
+          inputRefIds: [`viewer-text-local${token}`],
+        }],
+        uncertainties: ["没有调用真实 Provider；本地脚本不推断输入真实性或空间关系。"],
+        evidenceAnchors: [`viewer-text-local${token}`],
+      },
+      dissentRecords: [{
+        dissentId: `dissent_local${token}`,
+        text: "本地脚本只验证执行路径，不代表 Agent 对作品含义的判断。",
+        evidenceIds: [`viewer-text-local${token}`],
+      }],
     },
   });
   return {

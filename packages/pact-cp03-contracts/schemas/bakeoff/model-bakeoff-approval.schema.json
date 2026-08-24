@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://layered-redraw.local/cp03/bakeoff/model-bakeoff-approval.schema.json",
+  "$defs": {
+    "hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "route", "model"],
+      "properties": {
+        "provider": { "enum": ["deepseek", "gemini"] },
+        "route": { "enum": ["deepseek-official", "google"] },
+        "model": {
+          "enum": [
+            "deepseek-v4-pro",
+            "deepseek-v4-flash",
+            "gemini-3.5-flash",
+            "gemini-3.6-flash",
+            "gemini-3.7-flash"
+          ]
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "approvalId",
+    "approvedAt",
+    "runId",
+    "planSha256",
+    "preflightSha256",
+    "fixtureManifestSha256",
+    "promptManifestSha256",
+    "schemaManifestSha256",
+    "pricingManifestSha256",
+    "candidates",
+    "repetitions",
+    "counts",
+    "inputClasses",
+    "tokenCapsSha256",
+    "keychainReferencesSha256",
+    "retrySlots",
+    "worstCaseEstimatedUsd",
+    "maxUsd",
+    "oneRunOnly",
+    "automaticRerun",
+    "externalCapabilities"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "cp03-model-bakeoff-approval/0.1" },
+    "approvalId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "approvedAt": { "type": "string", "format": "date-time" },
+    "runId": {
+      "type": "string",
+      "pattern": "^cp03-model-bakeoff-[0-9]{8}T[0-9]{6}Z$"
+    },
+    "planSha256": { "$ref": "#/$defs/hash" },
+    "preflightSha256": { "$ref": "#/$defs/hash" },
+    "fixtureManifestSha256": { "$ref": "#/$defs/hash" },
+    "promptManifestSha256": { "$ref": "#/$defs/hash" },
+    "schemaManifestSha256": { "$ref": "#/$defs/hash" },
+    "pricingManifestSha256": { "$ref": "#/$defs/hash" },
+    "candidates": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "prefixItems": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/candidate" },
+            {
+              "type": "object",
+              "properties": {
+                "provider": { "const": "deepseek" },
+                "route": { "const": "deepseek-official" },
+                "model": { "const": "deepseek-v4-pro" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/candidate" },
+            {
+              "type": "object",
+              "properties": {
+                "provider": { "const": "deepseek" },
+                "route": { "const": "deepseek-official" },
+                "model": { "const": "deepseek-v4-flash" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/candidate" },
+            {
+              "type": "object",
+              "properties": {
+                "provider": { "const": "gemini" },
+                "route": { "const": "google" },
+                "model": { "const": "gemini-3.5-flash" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/candidate" },
+            {
+              "type": "object",
+              "properties": {
+                "provider": { "const": "gemini" },
+                "route": { "const": "google" },
+                "model": { "const": "gemini-3.6-flash" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/candidate" },
+            {
+              "type": "object",
+              "properties": {
+                "provider": { "const": "gemini" },
+                "route": { "const": "google" },
+                "model": { "const": "gemini-3.7-flash" }
+              }
+            }
+          ]
+        }
+      ],
+      "items": false
+    },
+    "repetitions": { "const": 2 },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "intended",
+        "eligible",
+        "excluded",
+        "sent",
+        "plannedDispatches",
+        "maximumDispatches"
+      ],
+      "properties": {
+        "intended": { "const": 28 },
+        "eligible": { "const": 28 },
+        "excluded": { "const": 0 },
+        "sent": { "const": 0 },
+        "plannedDispatches": { "const": 28 },
+        "maximumDispatches": { "const": 30 }
+      }
+    },
+    "inputClasses": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        { "const": "fictional_text" },
+        { "const": "synthetic_spatial_image" },
+        { "const": "synthetic_scene_registry" }
+      ],
+      "items": false
+    },
+    "tokenCapsSha256": { "$ref": "#/$defs/hash" },
+    "keychainReferencesSha256": { "$ref": "#/$defs/hash" },
+    "retrySlots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deepseek", "gemini"],
+      "properties": {
+        "deepseek": { "const": 1 },
+        "gemini": { "const": 1 }
+      }
+    },
+    "worstCaseEstimatedUsd": { "type": "number", "minimum": 0 },
+    "maxUsd": { "type": "number", "exclusiveMinimum": 0 },
+    "oneRunOnly": { "const": true },
+    "automaticRerun": { "const": false },
+    "externalCapabilities": {
+      "type": "array",
+      "maxItems": 0,
+      "items": false
+    }
+  }
+}

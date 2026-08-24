@@ -41,6 +41,7 @@ const receiptSchema = {
   properties: {
     accepted: { type: 'boolean' },
     payloadHash: { type: 'string' },
+    acceptedAtMonotonicMs: { type: 'number' },
   },
 } satisfies JsonSchemaNode;
 

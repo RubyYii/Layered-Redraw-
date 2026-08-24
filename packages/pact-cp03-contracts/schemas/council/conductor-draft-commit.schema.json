@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://layered-redraw.local/cp03/council/conductor-draft-commit.schema.json",
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "stableRef": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "terminalAction": {
+      "enum": ["Continue", "KeepOpaque"]
+    },
+    "nonterminalAction": {
+      "enum": ["Translate", "Reframe", "Merge"]
+    },
+    "actionSequence": {
+      "type": "array",
+      "oneOf": [
+        {
+          "minItems": 1,
+          "maxItems": 5,
+          "items": { "$ref": "#/$defs/nonterminalAction" }
+        },
+        {
+          "minItems": 1,
+          "maxItems": 1,
+          "prefixItems": [{ "$ref": "#/$defs/terminalAction" }],
+          "items": false
+        },
+        {
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/terminalAction" }
+          ],
+          "items": false
+        },
+        {
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/terminalAction" }
+          ],
+          "items": false
+        },
+        {
+          "minItems": 4,
+          "maxItems": 4,
+          "prefixItems": [
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/terminalAction" }
+          ],
+          "items": false
+        },
+        {
+          "minItems": 5,
+          "maxItems": 5,
+          "prefixItems": [
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/nonterminalAction" },
+            { "$ref": "#/$defs/terminalAction" }
+          ],
+          "items": false
+        }
+      ]
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "turnId",
+    "status",
+    "actionSequence",
+    "selectedShardHashes",
+    "selectedDissentIds",
+    "terminalIntent"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "cp03-council/0.2" },
+    "turnId": { "type": "string", "pattern": "^turn_[A-Za-z0-9_-]{8,80}$" },
+    "status": { "enum": ["NEEDS_CLARIFICATION", "PROPOSED", "WITHHELD"] },
+    "actionSequence": { "$ref": "#/$defs/actionSequence" },
+    "selectedShardHashes": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/hash" }
+    },
+    "selectedDissentIds": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/stableRef" }
+    },
+    "terminalIntent": { "enum": [null, "Continue", "KeepOpaque"] }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "actionSequence": {
+            "type": "array",
+            "contains": { "const": "Continue" }
+          }
+        },
+        "required": ["actionSequence"]
+      },
+      "then": {
+        "properties": { "terminalIntent": { "const": "Continue" } }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "actionSequence": {
+            "type": "array",
+            "contains": { "const": "KeepOpaque" }
+          }
+        },
+        "required": ["actionSequence"]
+      },
+      "then": {
+        "properties": { "terminalIntent": { "const": "KeepOpaque" } }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "actionSequence": {
+            "type": "array",
+            "not": { "contains": { "$ref": "#/$defs/terminalAction" } }
+          }
+        },
+        "required": ["actionSequence"]
+      },
+      "then": {
+        "properties": { "terminalIntent": { "type": "null" } }
+      }
+    }
+  ]
+}

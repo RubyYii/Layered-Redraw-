@@ -1,23 +1,57 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CP03_COUNCIL_SCHEMA_VERSION,
   CP03_RUNTIME_SCHEMA_VERSION,
   canonicalJson,
   sha256Canonical,
   validateAgentActionDraft,
   validateAgentContribution,
   validateApprovalRecord,
+  validateConductorDraftCommit,
+  validateCouncilShard,
+  validateModelBakeoffApproval,
+  validateModelBakeoffAttempt,
+  validateModelBakeoffSelection,
   validateProviderCallEnvelope,
+  validateProviderRoutingManifest,
   validateViewerTurn,
 } from "../src/index.js";
 import {
+  kindByRole,
   validAgentActionDraft,
   validAgentContribution,
   validApprovalRecord,
+  validConductorDraftCommit,
+  validCouncilShards,
+  validModelBakeoffApproval,
+  validModelBakeoffAttempt,
+  validModelBakeoffSelection,
   validProviderCallEnvelope,
+  validProviderRoutingManifest,
   validRuntimeAgentActionDraft,
   validViewerTurn,
 } from "./fixtures.js";
+
+const allRoutingAssignmentsFor = (provider) => {
+  const route = provider === "deepseek" ? "deepseek-official" : "gemini-official";
+  const model = provider === "deepseek"
+    ? "deepseek-model-pending-bakeoff"
+    : "gemini-model-pending-bakeoff";
+  const adapterPackage = provider === "deepseek"
+    ? "@deepseek-ai/dsh-llm-deepseek"
+    : "@deepseek-ai/dsh-llm-pi-ai";
+  return Object.fromEntries(Object.keys(validProviderRoutingManifest.assignments).map((role) => [
+    role,
+    {
+      ...validProviderRoutingManifest.assignments[role],
+      provider,
+      route,
+      model,
+      adapterPackage,
+    },
+  ]));
+};
 
 describe("CP03 foundation gate contracts", () => {
   it("canonicalises object keys but preserves array order", async () => {
@@ -42,6 +76,160 @@ describe("CP03 foundation gate contracts", () => {
     expect(validateAgentActionDraft(validRuntimeAgentActionDraft)).toBe(validRuntimeAgentActionDraft);
     expect(validateApprovalRecord(validApprovalRecord)).toBe(validApprovalRecord);
     expect(validateProviderCallEnvelope(validProviderCallEnvelope)).toBe(validProviderCallEnvelope);
+  });
+
+  it("requires structured runtime evidence and keeps restriction sets independently typed", () => {
+    expect(validateAgentActionDraft(validAgentActionDraft)).toBe(validAgentActionDraft);
+    expect(validateAgentActionDraft({
+      ...validRuntimeAgentActionDraft,
+      execution: {
+        ...validRuntimeAgentActionDraft.execution,
+        forbiddenChanges: [],
+        forbiddenCapabilityIds: [],
+        rollbackRequirements: [],
+      },
+    })).toBeTruthy();
+    expect(() => validateAgentActionDraft({
+      ...validRuntimeAgentActionDraft,
+      execution: {
+        ...validRuntimeAgentActionDraft.execution,
+        forbiddenCapabilityIds: undefined,
+      },
+    })).toThrow(/required|forbiddenCapabilityIds/);
+    expect(() => validateAgentActionDraft({
+      ...validRuntimeAgentActionDraft,
+      agency: {
+        ...validRuntimeAgentActionDraft.agency,
+        witnessEvidence: undefined,
+      },
+    })).toThrow(/required|witnessEvidence/);
+    expect(() => validateAgentActionDraft({
+      ...validRuntimeAgentActionDraft,
+      agency: {
+        ...validRuntimeAgentActionDraft.agency,
+        dissentRecords: undefined,
+      },
+    })).toThrow(/required|dissentRecords/);
+  });
+
+  it("accepts every frozen council shard, the minimal commit, and the dual-provider manifest", () => {
+    expect(CP03_COUNCIL_SCHEMA_VERSION).toBe("cp03-council/0.2");
+    for (const [role, shard] of Object.entries(validCouncilShards)) {
+      expect(shard.role).toBe(role);
+      expect(shard.kind).toBe(kindByRole[role]);
+      expect(Object.isFrozen(shard)).toBe(true);
+      expect(validateCouncilShard(shard)).toBe(shard);
+    }
+    expect(validateConductorDraftCommit(validConductorDraftCommit))
+      .toBe(validConductorDraftCommit);
+    expect(validateProviderRoutingManifest(validProviderRoutingManifest))
+      .toBe(validProviderRoutingManifest);
+  });
+
+  it("keeps council roles, commit authority, capability arguments, and providers closed", () => {
+    expect(() => validateCouncilShard({
+      ...validCouncilShards.Rewriter,
+      role: "Guardian",
+    })).toThrow(/validation failed/);
+    expect(() => validateCouncilShard({
+      ...validCouncilShards.Rewriter,
+      kind: "GUARDIAN",
+    })).toThrow(/validation failed/);
+    expect(() => validateConductorDraftCommit({
+      ...validConductorDraftCommit,
+      creative: { publicPoeticText: "not allowed in a commit" },
+    })).toThrow(/additionalProperties/);
+    expect(() => validateCouncilShard({
+      ...validCouncilShards.Rewriter,
+      content: {
+        ...validCouncilShards.Rewriter.content,
+        semanticCapabilityCalls: [{
+          capability: "performRegisteredInteraction",
+          arguments: {
+            actorId: "interaction-actor-a",
+            targetId: "interaction-cup",
+            affordance: "pickup",
+            position: [99, 0, 0],
+          },
+        }],
+      },
+    })).toThrow(/validation failed/);
+    expect(() => validateConductorDraftCommit({
+      ...validConductorDraftCommit,
+      actionSequence: ["Continue", "Reframe"],
+    })).toThrow(/validation failed/);
+    expect(() => validateProviderRoutingManifest({
+      ...validProviderRoutingManifest,
+      assignments: {
+        ...validProviderRoutingManifest.assignments,
+        CaseConductor: {
+          ...validProviderRoutingManifest.assignments.CaseConductor,
+          provider: "unapproved-provider",
+        },
+      },
+    })).toThrow(/validation failed/);
+  });
+
+  it("requires both provider families in the routing manifest", () => {
+    expect(() => validateProviderRoutingManifest({
+      ...validProviderRoutingManifest,
+      assignments: allRoutingAssignmentsFor("deepseek"),
+    })).toThrow(/validation failed/);
+  });
+
+  it.each([
+    ["provider and route", { provider: "deepseek", route: "gemini-official" }],
+    ["provider and model family", {
+      provider: "deepseek",
+      model: "gemini-model-pending-bakeoff",
+    }],
+    ["provider and adapter package", {
+      provider: "deepseek",
+      adapterPackage: "@google/generative-ai",
+    }],
+    ["URL-like model identifier", {
+      model: "https://models.example.test/deepseek-model",
+    }],
+  ])("rejects %s routing assignments", (_label, override) => {
+    expect(() => validateProviderRoutingManifest({
+      ...validProviderRoutingManifest,
+      assignments: {
+        ...validProviderRoutingManifest.assignments,
+        CaseConductor: {
+          ...validProviderRoutingManifest.assignments.CaseConductor,
+          ...override,
+        },
+      },
+    })).toThrow(/validation failed/);
+  });
+
+  it("rejects the legacy Google Gemini adapter instead of the installed DSH PI adapter", () => {
+    expect(() => validateProviderRoutingManifest({
+      ...validProviderRoutingManifest,
+      assignments: {
+        ...validProviderRoutingManifest.assignments,
+        Witness: {
+          ...validProviderRoutingManifest.assignments.Witness,
+          adapterPackage: "@google/generative-ai",
+        },
+      },
+    })).toThrow(/validation failed/);
+  });
+
+  it("keeps Archivist rights requirements registry-bound rather than licence prose", () => {
+    expect(validCouncilShards.Archivist.content.rightsRequirements)
+      .toEqual(["rights-local-scene"]);
+    expect(validateCouncilShard(validCouncilShards.Archivist))
+      .toBe(validCouncilShards.Archivist);
+    for (const rightsRequirement of ["Licensed under CC-BY 4.0", "CC-BY-4.0"]) {
+      expect(() => validateCouncilShard({
+        ...validCouncilShards.Archivist,
+        content: {
+          ...validCouncilShards.Archivist.content,
+          rightsRequirements: [rightsRequirement],
+        },
+      })).toThrow(/validation failed/);
+    }
   });
 
   it("rejects requested action authority in a viewer turn", () => {
@@ -161,5 +349,91 @@ describe("CP03 foundation gate contracts", () => {
       expect(error.message).not.toContain(sensitiveText);
       expect(error.message).not.toContain("Reframe");
     }
+  });
+
+  it("accepts the closed model-bakeoff approval, attempt, and author selection contracts", () => {
+    expect(validateModelBakeoffApproval(validModelBakeoffApproval))
+      .toBe(validModelBakeoffApproval);
+    expect(validateModelBakeoffAttempt(validModelBakeoffAttempt))
+      .toBe(validModelBakeoffAttempt);
+    expect(validateModelBakeoffSelection(validModelBakeoffSelection))
+      .toBe(validModelBakeoffSelection);
+  });
+
+  it("freezes the exact ordered candidate scope and approval authority", () => {
+    expect(() => validateModelBakeoffApproval({
+      ...validModelBakeoffApproval,
+      candidates: [
+        validModelBakeoffApproval.candidates[1],
+        validModelBakeoffApproval.candidates[0],
+        ...validModelBakeoffApproval.candidates.slice(2),
+      ],
+    })).toThrow(/validation failed/);
+    expect(() => validateModelBakeoffApproval({
+      ...validModelBakeoffApproval,
+      externalCapabilities: ["search"],
+    })).toThrow(/validation failed/);
+    expect(() => validateModelBakeoffApproval({
+      ...validModelBakeoffApproval,
+      automaticRerun: true,
+    })).toThrow(/validation failed/);
+  });
+
+  it("requires redacted durable attempt evidence without secret or raw-output fields", () => {
+    expect(() => validateModelBakeoffAttempt({
+      ...validModelBakeoffAttempt,
+      rawOutput: "provider response must not enter this contract",
+    })).toThrow(/additionalProperties/);
+    expect(() => validateModelBakeoffAttempt({
+      ...validModelBakeoffAttempt,
+      providerFacts: {
+        ...validModelBakeoffAttempt.providerFacts,
+        adapterPackage: "@google/generative-ai",
+      },
+    })).toThrow(/validation failed/);
+    expect(() => validateModelBakeoffAttempt({
+      ...validModelBakeoffAttempt,
+      sessionEventRange: null,
+    })).toThrow(/validation failed/);
+  });
+
+  it("records late attempt latency honestly while closing provider-phase and tool-contract pairs", () => {
+    expect(validateModelBakeoffAttempt({
+      ...validModelBakeoffAttempt,
+      latency: { completeMs: 15001, publicTraceMs: 13000 },
+      finish: { kind: "late", detailCode: "HARD_TIMEOUT_EXCEEDED" },
+      sideEffectAccepted: false,
+      toolResult: { ...validModelBakeoffAttempt.toolResult, accepted: false },
+    })).toBeTruthy();
+    expect(() => validateModelBakeoffAttempt({
+      ...validModelBakeoffAttempt,
+      phase: "Archivist",
+      role: "Archivist",
+    })).toThrow(/validation failed/);
+    expect(() => validateModelBakeoffAttempt({
+      ...validModelBakeoffAttempt,
+      toolResult: {
+        ...validModelBakeoffAttempt.toolResult,
+        name: "pact_submit_conductor_commit",
+        contract: "conductor-draft-commit/0.1",
+      },
+    })).toThrow(/validation failed/);
+  });
+
+  it("keeps the signed blind selection identity-free and exactly five-role", () => {
+    expect(() => validateModelBakeoffSelection({
+      ...validModelBakeoffSelection,
+      model: "gemini-3.7-flash",
+    })).toThrow(/additionalProperties/);
+    expect(() => validateModelBakeoffSelection({
+      ...validModelBakeoffSelection,
+      decisions: validModelBakeoffSelection.decisions.slice(0, 4),
+    })).toThrow(/validation failed/);
+    expect(() => validateModelBakeoffSelection({
+      ...validModelBakeoffSelection,
+      decisions: validModelBakeoffSelection.decisions.map((decision, index) => index === 0
+        ? { ...decision, roleDecision: "Witness" }
+        : decision),
+    })).toThrow(/validation failed/);
   });
 });

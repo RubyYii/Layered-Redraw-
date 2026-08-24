@@ -127,6 +127,7 @@ const runtimeDraft = (caseSessionId: string, turnId: string) => ({
     }],
     expectedChanges: ['interaction-actor-a', 'interaction-cup'],
     forbiddenChanges: ['source-plane', 'evidence-overlay'],
+    forbiddenCapabilityIds: [],
     rollbackRequirements: ['Discard the transient director overlay.'],
     terminalIntent: null,
   },
@@ -134,6 +135,12 @@ const runtimeDraft = (caseSessionId: string, turnId: string) => ({
     contributions: [],
     disagreements: [],
     guardianChallenge: 'Do not mutate before the viewer approves this exact draft hash.',
+    witnessEvidence: {
+      observations: [],
+      uncertainties: [],
+      evidenceAnchors: [],
+    },
+    dissentRecords: [],
   },
 });
 

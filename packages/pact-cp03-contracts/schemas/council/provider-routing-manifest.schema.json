@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://layered-redraw.local/cp03/council/provider-routing-manifest.schema.json",
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "assignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "route",
+        "model",
+        "adapterPackage",
+        "adapterVersion",
+        "promptHash",
+        "toolProfile",
+        "maximumConcurrency",
+        "inputClasses",
+        "inputLimitTokens",
+        "outputLimitTokens",
+        "timeoutMs"
+      ],
+      "properties": {
+        "provider": { "enum": ["deepseek", "gemini"] },
+        "route": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$"
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "adapterPackage": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\s]+$"
+        },
+        "adapterVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+        },
+        "promptHash": { "$ref": "#/$defs/hash" },
+        "toolProfile": { "const": "council-v2" },
+        "maximumConcurrency": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "inputClasses": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "enum": ["text", "image", "audio"] }
+        },
+        "inputLimitTokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "outputLimitTokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12000
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "provider": { "const": "deepseek" } },
+            "required": ["provider"]
+          },
+          "then": {
+            "properties": {
+              "route": {
+                "type": "string",
+                "pattern": "^deepseek(?:[-._/][A-Za-z0-9][A-Za-z0-9._/-]*)?$"
+              },
+              "model": {
+                "type": "string",
+                "pattern": "^deepseek-[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "adapterPackage": {
+                "type": "string",
+                "pattern": "^@deepseek-ai/[A-Za-z0-9][A-Za-z0-9._-]*$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "provider": { "const": "gemini" } },
+            "required": ["provider"]
+          },
+          "then": {
+            "properties": {
+              "route": {
+                "type": "string",
+                "pattern": "^gemini(?:[-._/][A-Za-z0-9][A-Za-z0-9._/-]*)?$"
+              },
+              "model": {
+                "type": "string",
+                "pattern": "^gemini-[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "adapterPackage": {
+                "const": "@deepseek-ai/dsh-llm-pi-ai"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "manifestVersion",
+    "plannedDispatches",
+    "maximumDispatches",
+    "assignments"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "cp03-council-routing/0.1" },
+    "manifestVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$"
+    },
+    "plannedDispatches": { "const": 6 },
+    "maximumDispatches": { "const": 8 },
+    "assignments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["CaseConductor", "Witness", "Archivist", "Rewriter", "Guardian"],
+      "properties": {
+        "CaseConductor": { "$ref": "#/$defs/assignment" },
+        "Witness": { "$ref": "#/$defs/assignment" },
+        "Archivist": { "$ref": "#/$defs/assignment" },
+        "Rewriter": { "$ref": "#/$defs/assignment" },
+        "Guardian": { "$ref": "#/$defs/assignment" }
+      },
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "required": ["CaseConductor"],
+              "properties": {
+                "CaseConductor": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "deepseek" } }
+                }
+              }
+            },
+            {
+              "required": ["Witness"],
+              "properties": {
+                "Witness": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "deepseek" } }
+                }
+              }
+            },
+            {
+              "required": ["Archivist"],
+              "properties": {
+                "Archivist": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "deepseek" } }
+                }
+              }
+            },
+            {
+              "required": ["Rewriter"],
+              "properties": {
+                "Rewriter": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "deepseek" } }
+                }
+              }
+            },
+            {
+              "required": ["Guardian"],
+              "properties": {
+                "Guardian": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "deepseek" } }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "required": ["CaseConductor"],
+              "properties": {
+                "CaseConductor": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "gemini" } }
+                }
+              }
+            },
+            {
+              "required": ["Witness"],
+              "properties": {
+                "Witness": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "gemini" } }
+                }
+              }
+            },
+            {
+              "required": ["Archivist"],
+              "properties": {
+                "Archivist": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "gemini" } }
+                }
+              }
+            },
+            {
+              "required": ["Rewriter"],
+              "properties": {
+                "Rewriter": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "gemini" } }
+                }
+              }
+            },
+            {
+              "required": ["Guardian"],
+              "properties": {
+                "Guardian": {
+                  "type": "object",
+                  "required": ["provider"],
+                  "properties": { "provider": { "const": "gemini" } }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

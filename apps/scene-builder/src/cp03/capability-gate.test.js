@@ -70,6 +70,7 @@ const createDraft = async (project, overrides = {}) => ({
     }],
     expectedChanges: ["interaction-actor-a", "interaction-cup"],
     forbiddenChanges: ["interaction-floor", "interaction-backdrop"],
+    forbiddenCapabilityIds: [],
     rollbackRequirements: ["Discard the transient director overlay."],
     terminalIntent: null,
     ...overrides.execution,
@@ -78,6 +79,12 @@ const createDraft = async (project, overrides = {}) => ({
     contributions: [],
     disagreements: [],
     guardianChallenge: "Execute only after approval of this exact draft hash.",
+    witnessEvidence: {
+      observations: [],
+      uncertainties: [],
+      evidenceAnchors: [],
+    },
+    dissentRecords: [],
     ...overrides.agency,
   },
 });
@@ -192,6 +199,44 @@ describe("CP03 viewer-approved capability gate", () => {
       preconditionHash: draft.identity.parentSceneHash,
       affectedObjectIds: ["interaction-actor-a", "interaction-cup"],
     });
+  });
+
+  it("rejects a capability that is explicitly forbidden even when it is registered", async () => {
+    const project = createGateProject();
+    const draft = await createDraft(project, {
+      execution: {
+        forbiddenCapabilityIds: ["performRegisteredInteraction"],
+      },
+    });
+    const approval = await createApproval(draft);
+
+    await expect(compileGuardedInteractionPlan({
+      draft,
+      approval,
+      project,
+      frame: evaluateTimeline(project, 0),
+    })).rejects.toThrow(/forbidden capability/i);
+  });
+
+  it("accepts empty object restrictions, capability restrictions, and rollback requirements", async () => {
+    const project = createGateProject();
+    const draft = await createDraft(project, {
+      execution: {
+        forbiddenChanges: [],
+        forbiddenCapabilityIds: [],
+        rollbackRequirements: [],
+      },
+    });
+    const approval = await createApproval(draft);
+    const plan = await compileGuardedInteractionPlan({
+      draft,
+      approval,
+      project,
+      frame: evaluateTimeline(project, 0),
+    });
+
+    expect(plan.forbiddenObjectIds).toEqual([]);
+    expect(plan.rollbackRequirements).toEqual([]);
   });
 
   it("applies a transient overlay without mutating the source and emits a linked receipt", async () => {

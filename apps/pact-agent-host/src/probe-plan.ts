@@ -20,7 +20,9 @@ export type PactCompatibilityTool =
   | 'pact_publish_trace'
   | 'pact_route_turn'
   | 'pact_submit_contribution'
-  | 'pact_submit_draft';
+  | 'pact_submit_draft'
+  | 'pact_submit_council_shard'
+  | 'pact_submit_conductor_commit';
 
 export interface ProbeDispatch {
   readonly purpose: string;
