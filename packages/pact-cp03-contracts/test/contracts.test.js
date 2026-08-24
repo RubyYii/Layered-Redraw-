@@ -8,7 +8,9 @@ import {
   validateAgentActionDraft,
   validateAgentContribution,
   validateApprovalRecord,
+  validateConductorCommitSubmission,
   validateConductorDraftCommit,
+  validateCouncilRoleSubmission,
   validateCouncilShard,
   validateModelBakeoffApproval,
   validateModelBakeoffAttempt,
@@ -22,7 +24,9 @@ import {
   validAgentActionDraft,
   validAgentContribution,
   validApprovalRecord,
+  validConductorCommitSubmission,
   validConductorDraftCommit,
+  validCouncilRoleSubmissions,
   validCouncilShards,
   validModelBakeoffApproval,
   validModelBakeoffAttempt,
@@ -124,6 +128,105 @@ describe("CP03 foundation gate contracts", () => {
       .toBe(validConductorDraftCommit);
     expect(validateProviderRoutingManifest(validProviderRoutingManifest))
       .toBe(validProviderRoutingManifest);
+  });
+
+  it("accepts only agent-owned role and Conductor submission fields", () => {
+    for (const submission of Object.values(validCouncilRoleSubmissions)) {
+      expect(Object.keys(submission).sort()).toEqual([
+        "content",
+        "evidenceAnchors",
+        "publicTrace",
+        "uncertainties",
+      ]);
+      expect(validateCouncilRoleSubmission(submission)).toBe(submission);
+    }
+    expect(validateConductorCommitSubmission(validConductorCommitSubmission))
+      .toBe(validConductorCommitSubmission);
+  });
+
+  it.each([
+    ["schemaVersion", "cp03-council/0.2"],
+    ["shardId", "shard_model_must_not_author"],
+    ["kind", "WITNESS"],
+    ["role", "Witness"],
+    ["childSessionId", "550e8400-e29b-41d4-a716-446655440099"],
+    ["caseSessionId", "case_model_must_not_author"],
+    ["turnId", "turn_model_must_not_author"],
+    ["snapshotHash", "a".repeat(64)],
+    ["parentSceneHash", "b".repeat(64)],
+    ["registryVersion", "cp03-registry/0.1"],
+    ["routingManifestVersion", "cp03-council-routing/manifest-0.1"],
+    ["deadlineId", "deadline_model_must_not_author"],
+  ])("rejects runtime-owned role submission field %s", (field, value) => {
+    expect(() => validateCouncilRoleSubmission({
+      ...validCouncilRoleSubmissions.Witness,
+      [field]: value,
+    })).toThrow(/additionalProperties/);
+  });
+
+  it.each([
+    ["schemaVersion", "cp03-council/0.2"],
+    ["turnId", "turn_model_must_not_author"],
+    ["status", "PROPOSED"],
+  ])("rejects runtime-owned Conductor commit field %s", (field, value) => {
+    expect(() => validateConductorCommitSubmission({
+      ...validConductorCommitSubmission,
+      [field]: value,
+    })).toThrow(/additionalProperties/);
+  });
+
+  it("rejects wrappers and executable or location-bearing model fields", () => {
+    expect(() => validateCouncilRoleSubmission({
+      shard: validCouncilRoleSubmissions.Witness,
+    })).toThrow(/validation failed/);
+    expect(() => validateConductorCommitSubmission({
+      argument: validConductorCommitSubmission,
+    })).toThrow(/validation failed/);
+    for (const forbiddenField of ["url", "path", "code"]) {
+      expect(() => validateCouncilRoleSubmission({
+        ...validCouncilRoleSubmissions.Witness,
+        [forbiddenField]: `forbidden-${forbiddenField}`,
+      })).toThrow(/additionalProperties/);
+    }
+    expect(() => validateCouncilRoleSubmission({
+      ...validCouncilRoleSubmissions.Rewriter,
+      content: {
+        ...validCouncilRoleSubmissions.Rewriter.content,
+        semanticCapabilityCalls: [{
+          capability: "rawTransform",
+          arguments: {
+            actorId: "interaction-actor-a",
+            targetId: "interaction-cup",
+            affordance: "pickup",
+          },
+        }],
+      },
+    })).toThrow(/validation failed/);
+    expect(() => validateCouncilRoleSubmission({
+      ...validCouncilRoleSubmissions.Rewriter,
+      content: {
+        ...validCouncilRoleSubmissions.Rewriter.content,
+        semanticCapabilityCalls: [{
+          capability: "performRegisteredInteraction",
+          arguments: {
+            actorId: "interaction-actor-a",
+            targetId: "interaction-cup",
+            affordance: "pickup",
+            position: [99, 0, 0],
+          },
+        }],
+      },
+    })).toThrow(/validation failed/);
+  });
+
+  it("rejects prose where Archivist rights references require registry IDs", () => {
+    expect(() => validateCouncilRoleSubmission({
+      ...validCouncilRoleSubmissions.Archivist,
+      content: {
+        ...validCouncilRoleSubmissions.Archivist.content,
+        rightsRequirements: ["synthetic-fixture-only"],
+      },
+    })).toThrow(/validation failed/);
   });
 
   it("keeps council roles, commit authority, capability arguments, and providers closed", () => {

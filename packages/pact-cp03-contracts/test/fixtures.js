@@ -280,6 +280,32 @@ export const validConductorDraftCommit = deepFreeze({
   terminalIntent: "Continue",
 });
 
+const councilRoleSubmissionFrom = ({
+  publicTrace,
+  uncertainties,
+  evidenceAnchors,
+  content,
+}) => ({
+  publicTrace,
+  uncertainties,
+  evidenceAnchors,
+  content,
+});
+
+export const validCouncilRoleSubmissions = deepFreeze(Object.fromEntries(
+  Object.entries(validCouncilShards).map(([role, shard]) => [
+    role,
+    councilRoleSubmissionFrom(shard),
+  ]),
+));
+
+export const validConductorCommitSubmission = deepFreeze({
+  actionSequence: ["Reframe", "Continue"],
+  selectedShardHashes: ["c".repeat(64), "d".repeat(64)],
+  selectedDissentIds: ["dissent_guardian01"],
+  terminalIntent: "Continue",
+});
+
 const routingAssignment = (provider, route, model, adapterPackage, promptHash) => ({
   provider,
   route,
