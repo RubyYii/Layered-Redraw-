@@ -328,3 +328,14 @@ export {
   type ModelBakeoffBlindRoleSection,
   type ModelBakeoffSealedMapping,
 } from './model-bakeoff-blind-review.js';
+export {
+  MODEL_BAKEOFF_REPAIR_BANNER,
+  MODEL_BAKEOFF_REPAIR_CHECKS,
+  MODEL_BAKEOFF_REPAIR_TEST_FILES,
+  createModelBakeoffRepairGateReport,
+  type ModelBakeoffRepairAssertionResult,
+  type ModelBakeoffRepairAssertionSelector,
+  type ModelBakeoffRepairCheckDefinition,
+  type ModelBakeoffRepairCounters,
+  type ModelBakeoffRepairGateReport,
+} from './model-bakeoff-repair-gate.js';
