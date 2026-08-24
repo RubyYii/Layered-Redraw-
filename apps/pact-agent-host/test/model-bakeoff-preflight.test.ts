@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 
 import { createModelBakeoffFixtures } from '../src/model-bakeoff-fixtures.js';
+import { createModelBakeoffExecutionPolicy } from '../src/model-bakeoff-execution-policy.js';
 import { createModelBakeoffPlan } from '../src/model-bakeoff-plan.js';
 import {
   createModelBakeoffPricingManifest,
@@ -57,6 +58,15 @@ const roleCaps = () => createModelBakeoffRoleCapsManifest({
   ConductorCommit: { maxInputTokens: 1_000, maxOutputTokens: 100 },
   Witness: { maxInputTokens: 1_000, maxOutputTokens: 100 },
   Rewriter: { maxInputTokens: 1_000, maxOutputTokens: 100 },
+});
+
+const replacementRoleCaps = () => createModelBakeoffRoleCapsManifest({
+  ConductorIntent: { maxInputTokens: 8_192, maxOutputTokens: 1_024 },
+  Archivist: { maxInputTokens: 8_192, maxOutputTokens: 1_024 },
+  Guardian: { maxInputTokens: 8_192, maxOutputTokens: 1_024 },
+  ConductorCommit: { maxInputTokens: 8_192, maxOutputTokens: 512 },
+  Witness: { maxInputTokens: 8_192, maxOutputTokens: 1_024 },
+  Rewriter: { maxInputTokens: 8_192, maxOutputTokens: 1_024 },
 });
 
 const keychain = () => createModelBakeoffKeychainReferenceManifest([
@@ -131,6 +141,12 @@ const validInput = () => {
   } as const;
 };
 
+const replacementInput = () => ({
+  ...validInput(),
+  roleCaps: replacementRoleCaps(),
+  executionPolicy: createModelBakeoffExecutionPolicy(),
+} as const);
+
 describe('model bakeoff preflight', () => {
   it('creates one canonical 28/28 zero-call preflight awaiting explicit approval', () => {
     const preflight = createModelBakeoffPreflight(validInput());
@@ -159,6 +175,50 @@ describe('model bakeoff preflight', () => {
     expect(verifyModelBakeoffPreflight(preflight)).toEqual({
       status: 'PASS',
       findings: [],
+    });
+  });
+
+  it('creates a hash-bound replacement preflight in memory without changing legacy 0.1', () => {
+    const executionPolicy = createModelBakeoffExecutionPolicy();
+    const replacement = createModelBakeoffPreflight({
+      ...replacementInput(),
+      executionPolicy,
+    });
+    const legacy = createModelBakeoffPreflight(validInput());
+
+    expect(replacement).toMatchObject({
+      schemaVersion: 'cp03-model-bakeoff-preflight/0.2',
+      status: 'ELIGIBLE_AWAITING_EXPLICIT_APPROVAL',
+      executionPolicySha256: executionPolicy.executionPolicySha256,
+      providerRequestsMade: 0,
+    });
+    expect(verifyModelBakeoffPreflight(replacement)).toEqual({
+      status: 'PASS',
+      findings: [],
+    });
+    expect(legacy.schemaVersion).toBe('cp03-model-bakeoff-preflight/0.1');
+    expect('executionPolicySha256' in legacy).toBe(false);
+  });
+
+  it('rejects replacement policy drift even when the preflight body is rehashed', () => {
+    const preflight = createModelBakeoffPreflight(replacementInput());
+    if (preflight.schemaVersion !== 'cp03-model-bakeoff-preflight/0.2') {
+      throw new Error('replacement preflight version missing');
+    }
+    const changed = {
+      ...preflight,
+      executionPolicySha256: 'f'.repeat(64),
+    };
+    const { preflightSha256: _oldHash, ...unsigned } = changed;
+
+    expect(verifyModelBakeoffPreflight({
+      ...changed,
+      preflightSha256: createHash('sha256')
+        .update(canonicalJson(unsigned))
+        .digest('hex'),
+    })).toMatchObject({
+      status: 'FAIL',
+      findings: expect.arrayContaining(['PREFLIGHT_EXECUTION_POLICY_INVALID']),
     });
   });
 

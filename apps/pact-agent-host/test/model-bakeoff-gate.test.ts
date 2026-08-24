@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createModelBakeoffFixtures } from '../src/model-bakeoff-fixtures.js';
+import { createModelBakeoffExecutionPolicy } from '../src/model-bakeoff-execution-policy.js';
 import {
   authorizeModelBakeoff,
   type ModelBakeoffApproval,
@@ -46,7 +47,7 @@ const candidates = (): CandidateCatalogFact[] => [
   ),
 ];
 
-const gateInput = () => {
+const gateInput = (replacement = false) => {
   const fixtures = createModelBakeoffFixtures();
   const plan = createModelBakeoffPlan(fixtures.manifest);
   const pricing = createModelBakeoffPricingManifest({
@@ -68,13 +69,34 @@ const gateInput = () => {
     }])),
   });
   const roleCaps = createModelBakeoffRoleCapsManifest({
-    ConductorIntent: { maxInputTokens: 1_000, maxOutputTokens: 100 },
-    Archivist: { maxInputTokens: 1_000, maxOutputTokens: 100 },
-    Guardian: { maxInputTokens: 1_000, maxOutputTokens: 100 },
-    ConductorCommit: { maxInputTokens: 1_000, maxOutputTokens: 100 },
-    Witness: { maxInputTokens: 1_000, maxOutputTokens: 100 },
-    Rewriter: { maxInputTokens: 1_000, maxOutputTokens: 100 },
+    ConductorIntent: {
+      maxInputTokens: replacement ? 8_192 : 1_000,
+      maxOutputTokens: replacement ? 1_024 : 100,
+    },
+    Archivist: {
+      maxInputTokens: replacement ? 8_192 : 1_000,
+      maxOutputTokens: replacement ? 1_024 : 100,
+    },
+    Guardian: {
+      maxInputTokens: replacement ? 8_192 : 1_000,
+      maxOutputTokens: replacement ? 1_024 : 100,
+    },
+    ConductorCommit: {
+      maxInputTokens: replacement ? 8_192 : 1_000,
+      maxOutputTokens: replacement ? 512 : 100,
+    },
+    Witness: {
+      maxInputTokens: replacement ? 8_192 : 1_000,
+      maxOutputTokens: replacement ? 1_024 : 100,
+    },
+    Rewriter: {
+      maxInputTokens: replacement ? 8_192 : 1_000,
+      maxOutputTokens: replacement ? 1_024 : 100,
+    },
   });
+  const executionPolicy = replacement
+    ? createModelBakeoffExecutionPolicy()
+    : undefined;
   const keychainReferences = createModelBakeoffKeychainReferenceManifest([
     { provider: 'deepseek', envRef: 'DEEPSEEK_API_KEY', keychainService: 'pact-test-deepseek', keychainAccount: 'test-account' },
     { provider: 'gemini', envRef: 'GEMINI_API_KEY', keychainService: 'pact-test-gemini', keychainAccount: 'test-account' },
@@ -91,6 +113,7 @@ const gateInput = () => {
       present: true,
     })),
     candidateFacts: candidates(),
+    ...(executionPolicy === undefined ? {} : { executionPolicy }),
     now: NOW,
   });
   const approval: ModelBakeoffApproval = {
@@ -118,7 +141,7 @@ const gateInput = () => {
     keychainReferencesSha256: keychainReferences.manifestSha256,
     retrySlots: { deepseek: 1, gemini: 1 },
     worstCaseEstimatedUsd: preflight.worstCaseEstimatedUsd!,
-    maxUsd: 0.05,
+    maxUsd: replacement ? 0.5 : 0.05,
     oneRunOnly: true,
     automaticRerun: false,
     externalCapabilities: [],
@@ -132,6 +155,7 @@ const gateInput = () => {
     roleCaps,
     keychainReferences,
     archiveState: { resultExists: false, pendingResultExists: false },
+    ...(executionPolicy === undefined ? {} : { executionPolicy }),
     now: NOW,
   } as const;
 };
@@ -142,6 +166,57 @@ describe('model bakeoff exact approval gate', () => {
     expect(authorizeModelBakeoff(input)).toEqual({
       status: 'AUTHORIZED',
       approval: input.approval,
+    });
+  });
+
+  it('authorizes a replacement preflight only when its exact policy is present', () => {
+    const input = gateInput(true);
+
+    expect(input.preflight.schemaVersion).toBe('cp03-model-bakeoff-preflight/0.2');
+    expect(authorizeModelBakeoff(input)).toEqual({
+      status: 'AUTHORIZED',
+      approval: input.approval,
+    });
+  });
+
+  it('refuses a replacement policy mismatch even when every legacy binding matches', () => {
+    const input = gateInput(true);
+    const changedPolicy = {
+      ...input.executionPolicy!,
+      outputSanitizer: 'allowed',
+    } as unknown as NonNullable<typeof input.executionPolicy>;
+
+    expect(authorizeModelBakeoff({
+      ...input,
+      executionPolicy: changedPolicy,
+    })).toMatchObject({
+      status: 'REFUSED',
+      providerRequestsMade: 0,
+      mismatches: expect.arrayContaining(['executionPolicy']),
+    });
+    const { executionPolicy: _missing, ...withoutPolicy } = input;
+    expect(authorizeModelBakeoff(withoutPolicy)).toMatchObject({
+      status: 'REFUSED',
+      providerRequestsMade: 0,
+      mismatches: expect.arrayContaining(['executionPolicy']),
+    });
+
+    expect(authorizeModelBakeoff({
+      ...input,
+      roleCaps: {
+        ...input.roleCaps,
+        caps: {
+          ...input.roleCaps.caps,
+          ConductorCommit: {
+            ...input.roleCaps.caps.ConductorCommit,
+            maxOutputTokens: 1_024,
+          },
+        },
+      },
+    })).toMatchObject({
+      status: 'REFUSED',
+      providerRequestsMade: 0,
+      mismatches: expect.arrayContaining(['executionPolicy.roleCaps']),
     });
   });
 

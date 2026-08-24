@@ -29,6 +29,7 @@ import type {
   CouncilRoleSubmission,
 } from '../src/council-submission-binding.js';
 import { createModelBakeoffFixtures } from '../src/model-bakeoff-fixtures.js';
+import { createModelBakeoffExecutionPolicy } from '../src/model-bakeoff-execution-policy.js';
 import {
   createModelBakeoffPlan,
   type ModelBakeoffCase,
@@ -199,7 +200,15 @@ const terminalTextResponse = (
 abstract class ReasoningAwareScriptedAdapter extends LlmAdapter {
   override async resolveModel(provider: string, model: string) {
     const resolved = await super.resolveModel(provider, model);
-    if (model !== 'gemini-3.7-flash') return resolved;
+    if (model.startsWith('deepseek-')) {
+      return {
+        ...resolved,
+        reasoning: {
+          efforts: [{ id: ReasoningEffortId('off'), name: 'Off' }],
+        },
+      };
+    }
+    if (!model.startsWith('gemini-')) return resolved;
     return {
       ...resolved,
       reasoning: {
@@ -263,6 +272,15 @@ const roleCaps = {
   Rewriter: { maxInputTokens: 1_000, maxOutputTokens: 100 },
 } as const;
 
+const replacementRoleCaps = {
+  ConductorIntent: { maxInputTokens: 8_192, maxOutputTokens: 1_024 },
+  Archivist: { maxInputTokens: 8_192, maxOutputTokens: 1_024 },
+  Guardian: { maxInputTokens: 8_192, maxOutputTokens: 1_024 },
+  ConductorCommit: { maxInputTokens: 8_192, maxOutputTokens: 512 },
+  Witness: { maxInputTokens: 8_192, maxOutputTokens: 1_024 },
+  Rewriter: { maxInputTokens: 8_192, maxOutputTokens: 1_024 },
+} as const;
+
 describe('DSH model bakeoff transport', () => {
   it('uses actual DSH sessions/tools, keeps conductor continuity, and confines the image', async () => {
     const fixtures = createModelBakeoffFixtures();
@@ -276,7 +294,8 @@ describe('DSH model bakeoff transport', () => {
       persistenceRoot,
       dshHome,
       providerKind: 'scripted',
-      roleCaps,
+      roleCaps: replacementRoleCaps,
+      executionPolicy: createModelBakeoffExecutionPolicy(),
       forbiddenSubstrings: [
         process.cwd(),
         persistenceRoot,
@@ -357,8 +376,13 @@ describe('DSH model bakeoff transport', () => {
     expect(deepseek.requests.every((request) =>
       !JSON.stringify(request).includes('"type":"image"'))).toBe(true);
 
+    const executionPolicy = createModelBakeoffExecutionPolicy();
     for (const request of requests) {
-      expect(request.maxTokens).toBe(100);
+      const context = promptContext(request);
+      expect(request.maxTokens).toBe(executionPolicy.roleCaps[context.phase]);
+      expect(String(request.reasoningEffort)).toBe(
+        executionPolicy.reasoningByModel[request.model],
+      );
       expect(request.tools?.map(({ name }) => name).some((name) => forbiddenTool.test(name)))
         .toBe(false);
     }
@@ -446,11 +470,8 @@ describe('DSH model bakeoff transport', () => {
       persistenceRoot: testRoot('conductor-phase-caps'),
       dshHome: testRoot('conductor-phase-cap-attachments'),
       providerKind: 'scripted',
-      roleCaps: {
-        ...roleCaps,
-        ConductorIntent: { maxInputTokens: 8_192, maxOutputTokens: 1_024 },
-        ConductorCommit: { maxInputTokens: 8_192, maxOutputTokens: 512 },
-      },
+      roleCaps: replacementRoleCaps,
+      executionPolicy: createModelBakeoffExecutionPolicy(),
       mountAdapters(ctx) {
         ctx.llm.registerAdapter(['deepseek-official'], adapter);
       },
@@ -464,6 +485,8 @@ describe('DSH model bakeoff transport', () => {
     expect(intentResult.kind).toBe('accepted');
     expect(commitResult.kind).toBe('accepted');
     expect(adapter.requests.map(({ maxTokens }) => maxTokens)).toEqual([1_024, 512]);
+    expect(adapter.requests.map(({ reasoningEffort }) => String(reasoningEffort)))
+      .toEqual(['off', 'off']);
     expect(new Set(adapter.requests.map(({ sessionId }) => String(sessionId))).size).toBe(1);
   });
 
@@ -730,7 +753,8 @@ describe('DSH model bakeoff transport', () => {
       persistenceRoot: testRoot('gemini-37-reasoning'),
       dshHome: testRoot('gemini-37-reasoning-attachments'),
       providerKind: 'scripted',
-      roleCaps,
+      roleCaps: replacementRoleCaps,
+      executionPolicy: createModelBakeoffExecutionPolicy(),
       mountAdapters(ctx) {
         ctx.llm.registerAdapter(['google'], adapter);
       },
@@ -743,6 +767,121 @@ describe('DSH model bakeoff transport', () => {
     expect(result.kind).toBe('accepted');
     expect(adapter.requests.map(({ reasoningEffort }) => String(reasoningEffort)))
       .toEqual(['low']);
+  });
+
+  it('serializes Gemini 3.7 LOW through an in-process HTTP intercept only', async () => {
+    const originalFetch = globalThis.fetch;
+    let interceptedRequests = 0;
+    let externalNetworkRequests = 0;
+    let capturedPayload: unknown;
+    let capturedHttpBody: unknown;
+    globalThis.fetch = async (input, init) => {
+      interceptedRequests += 1;
+      const request = input instanceof Request ? input : new Request(input, init);
+      const destination = new URL(request.url);
+      if (destination.hostname !== 'generativelanguage.googleapis.com') {
+        externalNetworkRequests += 1;
+        throw new Error('MODEL_BAKEOFF_LOCAL_SERIALIZATION_DESTINATION_INVALID');
+      }
+      capturedHttpBody = JSON.parse(await request.clone().text()) as unknown;
+      const syntheticEvent = {
+        candidates: [{
+          content: {
+            role: 'model',
+            parts: [{ text: 'Synthetic local terminal response.' }],
+          },
+          finishReason: 'STOP',
+        }],
+        usageMetadata: {
+          promptTokenCount: 1,
+          candidatesTokenCount: 1,
+          totalTokenCount: 2,
+        },
+      };
+      return new Response(`data: ${JSON.stringify(syntheticEvent)}\n\n`, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    };
+
+    try {
+      type LocalGoogleModel = { readonly id: string };
+      type LocalGoogleProvider = {
+        readonly getModels: () => Promise<readonly LocalGoogleModel[]>;
+        readonly streamSimple: (
+          model: LocalGoogleModel,
+          context: {
+            readonly messages: readonly {
+              readonly role: 'user';
+              readonly content: string;
+              readonly timestamp: number;
+            }[];
+          },
+          options: {
+            readonly apiKey: string;
+            readonly reasoning: 'low';
+            readonly maxTokens: number;
+            readonly maxRetries: 0;
+            readonly onPayload: (payload: unknown) => undefined;
+          },
+        ) => AsyncIterable<unknown>;
+      };
+      const providerModuleSpecifier: string =
+        '@earendil-works/pi-ai/providers/google';
+      const providerModule = await import(
+        /* @vite-ignore */ providerModuleSpecifier
+      ) as unknown as {
+        readonly googleProvider: () => LocalGoogleProvider;
+      };
+      const { googleProvider } = providerModule;
+      const provider = googleProvider();
+      const model = (await provider.getModels()).find(
+        ({ id }) => id === 'gemini-3.7-flash',
+      );
+      if (model === undefined) throw new Error('MODEL_BAKEOFF_GEMINI_37_MISSING');
+      const stream = provider.streamSimple(model, {
+        messages: [{
+          role: 'user',
+          content: 'Fictional local serialization probe.',
+          timestamp: 0,
+        }],
+      }, {
+        apiKey: 'synthetic-local-api-key',
+        reasoning: 'low',
+        maxTokens: 32,
+        maxRetries: 0,
+        onPayload(payload) {
+          capturedPayload = payload;
+          return undefined;
+        },
+      });
+      for await (const _event of stream) {
+        // Drain the locally synthesized terminal response.
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const payload = capturedPayload as {
+      readonly config?: {
+        readonly thinkingConfig?: {
+          readonly thinkingLevel?: string;
+        };
+      };
+    };
+    const body = capturedHttpBody as {
+      readonly generationConfig?: {
+        readonly thinkingConfig?: {
+          readonly thinkingLevel?: string;
+        };
+      };
+    };
+    expect(payload.config?.thinkingConfig?.thinkingLevel).toBe('LOW');
+    expect(payload.config?.thinkingConfig?.thinkingLevel).not.toBe('MINIMAL');
+    expect(body.generationConfig?.thinkingConfig?.thinkingLevel).toBe('LOW');
+    expect(body.generationConfig?.thinkingConfig?.thinkingLevel).not.toBe('MINIMAL');
+    expect(interceptedRequests).toBe(1);
+    expect(externalNetworkRequests).toBe(0);
   });
 
   it('classifies a terminal provider error as transport failure', async () => {

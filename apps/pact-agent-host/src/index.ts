@@ -234,6 +234,13 @@ export {
   type ModelBakeoffSchemaManifest,
 } from './model-bakeoff-fixtures.js';
 export {
+  createModelBakeoffExecutionPolicy,
+  verifyModelBakeoffExecutionPolicy,
+  type ModelBakeoffExecutionPolicy,
+  type ModelBakeoffExecutionPolicyAudit,
+  type ModelBakeoffReasoningEffort,
+} from './model-bakeoff-execution-policy.js';
+export {
   BAKEOFF_DEEPSEEK_MODELS,
   BAKEOFF_DEEPSEEK_PHASES,
   BAKEOFF_GEMINI_MODELS,
@@ -278,7 +285,9 @@ export {
   type ModelBakeoffCredentialPresence,
   type ModelBakeoffKeychainReference,
   type ModelBakeoffKeychainReferenceManifest,
+  type ModelBakeoffLegacyPreflight,
   type ModelBakeoffPreflight,
+  type ModelBakeoffReplacementPreflight,
 } from './model-bakeoff-preflight.js';
 export {
   runModelBakeoff,

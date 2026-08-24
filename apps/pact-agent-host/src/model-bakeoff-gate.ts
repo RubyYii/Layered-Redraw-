@@ -8,6 +8,10 @@ import {
   type ModelBakeoffFixtureManifest,
 } from './model-bakeoff-fixtures.js';
 import {
+  verifyModelBakeoffExecutionPolicy,
+  type ModelBakeoffExecutionPolicy,
+} from './model-bakeoff-execution-policy.js';
+import {
   createModelBakeoffPlan,
   type ModelBakeoffCase,
   type ModelBakeoffProvider,
@@ -130,6 +134,7 @@ const addMismatch = (mismatches: string[], condition: boolean, field: string): v
 export function authorizeModelBakeoff(input: {
   readonly approval: ModelBakeoffApproval;
   readonly preflight: ModelBakeoffPreflight;
+  readonly executionPolicy?: ModelBakeoffExecutionPolicy;
   readonly plan: readonly ModelBakeoffCase[];
   readonly fixtures: ModelBakeoffFixtureManifest;
   readonly pricing: ModelBakeoffPricingManifest;
@@ -164,6 +169,36 @@ export function authorizeModelBakeoff(input: {
       && input.preflight.status === 'ELIGIBLE_AWAITING_EXPLICIT_APPROVAL',
     'preflight',
   );
+  if (input.preflight.schemaVersion === 'cp03-model-bakeoff-preflight/0.2') {
+    addMismatch(
+      mismatches,
+      input.executionPolicy !== undefined
+        && verifyModelBakeoffExecutionPolicy(input.executionPolicy).status === 'PASS',
+      'executionPolicy',
+    );
+    addMismatch(
+      mismatches,
+      input.executionPolicy?.executionPolicySha256 ===
+        input.preflight.executionPolicySha256,
+      'executionPolicySha256',
+    );
+    addMismatch(
+      mismatches,
+      input.executionPolicy !== undefined
+        && Object.entries(input.executionPolicy.roleCaps).every(
+          ([phase, maxOutputTokens]) =>
+            input.roleCaps.caps[phase as keyof typeof input.roleCaps.caps]
+              ?.maxOutputTokens === maxOutputTokens,
+        ),
+      'executionPolicy.roleCaps',
+    );
+  } else {
+    addMismatch(
+      mismatches,
+      input.executionPolicy === undefined,
+      'executionPolicy',
+    );
+  }
   addMismatch(mismatches, sameCanonical(input.fixtures, canonicalFixtures), 'fixtures');
   addMismatch(mismatches, sameCanonical(input.plan, canonicalPlan), 'plan');
   addMismatch(

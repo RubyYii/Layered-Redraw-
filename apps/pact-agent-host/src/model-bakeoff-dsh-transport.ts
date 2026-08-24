@@ -47,6 +47,11 @@ import {
 } from './council-durability.js';
 import { waitForTurnEnd } from './durable-turn.js';
 import type { ModelBakeoffFixtures } from './model-bakeoff-fixtures.js';
+import {
+  verifyModelBakeoffExecutionPolicy,
+  type ModelBakeoffExecutionPolicy,
+  type ModelBakeoffReasoningEffort,
+} from './model-bakeoff-execution-policy.js';
 import type {
   ModelBakeoffCase,
   ModelBakeoffPhase,
@@ -278,16 +283,19 @@ export interface ModelBakeoffDshTransportOptions {
     ModelBakeoffPhase,
     { readonly maxInputTokens: number; readonly maxOutputTokens: number }
   >>;
+  readonly executionPolicy?: ModelBakeoffExecutionPolicy;
   readonly forbiddenSubstrings?: readonly string[];
   readonly now?: () => number;
 }
 
 interface StreamCapture {
   sessionId: string | null;
+  readonly expectedPhase: ModelBakeoffPhase;
   readonly expectedRoute: string;
   readonly expectedModel: string;
   readonly expectedToolName: ModelBakeoffToolResult['name'];
   readonly maxOutputTokens: number;
+  readonly expectedReasoningEffort: ModelBakeoffReasoningEffort | null;
   streamCount: number;
   undeclaredStreamCount: number;
   firstChunkAtMs: number | null;
@@ -486,12 +494,20 @@ const scanForForbidden = (
 
 class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
   private readonly now: () => number;
+  private readonly executionPolicy: ModelBakeoffExecutionPolicy | null;
   private readonly diagnosticsLog: ModelBakeoffDshDiagnostic[] = [];
   private scope: CandidateScope | null = null;
   private disposed = false;
 
   constructor(private readonly options: ModelBakeoffDshTransportOptions) {
     this.now = options.now ?? Date.now;
+    this.executionPolicy = options.executionPolicy ?? null;
+    if (
+      this.executionPolicy !== null
+      && verifyModelBakeoffExecutionPolicy(this.executionPolicy).status !== 'PASS'
+    ) {
+      throw new Error('MODEL_BAKEOFF_EXECUTION_POLICY_INVALID');
+    }
     for (const phase of [
       'ConductorIntent',
       'Archivist',
@@ -509,6 +525,12 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         || cap.maxOutputTokens < 1
         || cap.maxOutputTokens > 2_048
       ) throw new Error('MODEL_BAKEOFF_ROLE_CAP_INVALID');
+      if (
+        this.executionPolicy !== null
+        && cap.maxOutputTokens !== this.executionPolicy.roleCaps[phase]
+      ) {
+        throw new Error(`MODEL_BAKEOFF_EXECUTION_POLICY_ROLE_CAP_MISMATCH:${phase}`);
+      }
     }
   }
 
@@ -536,10 +558,13 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
       observation = {
         capture: {
           sessionId: null,
+          expectedPhase: request.case.phase,
           expectedRoute: request.case.route,
           expectedModel: request.case.model,
           expectedToolName: expected.name,
-          maxOutputTokens: this.options.roleCaps[request.case.phase].maxOutputTokens,
+          maxOutputTokens: this.executionPolicy?.roleCaps[request.case.phase]
+            ?? this.options.roleCaps[request.case.phase].maxOutputTokens,
+          expectedReasoningEffort: this.reasoningEffortFor(request.case.model),
           streamCount: 0,
           undeclaredStreamCount: 0,
           firstChunkAtMs: null,
@@ -1078,9 +1103,13 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         return {
           ...config,
           maxTokens: active.capture.maxOutputTokens,
-          ...(active.capture.expectedModel === 'gemini-3.7-flash'
-            ? { reasoningEffort: ReasoningEffortId('low') }
-            : {}),
+          ...(active.capture.expectedReasoningEffort === null
+            ? {}
+            : {
+              reasoningEffort: ReasoningEffortId(
+                active.capture.expectedReasoningEffort,
+              ),
+            }),
         };
       });
       harness.ctx.on('llm/stream', (request: GenerateOptions, next) => {
@@ -1100,6 +1129,11 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
           request.provider !== active.capture.expectedRoute
           || request.model !== active.capture.expectedModel
           || request.maxTokens !== active.capture.maxOutputTokens
+          || (
+            active.capture.expectedReasoningEffort !== null
+            && String(request.reasoningEffort) !==
+              active.capture.expectedReasoningEffort
+          )
         ) {
           throw new Error('MODEL_BAKEOFF_ROUTE_MODEL_MISMATCH');
         }
@@ -1119,6 +1153,17 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
       await harness.dispose();
       throw error;
     }
+  }
+
+  private reasoningEffortFor(model: string): ModelBakeoffReasoningEffort | null {
+    if (this.executionPolicy === null) {
+      return model === 'gemini-3.7-flash' ? 'low' : null;
+    }
+    const reasoningEffort = this.executionPolicy.reasoningByModel[model];
+    if (reasoningEffort === undefined) {
+      throw new Error(`MODEL_BAKEOFF_EXECUTION_POLICY_MODEL_MISSING:${model}`);
+    }
+    return reasoningEffort;
   }
 
   private promptFor(

@@ -13,6 +13,11 @@ import {
   type ModelBakeoffFixtureManifest,
 } from './model-bakeoff-fixtures.js';
 import {
+  createModelBakeoffExecutionPolicy,
+  verifyModelBakeoffExecutionPolicy,
+  type ModelBakeoffExecutionPolicy,
+} from './model-bakeoff-execution-policy.js';
+import {
   BAKEOFF_DEEPSEEK_MODELS,
   BAKEOFF_GEMINI_MODELS,
   BAKEOFF_MAXIMUM_DISPATCHES,
@@ -67,8 +72,7 @@ export interface ModelBakeoffCredentialPresence extends ModelBakeoffKeychainRefe
   readonly present: boolean;
 }
 
-export interface ModelBakeoffPreflight {
-  readonly schemaVersion: 'cp03-model-bakeoff-preflight/0.1';
+interface ModelBakeoffPreflightCommon {
   readonly status: 'NOT_ELIGIBLE' | 'ELIGIBLE_AWAITING_EXPLICIT_APPROVAL';
   readonly runId: string;
   readonly counts: {
@@ -96,6 +100,19 @@ export interface ModelBakeoffPreflight {
   readonly providerRequestsMade: 0;
   readonly preflightSha256: string;
 }
+
+export interface ModelBakeoffLegacyPreflight extends ModelBakeoffPreflightCommon {
+  readonly schemaVersion: 'cp03-model-bakeoff-preflight/0.1';
+}
+
+export interface ModelBakeoffReplacementPreflight extends ModelBakeoffPreflightCommon {
+  readonly schemaVersion: 'cp03-model-bakeoff-preflight/0.2';
+  readonly executionPolicySha256: string;
+}
+
+export type ModelBakeoffPreflight =
+  | ModelBakeoffLegacyPreflight
+  | ModelBakeoffReplacementPreflight;
 
 export interface KeychainPresenceCommand {
   readonly file: '/usr/bin/security';
@@ -380,6 +397,22 @@ const credentialFindings = (
   return findings;
 };
 
+const executionPolicyFindings = (
+  policy: ModelBakeoffExecutionPolicy,
+  roleCaps: ModelBakeoffRoleCapsManifest,
+): readonly string[] => {
+  const findings = [...verifyModelBakeoffExecutionPolicy(policy).findings];
+  for (const [phase, maxOutputTokens] of Object.entries(policy.roleCaps)) {
+    if (
+      roleCaps.caps[phase as keyof typeof roleCaps.caps]?.maxOutputTokens
+      !== maxOutputTokens
+    ) {
+      findings.push(`EXECUTION_POLICY_ROLE_CAP_MISMATCH:${phase}`);
+    }
+  }
+  return findings;
+};
+
 export function createModelBakeoffPreflight(input: {
   readonly runId: string;
   readonly plan: readonly ModelBakeoffCase[];
@@ -389,6 +422,7 @@ export function createModelBakeoffPreflight(input: {
   readonly keychainReferences: ModelBakeoffKeychainReferenceManifest;
   readonly credentialPresence: readonly ModelBakeoffCredentialPresence[];
   readonly candidateFacts: readonly CandidateCatalogFact[];
+  readonly executionPolicy?: ModelBakeoffExecutionPolicy;
   readonly now?: number;
 }): ModelBakeoffPreflight {
   const globalFindings: string[] = [];
@@ -400,6 +434,9 @@ export function createModelBakeoffPreflight(input: {
     ...fixtureFindings(input.fixtures),
     ...planFindings(input.plan, input.fixtures),
     ...credentialFindings(input.keychainReferences, input.credentialPresence),
+    ...(input.executionPolicy === undefined
+      ? []
+      : executionPolicyFindings(input.executionPolicy, input.roleCaps)),
   );
 
   const candidateStatus = candidateEligibility(input.candidateFacts);
@@ -430,8 +467,7 @@ export function createModelBakeoffPreflight(input: {
     }).worstCaseEstimatedUsd
     : null;
 
-  const unsigned = {
-    schemaVersion: 'cp03-model-bakeoff-preflight/0.1' as const,
+  const common = {
     status: input.plan.length === BAKEOFF_PLANNED_DISPATCHES
       && eligible === BAKEOFF_PLANNED_DISPATCHES
       && exclusions.length === 0
@@ -462,6 +498,16 @@ export function createModelBakeoffPreflight(input: {
     exclusions,
     providerRequestsMade: 0 as const,
   };
+  const unsigned = input.executionPolicy === undefined
+    ? {
+      schemaVersion: 'cp03-model-bakeoff-preflight/0.1' as const,
+      ...common,
+    }
+    : {
+      schemaVersion: 'cp03-model-bakeoff-preflight/0.2' as const,
+      executionPolicySha256: input.executionPolicy.executionPolicySha256,
+      ...common,
+    };
   return deepFreeze({ ...unsigned, preflightSha256: canonicalHash(unsigned) });
 }
 
@@ -469,8 +515,22 @@ export function verifyModelBakeoffPreflight(
   preflight: ModelBakeoffPreflight,
 ): { readonly status: 'PASS' | 'FAIL'; readonly findings: readonly string[] } {
   const findings: string[] = [];
-  if (preflight.schemaVersion !== 'cp03-model-bakeoff-preflight/0.1') {
+  if (
+    preflight.schemaVersion !== 'cp03-model-bakeoff-preflight/0.1'
+    && preflight.schemaVersion !== 'cp03-model-bakeoff-preflight/0.2'
+  ) {
     findings.push('PREFLIGHT_SCHEMA_VERSION_INVALID');
+  }
+  if (preflight.schemaVersion === 'cp03-model-bakeoff-preflight/0.2') {
+    if (
+      !SHA256.test(preflight.executionPolicySha256)
+      || preflight.executionPolicySha256 !==
+        createModelBakeoffExecutionPolicy().executionPolicySha256
+    ) {
+      findings.push('PREFLIGHT_EXECUTION_POLICY_INVALID');
+    }
+  } else if ('executionPolicySha256' in preflight) {
+    findings.push('PREFLIGHT_LEGACY_POLICY_FIELD_FORBIDDEN');
   }
   if (!RUN_ID.test(preflight.runId)) findings.push('PREFLIGHT_RUN_ID_INVALID');
   if (
@@ -512,6 +572,9 @@ export function verifyModelBakeoffPreflight(
     preflight.pricingManifestSha256,
     preflight.roleCapsSha256,
     preflight.keychainReferencesSha256,
+    ...(preflight.schemaVersion === 'cp03-model-bakeoff-preflight/0.2'
+      ? [preflight.executionPolicySha256]
+      : []),
   ]) {
     if (!SHA256.test(hash)) findings.push('PREFLIGHT_BINDING_SHA256_INVALID');
   }
