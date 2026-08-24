@@ -34,7 +34,8 @@
 - Layered Redraw `spatial-bridge.json` 工程导入：自动匹配 RGB／近白相对深度、校验两个 SHA-256，并生成可旋转的 2.5D 纹理高度场；载体位置、旋转和尺寸继续可编辑
 - 导入报告会列出网格、蒙皮网格、骨骼、动画片段与 Morph Target，并自动识别 `root/head/effector/statusLight`、常用骨骼和表情槽位
 - `AnimationMixer` 驱动的 `idle/move/interact/react` CrossFade，以及独立的动作、表情权重与骨骼姿态控制接口；模型变化不改写角色根轨道
-- 外部动作 GLB 到当前蒙皮骨架的动画重定向接口，以及双手／双脚世界空间双骨 CCD、头颈注视与静止脚底锁定
+- 外部动作 GLB 到当前蒙皮骨架的动画重定向接口，以及双手／双脚世界空间双骨 CCD、头颈注视与静止脚底锁定；目标按真实骨长限制在可达环带内，退化骨链安全降级
+- 同角色每帧 IK 批处理与平滑 1–8 次迭代预算：离屏／远景减负，近景／选中角色恢复精度，固定步长成片始终使用完整预算
 - 25 槽位骨架映射编辑器：搜索、自动推断、必需槽位／重复骨骼诊断、实时姿势／双手／脚锁测试和工程持久化
 - `idle / approach / look / reach / grasp / carry / transfer / release / speak` 角色动作状态机，统一选择动画槽位与身体约束
 - 交互的预备、伸手、接触、恢复阶段，以及随持有者旋转的局部携带锚点
@@ -140,7 +141,7 @@ editor.clearAssetBonePose(objectId, "head");
 editor.clearAssetHandIk(objectId, "rightHand");
 ```
 
-动作既可传语义槽位，也可传 GLB 中的原始动画名；表情、骨骼和四肢同样支持语义槽位或原始名称。动作重定向要求源／目标 GLB 都包含兼容的蒙皮骨架；名称不兼容会失败并保留原动作。`assetReport` 会返回 `twoHandIk`、`footLock`、`lookIk`、`fullBodyIk`、映射诊断、重定向能力和当前状态机。页面还暴露只读／编译边界 `window.__BLOCKOUT_AGENT_BEHAVIOR__`；它不会直接把模型输出写进场景。
+动作既可传语义槽位，也可传 GLB 中的原始动画名；表情、骨骼和四肢同样支持语义槽位或原始名称。动作重定向要求源／目标 GLB 都包含兼容的蒙皮骨架；名称不兼容会失败并保留原动作。`assetReport` 会返回 `twoHandIk`、`footLock`、`lookIk`、`fullBodyIk`、骨链长度／有效性、可达目标诊断、当前迭代层级、映射诊断、重定向能力和状态机。页面还暴露只读／编译边界 `window.__BLOCKOUT_AGENT_BEHAVIOR__`；它不会直接把模型输出写进场景。
 
 七动作合同的调用示例：
 

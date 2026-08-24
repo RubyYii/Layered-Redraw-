@@ -39,6 +39,8 @@ v1.5 hardens the 3D runtime and adds the local CP03 audience slice. Large projec
 
 v1.6 adds a replaceable-character control layer. An `idle / approach / look / reach / grasp / carry / transfer / release / speak` state machine coordinates animation crossfades, two-hand/two-foot CCD constraints, head-and-neck gaze, and stationary foot locking. A 25-slot bone-mapping editor provides auto-map, missing/duplicate diagnostics, live pose/hand/foot tests, and project persistence. Future model adapters can request only `approach / look / reach / grasp / transfer / release / speak`; the deterministic runtime retains authority over transforms, paths, collision, animation, IK, and ownership and emits SHA-256-bound receipts.
 
+v1.7 hardens multi-character IK. Limb targets are constrained to the rig's current world-scale reachable annulus, avoiding straight-chain singularities and safely rejecting zero-length or non-finite segments. Director updates batch foot locks, gaze, and both hands into one solve pass per actor per frame. Interactive preview moves smoothly between 1–8 iterations by visibility and camera distance, while selected actors and fixed-step exports always use the full eight-iteration budget.
+
 Before production, the project can generate parameterized A/B/C proofs. The built-in output is a parameter contract, deltas, a low-detail schematic, and an external render request. It becomes image-effect evidence only after scene-specific renders are registered. Selection and promotion can guide the final 8–12 layers, but do not establish artistic quality on their own.
 
 The goal is not another brush picker. A style now changes crop, scale, negative space, depth, shape grammar, and value grouping before colour and surface treatment.

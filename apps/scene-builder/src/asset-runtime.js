@@ -9,6 +9,12 @@ import {
   evaluateRigMapping,
   resolveRigBoneBindings,
 } from "./character-rig.js";
+import {
+  constrainLimbTarget,
+  IK_MAX_ITERATIONS,
+  IK_MIN_ITERATIONS,
+  stepIkIterationBudget,
+} from "./character-ik-runtime.js";
 
 const MAX_MODEL_BYTES = 80_000_000;
 const ANIMATION_SLOTS = ["idle", "move", "interact", "react"];
@@ -268,6 +274,13 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
   let currentAction = null;
   let currentActionName = null;
   let currentSlot = null;
+  let ikBatchDepth = 0;
+  let ikSolveDirty = false;
+  let ikSolvePasses = 0;
+  let ikChainSolves = 0;
+  let ikPolicyTier = "full";
+  let ikIterationBudget = IK_MAX_ITERATIONS;
+  let ikTargetIterationBudget = IK_MAX_ITERATIONS;
 
   const resolveExpressionName = (nameOrSlot) => {
     const requested = String(nameOrSlot ?? "");
@@ -298,6 +311,12 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       if (pose.scale) bone.scale.fromArray(pose.scale);
     }
   };
+  const vector3FromInput = (value) => {
+    if (value?.isVector3) return value.toArray().every(Number.isFinite) ? value.clone() : null;
+    if (!Array.isArray(value) || value.length < 3) return null;
+    const values = value.slice(0, 3).map(Number);
+    return values.every(Number.isFinite) ? new THREE.Vector3().fromArray(values) : null;
+  };
   const limbSlotFor = (nameOrSlot, preferredKind = "hand") => {
     const requested = String(nameOrSlot ?? "").toLowerCase();
     const kind = requested.includes("foot") || requested.includes("leg") || requested.includes("toe")
@@ -325,6 +344,26 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
     if (!effector || !lower || !upper || new Set([effector.uuid, lower.uuid, upper.uuid]).size !== 3) return null;
     return { slot, kind, effector, joints: [lower, upper] };
   };
+  const measureLimbChain = (chain) => {
+    if (!chain) return { valid: false, reason: "missing_chain", segmentLengths: [] };
+    root.updateWorldMatrix(true, true);
+    const upperPosition = chain.joints[1].getWorldPosition(new THREE.Vector3());
+    const lowerPosition = chain.joints[0].getWorldPosition(new THREE.Vector3());
+    const effectorPosition = chain.effector.getWorldPosition(new THREE.Vector3());
+    const segmentLengths = [
+      upperPosition.distanceTo(lowerPosition),
+      lowerPosition.distanceTo(effectorPosition),
+    ];
+    const valid = segmentLengths.every((length) => Number.isFinite(length) && length > 1e-5);
+    return {
+      valid,
+      reason: valid ? null : "degenerate_chain",
+      origin: upperPosition,
+      currentEffector: effectorPosition,
+      segmentLengths,
+      maximumReach: valid ? segmentLengths[0] + segmentLengths[1] : 0,
+    };
+  };
   const restoreIkPose = () => {
     for (const [uuid, quaternion] of ikPreSolve) {
       const bone = boneByUuid.get(uuid);
@@ -332,7 +371,30 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
     }
     ikPreSolve.clear();
   };
-  const solveLimbIk = ({ chain, target, weight, iterations }) => {
+  const solveLimbIk = (entry) => {
+    const { chain, target, weight, iterations } = entry;
+    const measurement = measureLimbChain(chain);
+    const constraint = constrainLimbTarget({
+      origin: measurement.origin?.toArray(),
+      target: target?.toArray(),
+      currentEffector: measurement.currentEffector?.toArray(),
+      segmentLengths: measurement.segmentLengths,
+    });
+    entry.lastSolve = {
+      valid: constraint.valid,
+      clamped: constraint.clamped === true,
+      reason: constraint.reason ?? measurement.reason ?? null,
+      requestedTarget: target?.toArray() ?? null,
+      effectiveTarget: constraint.effectiveTarget ?? null,
+      requestedDistance: constraint.requestedDistance ?? null,
+      effectiveDistance: constraint.effectiveDistance ?? null,
+      minReach: constraint.minReach ?? null,
+      maxReach: constraint.maxReach ?? measurement.maximumReach ?? null,
+      residualDistance: null,
+      iterationsUsed: 0,
+    };
+    if (!constraint.valid) return false;
+    const effectiveTarget = new THREE.Vector3().fromArray(constraint.effectiveTarget);
     const identity = new THREE.Quaternion();
     const jointWorld = new THREE.Quaternion();
     const parentWorld = new THREE.Quaternion();
@@ -341,16 +403,17 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
     const currentDirection = new THREE.Vector3();
     const targetDirection = new THREE.Vector3();
     const maxStep = THREE.MathUtils.degToRad(42);
+    const iterationsUsed = Math.min(iterations, ikIterationBudget);
     for (const joint of chain.joints) {
       if (!ikPreSolve.has(joint.uuid)) ikPreSolve.set(joint.uuid, joint.quaternion.clone());
     }
     content.updateMatrixWorld(true);
-    for (let iteration = 0; iteration < iterations; iteration += 1) {
+    for (let iteration = 0; iteration < iterationsUsed; iteration += 1) {
       for (const joint of chain.joints) {
         chain.effector.getWorldPosition(effectorPosition);
         joint.getWorldPosition(jointPosition);
         currentDirection.copy(effectorPosition).sub(jointPosition);
-        targetDirection.copy(target).sub(jointPosition);
+        targetDirection.copy(effectiveTarget).sub(jointPosition);
         if (currentDirection.lengthSq() < 1e-10 || targetDirection.lengthSq() < 1e-10) continue;
         currentDirection.normalize();
         targetDirection.normalize();
@@ -366,8 +429,13 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
         joint.updateWorldMatrix(false, true);
       }
       chain.effector.getWorldPosition(effectorPosition);
-      if (effectorPosition.distanceToSquared(target) < 1e-6) break;
+      if (effectorPosition.distanceToSquared(effectiveTarget) < 1e-6) break;
     }
+    chain.effector.getWorldPosition(effectorPosition);
+    entry.lastSolve.residualDistance = effectorPosition.distanceTo(effectiveTarget);
+    entry.lastSolve.iterationsUsed = iterationsUsed;
+    ikChainSolves += 1;
+    return true;
   };
   const applyLookTarget = () => {
     if (!lookTarget) return;
@@ -401,8 +469,17 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
   };
   const applyIkTargets = () => {
     restoreIkPose();
+    ikSolveDirty = false;
+    if (!ikTargets.size && !lookTarget) return false;
+    ikSolvePasses += 1;
     for (const entry of ikTargets.values()) solveLimbIk(entry);
     applyLookTarget();
+    return true;
+  };
+  const requestIkSolve = () => {
+    ikSolveDirty = true;
+    if (ikBatchDepth > 0) return false;
+    return applyIkTargets();
   };
   const activateClip = (clipName, slot, { fadeSeconds = 0.18, loop = true, restart = false } = {}) => {
     const clip = clipByName.get(clipName);
@@ -431,11 +508,13 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
     const chains = ["leftHand", "rightHand", "leftFoot", "rightFoot"]
       .map(chainForLimb)
       .filter(Boolean);
+    const measuredChains = chains.map((chain) => ({ chain, measurement: measureLimbChain(chain) }));
+    const validChains = measuredChains.filter(({ measurement }) => measurement.valid);
     const diagnostics = evaluateRigMapping(rigBindings.bones, uniqueBoneNames, {
       sources: rigBindings.boneSources,
     });
-    const handChains = chains.filter((chain) => chain.kind === "hand");
-    const footChains = chains.filter((chain) => chain.kind === "foot");
+    const handChains = validChains.filter(({ chain }) => chain.kind === "hand");
+    const footChains = validChains.filter(({ chain }) => chain.kind === "foot");
     const lookBones = ["chest", "neck", "head"].filter((slot) => resolveBone(slot));
     return {
       bones: { ...rigBindings.bones },
@@ -443,10 +522,14 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       boneConfidence: { ...rigBindings.boneConfidence },
       missingBones: [...rigBindings.missingBones],
       rigDiagnostics: diagnostics,
-      ikChains: chains.map((chain) => ({
+      ikChains: measuredChains.map(({ chain, measurement }) => ({
         slot: chain.slot,
         kind: chain.kind,
         bones: [...chain.joints.map((bone) => bone.name), chain.effector.name],
+        valid: measurement.valid,
+        maximumReach: measurement.maximumReach,
+        segmentLengths: [...measurement.segmentLengths],
+        reason: measurement.reason,
       })),
       capabilities: {
         handIk: handChains.length > 0,
@@ -455,6 +538,9 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
         footLock: footChains.length === 2,
         lookIk: lookBones.length > 0,
         fullBodyIk: diagnostics.valid && handChains.length === 2 && footChains.length === 2 && lookBones.length === 3,
+        ikReachClamping: validChains.length > 0,
+        ikBatching: validChains.length > 0,
+        adaptiveIkBudget: validChains.length > 0,
       },
     };
   };
@@ -549,31 +635,58 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       }
       expressionOverrides.clear();
     },
+    beginIkBatch() {
+      ikBatchDepth += 1;
+      return ikBatchDepth;
+    },
+    endIkBatch() {
+      if (ikBatchDepth <= 0) return false;
+      ikBatchDepth -= 1;
+      if (ikBatchDepth === 0 && ikSolveDirty) return applyIkTargets();
+      return false;
+    },
+    setIkSolvePolicy(policy = {}, { immediate = false } = {}) {
+      const nextTier = String(policy.tier ?? "full");
+      const nextTarget = Math.min(
+        IK_MAX_ITERATIONS,
+        Math.max(IK_MIN_ITERATIONS, Math.round(Number(policy.iterations) || IK_MAX_ITERATIONS)),
+      );
+      const targetChanged = nextTarget !== ikTargetIterationBudget;
+      ikPolicyTier = nextTier;
+      ikTargetIterationBudget = nextTarget;
+      if (immediate && ikIterationBudget !== nextTarget) {
+        ikIterationBudget = nextTarget;
+        if (ikTargets.size || lookTarget) requestIkSolve();
+      }
+      return {
+        tier: ikPolicyTier,
+        iterations: ikIterationBudget,
+        targetIterations: ikTargetIterationBudget,
+        changed: targetChanged,
+      };
+    },
     setLimbIk(nameOrSlot, targetWorld, { weight = 1, iterations = 4, locked = false, kind = "hand" } = {}) {
       const slot = limbSlotFor(nameOrSlot, kind);
       const chain = chainForLimb(slot);
-      const target = targetWorld?.isVector3
-        ? targetWorld.clone()
-        : Array.isArray(targetWorld) && targetWorld.length >= 3
-          ? new THREE.Vector3(...targetWorld.slice(0, 3).map((value) => Number(value) || 0))
-          : null;
-      if (!chain || !target) return false;
+      const target = vector3FromInput(targetWorld);
+      if (!chain || !target || !measureLimbChain(chain).valid) return false;
       const safeWeight = clamp01(weight);
       if (safeWeight <= 0) return controller.clearLimbIk(slot, { kind });
       ikTargets.set(slot, {
         chain,
         target,
         weight: safeWeight,
-        iterations: Math.min(8, Math.max(1, Math.round(Number(iterations) || 4))),
+        iterations: Math.min(IK_MAX_ITERATIONS, Math.max(IK_MIN_ITERATIONS, Math.round(Number(iterations) || 4))),
         locked: locked === true,
+        lastSolve: null,
       });
-      applyIkTargets();
+      requestIkSolve();
       return true;
     },
     clearLimbIk(nameOrSlot, { kind = "hand" } = {}) {
       const slot = limbSlotFor(nameOrSlot, kind);
       if (!slot || !ikTargets.delete(slot)) return false;
-      applyIkTargets();
+      requestIkSolve();
       return true;
     },
     setHandIk(nameOrSlot, targetWorld, options = {}) {
@@ -603,24 +716,20 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       return controller.clearLimbIk(nameOrSlot, { kind: "foot" });
     },
     setLookTarget(targetWorld, { weight = 1, maxDegrees = 55 } = {}) {
-      const target = targetWorld?.isVector3
-        ? targetWorld.clone()
-        : Array.isArray(targetWorld) && targetWorld.length >= 3
-          ? new THREE.Vector3(...targetWorld.slice(0, 3).map((value) => Number(value) || 0))
-          : null;
+      const target = vector3FromInput(targetWorld);
       if (!target || !["chest", "neck", "head"].some((slot) => resolveBone(slot))) return false;
       lookTarget = {
         target,
         weight: clamp01(weight),
         maxDegrees: Math.min(85, Math.max(1, Number(maxDegrees) || 55)),
       };
-      applyIkTargets();
+      requestIkSolve();
       return true;
     },
     clearLookTarget() {
       if (!lookTarget) return false;
       lookTarget = null;
-      applyIkTargets();
+      requestIkSolve();
       return true;
     },
     clearTransientIkTargets() {
@@ -632,14 +741,14 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
           changed = true;
         }
       }
-      if (changed) applyIkTargets();
+      if (changed) requestIkSolve();
       return changed;
     },
     clearIkTargets() {
       const changed = ikTargets.size > 0 || ikPreSolve.size > 0 || Boolean(lookTarget);
       ikTargets.clear();
       lookTarget = null;
-      restoreIkPose();
+      requestIkSolve();
       return changed;
     },
     setRigBindings(bones = {}) {
@@ -672,14 +781,19 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
         : actionStateMachine.transition(state, context, { source: context.source ?? "runtime" });
       if (!result.ok) return result;
       controller.setState(animationSlotForCharacterAction(state));
-      if (!characterActionUsesFootLock(state)) {
-        controller.clearFootLock("leftFoot");
-        controller.clearFootLock("rightFoot");
-      } else if (result.changed || recaptureFootLocks) {
-        controller.clearFootLock("leftFoot");
-        controller.clearFootLock("rightFoot");
-        controller.setFootLock("leftFoot", true, { weight: 1 });
-        controller.setFootLock("rightFoot", true, { weight: 1 });
+      controller.beginIkBatch();
+      try {
+        if (!characterActionUsesFootLock(state)) {
+          controller.clearFootLock("leftFoot");
+          controller.clearFootLock("rightFoot");
+        } else if (result.changed || recaptureFootLocks) {
+          controller.clearFootLock("leftFoot");
+          controller.clearFootLock("rightFoot");
+          controller.setFootLock("leftFoot", true, { weight: 1 });
+          controller.setFootLock("rightFoot", true, { weight: 1 });
+        }
+      } finally {
+        controller.endIkBatch();
       }
       return result;
     },
@@ -766,6 +880,7 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       mixer?.update(Math.min(0.1, Math.max(0, Number(deltaSeconds) || 0)));
       applyBonePoseOverrides();
       applyExpressionOverrides();
+      ikIterationBudget = stepIkIterationBudget(ikIterationBudget, ikTargetIterationBudget);
       applyIkTargets();
     },
     nodeFor(slot) {
@@ -786,6 +901,18 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
         ikTargets: [...ikTargets.keys()],
         footLocks: [...ikTargets.entries()].filter(([, entry]) => entry.locked).map(([slot]) => slot),
         lookTarget: lookTarget?.target.toArray() ?? null,
+        ikRuntime: {
+          policyTier: ikPolicyTier,
+          iterations: ikIterationBudget,
+          targetIterations: ikTargetIterationBudget,
+          batchDepth: ikBatchDepth,
+          solvePasses: ikSolvePasses,
+          chainSolves: ikChainSolves,
+          diagnostics: Object.fromEntries([...ikTargets.entries()].map(([slot, entry]) => [
+            slot,
+            entry.lastSolve ? { ...entry.lastSolve } : null,
+          ])),
+        },
       };
     },
     dispose() {

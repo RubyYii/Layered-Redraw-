@@ -7,6 +7,7 @@ import {
   proceduralInteractionPose,
   surfaceContactPosition,
 } from "./interaction-runtime.js";
+import { selectIkSolvePolicy } from "./character-ik-runtime.js";
 import { Cp03VisualEffects } from "./cp03/visual-effects.js";
 
 const DEG_TO_RAD = Math.PI / 180;
@@ -1258,43 +1259,83 @@ export class ThreeSceneAdapter {
     this.activeCamera.updateMatrixWorld(true);
   }
 
+  updateAssetIkPolicies() {
+    if (!this.assetControllers.size) return;
+    this.activeCamera.updateMatrixWorld(true);
+    const cameraPosition = this.activeCamera.getWorldPosition(new THREE.Vector3());
+    const fullQuality = !this.performanceAdaptationEnabled;
+    for (const [id, controller] of this.assetControllers) {
+      const mesh = this.meshes.get(id);
+      if (!mesh) continue;
+      const center = mesh.getWorldPosition(new THREE.Vector3());
+      const projected = center.clone().project(this.activeCamera);
+      let hierarchyVisible = true;
+      for (let cursor = mesh; cursor; cursor = cursor.parent) {
+        if (!cursor.visible) {
+          hierarchyVisible = false;
+          break;
+        }
+      }
+      const visible = hierarchyVisible
+        && projected.z >= -1.25
+        && projected.z <= 1.25
+        && Math.abs(projected.x) <= 1.35
+        && Math.abs(projected.y) <= 1.35;
+      const selected = this.lastState?.selectionId === id;
+      const policy = selectIkSolvePolicy({
+        distance: center.distanceTo(cameraPosition),
+        visible,
+        selected,
+        fullQuality,
+      });
+      controller.setIkSolvePolicy?.(policy, { immediate: fullQuality || selected });
+    }
+  }
+
   applyDirectorFrame(frame) {
     if (this.mode !== "preview" || !this.lastState) return;
     this.directorFrame = frame;
-    this.resetTimelineInteractionPoses();
     const transformedAssetIds = new Set();
-    for (const object of this.lastState.project.objects) {
-      const mesh = this.meshes.get(object.id);
-      if (!mesh) continue;
-      const override = frame.objects?.[object.id];
-      const transformChanged = this.syncPreviewMesh(mesh, override ?? object, object);
-      if (transformChanged && this.assetControllers.has(object.id)) transformedAssetIds.add(object.id);
-      if (this.interactionVisibility.has(object.id)) {
-        mesh.visible = this.interactionVisibility.get(object.id);
+    const batchedControllers = [...this.assetControllers.values()];
+    batchedControllers.forEach((controller) => controller.beginIkBatch?.());
+    try {
+      this.resetTimelineInteractionPoses();
+      for (const object of this.lastState.project.objects) {
+        const mesh = this.meshes.get(object.id);
+        if (!mesh) continue;
+        const override = frame.objects?.[object.id];
+        const transformChanged = this.syncPreviewMesh(mesh, override ?? object, object);
+        if (transformChanged && this.assetControllers.has(object.id)) transformedAssetIds.add(object.id);
+        if (this.interactionVisibility.has(object.id)) {
+          mesh.visible = this.interactionVisibility.get(object.id);
+        }
+        const hadPreviewBase = Boolean(mesh.userData.previewBase);
+        const previewBase = mesh.userData.previewBase ?? {
+          position: new THREE.Vector3(),
+          rotation: new THREE.Euler(),
+          scale: new THREE.Vector3(),
+          visible: true,
+        };
+        if (transformChanged || !hadPreviewBase) {
+          previewBase.position.copy(mesh.position);
+          previewBase.rotation.copy(mesh.rotation);
+          previewBase.scale.copy(mesh.scale);
+        }
+        previewBase.visible = mesh.visible;
+        mesh.userData.previewBase = previewBase;
       }
-      const hadPreviewBase = Boolean(mesh.userData.previewBase);
-      const previewBase = mesh.userData.previewBase ?? {
-        position: new THREE.Vector3(),
-        rotation: new THREE.Euler(),
-        scale: new THREE.Vector3(),
-        visible: true,
-      };
-      if (transformChanged || !hadPreviewBase) {
-        previewBase.position.copy(mesh.position);
-        previewBase.rotation.copy(mesh.rotation);
-        previewBase.scale.copy(mesh.scale);
-      }
-      previewBase.visible = mesh.visible;
-      mesh.userData.previewBase = previewBase;
+      this.applyAssetReplacements();
+      this.scene.updateMatrixWorld(true);
+      this.applyDirectorCamera(frame.camera);
+      this.updateAssetIkPolicies();
+      this.applyCharacterBehaviors(frame.characterBehaviors, transformedAssetIds);
+      this.scene.updateMatrixWorld(true);
+      this.applyTimelineInteractionPoses(frame.interactionPoses ?? frame.interactions);
+    } finally {
+      batchedControllers.forEach((controller) => controller.endIkBatch?.());
     }
-    this.applyAssetReplacements();
-    this.scene.updateMatrixWorld(true);
-    this.applyCharacterBehaviors(frame.characterBehaviors, transformedAssetIds);
-    this.scene.updateMatrixWorld(true);
-    this.applyTimelineInteractionPoses(frame.interactionPoses ?? frame.interactions);
     this.scene.updateMatrixWorld(true);
     this.applyPhysicsFrame(frame);
-    this.applyDirectorCamera(frame.camera);
     this.applyInteractionEffects(performance.now());
   }
 
@@ -1588,6 +1629,7 @@ export class ThreeSceneAdapter {
       ? 0
       : Math.min(0.1, Math.max(0, (timestamp - this.lastAnimationTimestamp) / 1000));
     this.lastAnimationTimestamp = Number.isFinite(timestamp) ? timestamp : this.lastAnimationTimestamp;
+    this.updateAssetIkPolicies();
     this.assetControllers.forEach((controller) => controller.update(deltaSeconds));
     this.cp03VisualEffects.update(timestamp);
     const report = this.framePacing.sample(timestamp);

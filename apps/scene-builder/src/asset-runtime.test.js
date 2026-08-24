@@ -27,7 +27,7 @@ const glbWithDocument = (document) => {
   return output;
 };
 
-const createFullBodyRig = () => {
+const createFullBodyRig = ({ degenerateRightArm = false } = {}) => {
   const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
   const vertexCount = geometry.attributes.position.count;
   geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(new Uint16Array(vertexCount * 4), 4));
@@ -50,7 +50,11 @@ const createFullBodyRig = () => {
   for (const side of ["Left", "Right"]) {
     const sign = side === "Left" ? -1 : 1;
     const upperArm = bone(`${side}UpperArm`, [sign * 0.18, 0.16, 0]);
-    const lowerArm = bone(`${side}ForeArm`, [sign * 0.48, 0, 0]);
+    const lowerArm = bone(`${side}ForeArm`, [
+      side === "Right" && degenerateRightArm ? 0 : sign * 0.48,
+      0,
+      0,
+    ]);
     const hand = bone(`${side}Hand`, [sign * 0.42, 0, 0]);
     chest.add(upperArm); upperArm.add(lowerArm); lowerArm.add(hand);
     const upperLeg = bone(`${side}UpLeg`, [sign * 0.18, -0.08, 0]);
@@ -323,6 +327,77 @@ describe("replaceable OBJ/GLB asset bindings", () => {
     expect(controller.getState().footLocks).toEqual(["leftFoot", "rightFoot"]);
     expect(controller.setBehaviorState("approach", { targetId: "destination" }).ok).toBe(true);
     expect(controller.getState().footLocks).toEqual([]);
+    controller.dispose();
+  });
+
+  it("clamps an unreachable hand target and reports the effective solve target", () => {
+    const rig = createFullBodyRig();
+    const host = new THREE.Scene();
+    const controller = createAssetController({ scene: rig.scene, animations: [] }, {}, "clamped.glb");
+    host.add(controller.root);
+    host.updateMatrixWorld(true);
+    const target = rig.rightHand.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(100, 20, -40));
+
+    expect(controller.setHandIk("rightHand", target, { iterations: 8 })).toBe(true);
+    host.updateMatrixWorld(true);
+    const diagnostic = controller.getState().ikRuntime.diagnostics.rightHand;
+
+    expect(diagnostic).toMatchObject({ valid: true, clamped: true, reason: "outside_max_reach" });
+    expect(diagnostic.effectiveDistance).toBeLessThan(diagnostic.requestedDistance);
+    expect(diagnostic.effectiveDistance).toBeCloseTo(diagnostic.maxReach);
+    expect(rig.rightHand.getWorldPosition(new THREE.Vector3()).toArray().every(Number.isFinite)).toBe(true);
+    controller.dispose();
+  });
+
+  it("rejects zero-length limb segments without emitting invalid rotations", () => {
+    const rig = createFullBodyRig({ degenerateRightArm: true });
+    const controller = createAssetController({ scene: rig.scene, animations: [] }, {}, "degenerate.glb");
+    const rightChain = controller.report.ikChains.find((chain) => chain.slot === "rightHand");
+
+    expect(rightChain).toMatchObject({ valid: false, reason: "degenerate_chain" });
+    expect(controller.report.capabilities.twoHandIk).toBe(false);
+    expect(controller.setHandIk("rightHand", [10, 2, 0])).toBe(false);
+    expect(() => controller.update(1 / 60)).not.toThrow();
+    expect(rig.rightHand.quaternion.toArray().every(Number.isFinite)).toBe(true);
+    controller.dispose();
+  });
+
+  it("batches timeline hand and gaze changes into one IK solve pass", () => {
+    const rig = createFullBodyRig();
+    const controller = createAssetController({ scene: rig.scene, animations: [] }, {}, "batch.glb");
+    const leftTarget = rig.leftHand.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0.1, 0.1, 0));
+    const rightTarget = rig.rightHand.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(-0.1, 0.1, 0));
+    const before = controller.getState().ikRuntime.solvePasses;
+
+    controller.beginIkBatch();
+    expect(controller.setHandIk("leftHand", leftTarget, { iterations: 8 })).toBe(true);
+    expect(controller.setHandIk("rightHand", rightTarget, { iterations: 8 })).toBe(true);
+    expect(controller.setLookTarget([0, 1.4, 2])).toBe(true);
+    expect(controller.getState().ikRuntime.solvePasses).toBe(before);
+    expect(controller.endIkBatch()).toBe(true);
+
+    expect(controller.getState().ikRuntime).toMatchObject({ solvePasses: before + 1, chainSolves: 2 });
+    controller.dispose();
+  });
+
+  it("transitions interactive IK budgets gradually while export quality applies immediately", () => {
+    const rig = createFullBodyRig();
+    const controller = createAssetController({ scene: rig.scene, animations: [] }, {}, "lod.glb");
+
+    controller.setIkSolvePolicy({ tier: "offscreen", iterations: 1 });
+    controller.update(1 / 60);
+    expect(controller.getState().ikRuntime).toMatchObject({
+      policyTier: "offscreen",
+      iterations: 7,
+      targetIterations: 1,
+    });
+    for (let index = 0; index < 6; index += 1) controller.update(1 / 60);
+    expect(controller.getState().ikRuntime.iterations).toBe(1);
+    controller.setIkSolvePolicy({ tier: "near", iterations: 8 });
+    controller.update(1 / 60);
+    expect(controller.getState().ikRuntime.iterations).toBe(2);
+    controller.setIkSolvePolicy({ tier: "export-full", iterations: 8 }, { immediate: true });
+    expect(controller.getState().ikRuntime.iterations).toBe(8);
     controller.dispose();
   });
 
