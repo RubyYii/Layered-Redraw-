@@ -146,7 +146,17 @@ const roleTitle = (role) => ({
   Guardian: "GUARDIAN",
 })[role];
 
+const technicallyEligiblePairCount = (packet) => packet.roles.reduce(
+  (total, role) => total + role.candidates.length,
+  0,
+);
+
+const captureClaimCeiling = (packet) => technicallyEligiblePairCount(packet) === 0
+  ? "no technically eligible role/model pairs; author selection unavailable; partial run preserved as failure evidence"
+  : packet.claimCeiling;
+
 const reportHtml = (packet, imageDataUrl, mode) => {
+  const eligiblePairCount = technicallyEligiblePairCount(packet);
   const criteriaHtml = packet.criteria.map((entry) => `<li>${escapeHtml(entry)}</li>`).join("");
   const rolesHtml = packet.roles.map((role, roleIndex) => {
     const candidatesHtml = role.candidates.map((candidate) => `
@@ -210,14 +220,14 @@ const reportHtml = (packet, imageDataUrl, mode) => {
   <main>
     <header class="mast">
       <div><div class="eyebrow">PACT / CP03 / STAGE B</div><h1>Blind evidence room</h1></div>
-      <div class="claim">${escapeHtml(packet.claimCeiling)}</div>
-      <div class="state">${mode === "local-scripted" ? "LOCAL SCRIPTED CAPTURE" : "ANONYMOUS REVIEW PACKET"}</div>
+      <div class="claim">${escapeHtml(captureClaimCeiling(packet))}</div>
+      <div class="state">${mode === "local-scripted" ? "LOCAL SCRIPTED CAPTURE" : eligiblePairCount === 0 ? "NO ELIGIBLE CANDIDATES" : "ANONYMOUS REVIEW PACKET"}</div>
     </header>
     <div class="layout">
       <aside>
         <div class="image-wrap"><img src="${imageDataUrl}" alt="Synthetic spatial fixture"></div>
         <h3>AUTHOR CRITERIA / 07</h3><ul>${criteriaHtml}</ul>
-        <div class="zero">PROVIDER REQUESTS 00<br>SELECTIONS 00<br>SEALED MAPPING NOT LOADED</div>
+        <div class="zero">CAPTURE REQUESTS 00<br>ELIGIBLE PAIRS ${String(eligiblePairCount).padStart(2, "0")}<br>SELECTIONS 00<br>SEALED MAPPING NOT LOADED</div>
       </aside>
       <div class="roles">${rolesHtml}</div>
     </div>
@@ -305,6 +315,7 @@ export async function captureModelBakeoff({ mode, packetPath, outputDir }) {
     packetSha256: packet.packetSha256,
     syntheticImageSha256: imageSha256,
     providerRequestsMade: 0,
+    technicallyEligiblePairs: technicallyEligiblePairCount(packet),
     nonLocalBrowserRequests: 0,
     authorSelections: 0,
     sealedMappingLoaded: false,
@@ -313,7 +324,7 @@ export async function captureModelBakeoff({ mode, packetPath, outputDir }) {
     syntheticImage: "media/synthetic-spatial-image-01.png",
     claimCeiling: mode === "local-scripted"
       ? "local scripted capture surface; no model-quality result"
-      : packet.claimCeiling,
+      : captureClaimCeiling(packet),
   };
   fs.writeFileSync(reportPath, `${canonicalJson({
     ...report,
