@@ -62,6 +62,8 @@ The viewer does not directly drive a character with keyboard/game controls in th
 | `dc86bf1`–`0c2b585` | CP03 dependency installation and full-stack GitHub Actions checks | remote CI workflow retained; a workflow definition is not proof that a GitHub run passed |
 | `3d13bb5` | portable 3D simulation, audience/effects, checkpoint archive, navmesh/Rapier and persistence | retained; combined unit/build/browser gate passes locally |
 | `b334db0` | constrained character rig and seven-action Agent behaviour boundary | retained; combined unit/build/rig-editor gate passes locally |
+| `e00cbc2` | character IK stability: world-scale reach-annulus clamping, degenerate-chain rejection, per-actor batched solves and smooth 1–8 iteration budgets | retained in the current Scene Builder; selected actors and fixed-step output keep the full eight-iteration budget |
+| `c1247e2` | single-image rigging and character performance: local relative-depth OBJ, editable 22-joint four-influence GLB, and phase-aware two-hand / foot-lock / gaze / Morph behaviour | retained in the current Scene Builder and portable package path; remains 2.5D front-surface reconstruction rather than pose estimation, volumetric recovery or production skinning |
 
 Ruby owns the 3D execution primitives and authored stage. New CP03 code should call these interfaces rather than duplicate them.
 
