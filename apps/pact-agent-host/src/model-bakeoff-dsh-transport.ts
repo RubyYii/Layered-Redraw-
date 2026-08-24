@@ -70,6 +70,11 @@ const HARD_ATTEMPT_TIMEOUT_MS = 12_000;
 const SYNTHETIC_IMAGE_REF = 'synthetic-spatial-image-01' as const;
 const SYNTHETIC_SCENE_REF = 'synthetic-scene-01' as const;
 
+type ModelBakeoffTerminalFinish = Readonly<{
+  kind: Extract<StreamChunk, { type: 'finish' }>['reason']['kind'];
+  failureCode: string | null;
+}>;
+
 const sha256 = (value: string | Uint8Array): string => createHash('sha256')
   .update(value)
   .digest('hex');
@@ -263,6 +268,13 @@ export interface ModelBakeoffDshDiagnostic {
   readonly redactedOutputText: string | null;
   readonly turnEndReason: string | null;
   readonly sessionEventRange: ModelBakeoffSessionEventRange;
+  readonly diagnosticSchemaVersion?: 'cp03-model-bakeoff-dsh-diagnostic/0.2';
+  readonly primaryOutcome?: Readonly<{
+    kind: ModelBakeoffTransportResult['kind'];
+    detailCode: string | null;
+  }>;
+  readonly secondaryConditions?: readonly string[];
+  readonly terminalFinish?: ModelBakeoffTerminalFinish | null;
 }
 
 export interface ModelBakeoffDshTransport extends ModelBakeoffTransport {
@@ -284,6 +296,7 @@ export interface ModelBakeoffDshTransportOptions {
     { readonly maxInputTokens: number; readonly maxOutputTokens: number }
   >>;
   readonly executionPolicy?: ModelBakeoffExecutionPolicy;
+  readonly attemptTimeoutMs?: number;
   readonly forbiddenSubstrings?: readonly string[];
   readonly now?: () => number;
 }
@@ -300,6 +313,7 @@ interface StreamCapture {
   undeclaredStreamCount: number;
   firstChunkAtMs: number | null;
   usage: TokenUsage | null;
+  terminalFinish: ModelBakeoffTerminalFinish | null;
   thrown: unknown;
   availableTools: readonly string[];
 }
@@ -309,6 +323,9 @@ interface DispatchObservation {
   session: Session | null;
   agent: Agent | null;
   toolCallCount: number;
+  expectedToolCallIds: Set<string>;
+  firstToolResultSeen: boolean;
+  firstUnexpectedToolResultSeen: boolean;
   firstToolResultErrorCode: string | null;
   acceptedEvents: SessionEvent[];
   quarantineCount: number;
@@ -337,10 +354,22 @@ const appendObserved = (
   event: SessionEvent,
 ): void => {
   if (observation.capture.sessionId !== String(session.id)) return;
-  if (event.type === 'tool/call') observation.toolCallCount += 1;
-  if (event.type === 'tool/result' && observation.toolCallCount > 0) {
-    if (observation.firstToolResultErrorCode === null) {
-      const block = event.data.message.content[0];
+  if (event.type === 'tool/call') {
+    observation.toolCallCount += 1;
+    if (event.data.name === observation.capture.expectedToolName) {
+      observation.expectedToolCallIds.add(String(event.data.callId));
+    }
+  }
+  if (event.type === 'tool/result' && !observation.firstToolResultSeen) {
+    observation.firstToolResultSeen = true;
+    const block = event.data.message.content[0];
+    const expectedResult = observation.expectedToolCallIds.has(
+      block?.type === 'tool-result' ? String(block.toolCallId) : '',
+    );
+    observation.firstUnexpectedToolResultSeen = !expectedResult;
+    if (!expectedResult) {
+      observation.firstToolResultErrorCode = 'MODEL_BAKEOFF_EXACT_TOOL_REQUIRED';
+    } else if (observation.firstToolResultErrorCode === null) {
       if (
         block?.type === 'tool-result' &&
         (block.isError === true || event.data.error !== undefined)
@@ -374,11 +403,21 @@ const observeStream = async function* (
   capture: StreamCapture,
   stream: AsyncIterable<StreamChunk>,
   now: () => number,
+  forbidden: readonly string[],
 ): AsyncIterable<StreamChunk> {
   try {
     for await (const chunk of stream) {
       if (capture.firstChunkAtMs === null) capture.firstChunkAtMs = now();
       if (chunk.type === 'usage') capture.usage = chunk.usage;
+      if (chunk.type === 'finish' && capture.terminalFinish === null) {
+        capture.terminalFinish = deepFreeze({
+          kind: chunk.reason.kind,
+          failureCode:
+            chunk.reason.kind === 'error' || chunk.reason.kind === 'aborted'
+              ? detailCode(chunk.reason.failure.code, forbidden)
+              : null,
+        });
+      }
       yield chunk;
     }
   } catch (error) {
@@ -495,6 +534,7 @@ const scanForForbidden = (
 class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
   private readonly now: () => number;
   private readonly executionPolicy: ModelBakeoffExecutionPolicy | null;
+  private readonly attemptTimeoutMs: number;
   private readonly diagnosticsLog: ModelBakeoffDshDiagnostic[] = [];
   private scope: CandidateScope | null = null;
   private disposed = false;
@@ -502,6 +542,12 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
   constructor(private readonly options: ModelBakeoffDshTransportOptions) {
     this.now = options.now ?? Date.now;
     this.executionPolicy = options.executionPolicy ?? null;
+    this.attemptTimeoutMs = options.attemptTimeoutMs ?? HARD_ATTEMPT_TIMEOUT_MS;
+    if (
+      !Number.isInteger(this.attemptTimeoutMs)
+      || this.attemptTimeoutMs < 1
+      || this.attemptTimeoutMs > HARD_ATTEMPT_TIMEOUT_MS
+    ) throw new Error('MODEL_BAKEOFF_ATTEMPT_TIMEOUT_INVALID');
     if (
       this.executionPolicy !== null
       && verifyModelBakeoffExecutionPolicy(this.executionPolicy).status !== 'PASS'
@@ -539,7 +585,56 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
       ...entry,
       availableTools: [...entry.availableTools],
       sessionEventRange: { ...entry.sessionEventRange },
+      ...(entry.primaryOutcome === undefined
+        ? {}
+        : { primaryOutcome: { ...entry.primaryOutcome } }),
+      ...(entry.secondaryConditions === undefined
+        ? {}
+        : { secondaryConditions: [...entry.secondaryConditions] }),
+      ...(entry.terminalFinish === undefined
+        ? {}
+        : {
+          terminalFinish: entry.terminalFinish === null
+            ? null
+            : { ...entry.terminalFinish },
+        }),
     })));
+  }
+
+  private replacementDiagnosticFields(
+    result: ModelBakeoffTransportResult,
+    observation: DispatchObservation | null,
+  ): Partial<ModelBakeoffDshDiagnostic> {
+    if (this.executionPolicy === null) return {};
+    const secondaryConditions: string[] = [];
+    if (
+      (observation?.capture.undeclaredStreamCount ?? 0) > 0
+      || (observation?.capture.streamCount ?? 0) > 1
+    ) secondaryConditions.push('MODEL_BAKEOFF_UNDECLARED_SECOND_STREAM');
+    if (observation?.firstUnexpectedToolResultSeen === true) {
+      secondaryConditions.push('MODEL_BAKEOFF_UNEXPECTED_TOOL_RESULT');
+    }
+    if ((observation?.toolCallCount ?? 0) > 1) {
+      secondaryConditions.push('MODEL_BAKEOFF_MULTIPLE_TOOL_CALLS');
+    }
+    if ((observation?.quarantineCount ?? 0) > 0) {
+      secondaryConditions.push('MODEL_BAKEOFF_QUARANTINED_DOMAIN_EVENT');
+    }
+    if ((observation?.acceptedEvents.length ?? 0) > 1) {
+      secondaryConditions.push('MODEL_BAKEOFF_MULTIPLE_ACCEPTED_DOMAIN_EVENTS');
+    }
+    if (result.sideEffectAccepted && result.kind !== 'accepted') {
+      secondaryConditions.push('MODEL_BAKEOFF_ACCEPTED_SIDE_EFFECT_NOT_CERTIFIED');
+    }
+    return {
+      diagnosticSchemaVersion: 'cp03-model-bakeoff-dsh-diagnostic/0.2',
+      primaryOutcome: {
+        kind: result.kind,
+        detailCode: result.detailCode,
+      },
+      secondaryConditions,
+      terminalFinish: observation?.capture.terminalFinish ?? null,
+    };
   }
 
   async dispatch(request: ModelBakeoffDispatchRequest): Promise<ModelBakeoffTransportResult> {
@@ -569,12 +664,16 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
           undeclaredStreamCount: 0,
           firstChunkAtMs: null,
           usage: null,
+          terminalFinish: null,
           thrown: undefined,
           availableTools: [],
         },
         session: null,
         agent: null,
         toolCallCount: 0,
+        expectedToolCallIds: new Set(),
+        firstToolResultSeen: false,
+        firstUnexpectedToolResultSeen: false,
         firstToolResultErrorCode: null,
         acceptedEvents: [],
         quarantineCount: 0,
@@ -592,7 +691,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
       }
       const prompt = this.promptFor(request, scope, turn);
       promptImageBlockCount = prompt.filter(({ type }) => type === 'image').length;
-      const remainingBeforeDrive = HARD_ATTEMPT_TIMEOUT_MS - (this.now() - startedAtMs);
+      const remainingBeforeDrive = this.attemptTimeoutMs - (this.now() - startedAtMs);
       if (remainingBeforeDrive <= 0) {
         timedOut = true;
         throw new Error('MODEL_BAKEOFF_ATTEMPT_TIMEOUT');
@@ -663,7 +762,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         scope.harness.ctx,
         session,
         turnNumber,
-        HARD_ATTEMPT_TIMEOUT_MS + 250,
+        this.attemptTimeoutMs + 250,
       );
       await observation.agent?.whenIdle();
       await parent?.agent.whenIdle();
@@ -785,8 +884,14 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
       }
 
       const { range, reason, providerFailureCode } = latestTurnRange(session);
-      const providerTerminalFailure = providerFailureCode !== null;
-      const maxTokenTerminal = reason === 'max-tokens';
+      const terminalFinish = observation.capture.terminalFinish;
+      const directTerminalFailure =
+        terminalFinish?.kind === 'error' || terminalFinish?.kind === 'aborted';
+      const directMaxTokenTerminal = terminalFinish?.kind === 'max-tokens';
+      const fallbackProviderTerminalFailure =
+        terminalFinish === null && providerFailureCode !== null;
+      const fallbackMaxTokenTerminal =
+        terminalFinish === null && reason === 'max-tokens';
       let resultKind: ModelBakeoffTransportResult['kind'];
       let resultDetailCode: string | null;
       if (success) {
@@ -801,16 +906,43 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
           observation.capture.thrown,
           this.options.forbiddenSubstrings,
         );
-      } else if (providerTerminalFailure) {
-        resultKind = 'transport_failure';
-        resultDetailCode = `MODEL_BAKEOFF_PROVIDER_${detailCode(providerFailureCode)}`;
-      } else if (maxTokenTerminal) {
+      } else if (directTerminalFailure && accepted.length === 0) {
+        resultKind = terminalFinish.kind === 'error'
+          ? 'provider_error'
+          : 'transport_failure';
+        resultDetailCode = `${terminalFinish.kind === 'error'
+          ? 'MODEL_BAKEOFF_PROVIDER'
+          : 'MODEL_BAKEOFF_TRANSPORT'}_${
+          terminalFinish.failureCode ?? detailCode(terminalFinish.kind)
+        }`;
+      } else if (
+        (directMaxTokenTerminal || fallbackMaxTokenTerminal)
+        && observation.toolCallCount === 0
+      ) {
         resultKind = 'content_failure';
-        resultDetailCode = 'MODEL_BAKEOFF_OUTPUT_MAX_TOKENS';
+        resultDetailCode = 'MODEL_BAKEOFF_MAX_TOKENS_NO_TOOL';
+      } else if (
+        observation.firstToolResultErrorCode ===
+          'MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED'
+      ) {
+        resultKind = 'grounding_failure';
+        resultDetailCode = 'MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED';
+      } else if (
+        observation.firstToolResultErrorCode !== null
+        && observation.firstToolResultErrorCode !== 'MODEL_BAKEOFF_EXACT_TOOL_REQUIRED'
+      ) {
+        resultKind = 'schema_failure';
+        resultDetailCode = observation.firstToolResultErrorCode;
+      } else if (fallbackProviderTerminalFailure && accepted.length === 0) {
+        resultKind = 'provider_error';
+        resultDetailCode = `MODEL_BAKEOFF_PROVIDER_${detailCode(providerFailureCode)}`;
       } else if (!tokenCapValid) {
         resultKind = 'content_failure';
         resultDetailCode = 'MODEL_BAKEOFF_TOKEN_CAP_EXCEEDED';
-      } else if (observation.toolCallCount === 0) {
+      } else if (
+        observation.toolCallCount === 0
+        || observation.firstUnexpectedToolResultSeen
+      ) {
         resultKind = 'content_failure';
         resultDetailCode = 'MODEL_BAKEOFF_EXACT_TOOL_REQUIRED';
       } else if (!schemaValid) {
@@ -880,6 +1012,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         redactedOutputText: success ? reviewText : null,
         turnEndReason: reason,
         sessionEventRange: range,
+        ...this.replacementDiagnosticFields(result, observation),
       });
       const forbidden = this.options.forbiddenSubstrings ?? [];
       if (scanForForbidden({
@@ -959,6 +1092,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         redactedOutputText: null,
         turnEndReason: reason,
         sessionEventRange: range,
+        ...this.replacementDiagnosticFields(result, observation),
       });
       const forbidden = this.options.forbiddenSubstrings ?? [];
       const containsForbidden = scanForForbidden({
@@ -1145,7 +1279,12 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         active.capture.availableTools = Object.freeze(
           request.tools?.map(({ name }) => name) ?? [],
         );
-        return observeStream(active.capture, next(), this.now);
+        return observeStream(
+          active.capture,
+          next(),
+          this.now,
+          this.options.forbiddenSubstrings ?? [],
+        );
       });
       this.scope = scope;
       return scope;

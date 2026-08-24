@@ -554,9 +554,13 @@ describe('DSH model bakeoff transport', () => {
     });
 
     const result = await transport.dispatch(requestFor(entry, 1));
+    const [diagnostic] = transport.diagnostics();
     await transport.dispose();
 
     expect(result.kind).toBe('accepted');
+    expect(diagnostic).not.toHaveProperty('diagnosticSchemaVersion');
+    expect(diagnostic).not.toHaveProperty('primaryOutcome');
+    expect(diagnostic).not.toHaveProperty('secondaryConditions');
   });
 
   it('states that council tool arguments are a direct object', async () => {
@@ -672,7 +676,7 @@ describe('DSH model bakeoff transport', () => {
   });
 
   it('does not technically accept schema-valid but unregistered Archivist references', async () => {
-    class ArchivedFalseGreenAdapter extends LlmAdapter {
+    class ArchivedFalseGreenAdapter extends ReasoningAwareScriptedAdapter {
       async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
         const context = promptContext(options);
         const shard = shardFor(options, context) as unknown as Record<string, unknown>;
@@ -699,7 +703,8 @@ describe('DSH model bakeoff transport', () => {
       persistenceRoot: testRoot('archivist-false-green'),
       dshHome: testRoot('archivist-false-green-attachments'),
       providerKind: 'scripted',
-      roleCaps,
+      roleCaps: replacementRoleCaps,
+      executionPolicy: createModelBakeoffExecutionPolicy(),
       mountAdapters(ctx) {
         ctx.llm.registerAdapter(['deepseek-official'], new ArchivedFalseGreenAdapter());
       },
@@ -707,6 +712,7 @@ describe('DSH model bakeoff transport', () => {
     });
 
     const result = await transport.dispatch(requestFor(entry, 1));
+    const [diagnostic] = transport.diagnostics();
     await transport.dispose();
 
     expect(result).toMatchObject({
@@ -715,6 +721,15 @@ describe('DSH model bakeoff transport', () => {
       preSideEffect: true,
       sideEffectAccepted: false,
       toolResult: { accepted: false },
+    });
+    expect(diagnostic).toMatchObject({
+      diagnosticSchemaVersion: 'cp03-model-bakeoff-dsh-diagnostic/0.2',
+      primaryOutcome: {
+        kind: 'grounding_failure',
+        detailCode: 'MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED',
+      },
+      secondaryConditions: [],
+      acceptedDomainEventCount: 0,
     });
   });
 
@@ -884,13 +899,13 @@ describe('DSH model bakeoff transport', () => {
     expect(externalNetworkRequests).toBe(0);
   });
 
-  it('classifies a terminal provider error as transport failure', async () => {
-    class ProviderErrorAdapter extends LlmAdapter {
+  it('classifies a terminal HTTP 400 finish as a non-retryable provider error', async () => {
+    class ProviderErrorAdapter extends ReasoningAwareScriptedAdapter {
       async *stream(): AsyncIterable<StreamChunk> {
         yield* terminalTextResponse({
           kind: 'error',
           failure: {
-            code: 'INVALID_REQUEST',
+            code: 'HTTP_400',
             status: 400,
             message: 'Synthetic provider request rejected.',
           },
@@ -907,7 +922,8 @@ describe('DSH model bakeoff transport', () => {
       persistenceRoot: testRoot('provider-error'),
       dshHome: testRoot('provider-error-attachments'),
       providerKind: 'scripted',
-      roleCaps,
+      roleCaps: replacementRoleCaps,
+      executionPolicy: createModelBakeoffExecutionPolicy(),
       mountAdapters(ctx) {
         ctx.llm.registerAdapter(['google'], new ProviderErrorAdapter());
       },
@@ -915,18 +931,28 @@ describe('DSH model bakeoff transport', () => {
     });
 
     const result = await transport.dispatch(requestFor(entry, 1));
+    const [diagnostic] = transport.diagnostics();
     await transport.dispose();
 
     expect(result).toMatchObject({
-      kind: 'transport_failure',
-      detailCode: 'MODEL_BAKEOFF_PROVIDER_INVALID_REQUEST',
+      kind: 'provider_error',
+      detailCode: 'MODEL_BAKEOFF_PROVIDER_HTTP_400',
       preSideEffect: true,
       sideEffectAccepted: false,
+    });
+    expect(diagnostic).toMatchObject({
+      diagnosticSchemaVersion: 'cp03-model-bakeoff-dsh-diagnostic/0.2',
+      primaryOutcome: {
+        kind: 'provider_error',
+        detailCode: 'MODEL_BAKEOFF_PROVIDER_HTTP_400',
+      },
+      secondaryConditions: [],
+      terminalFinish: { kind: 'error', failureCode: 'HTTP_400' },
     });
   });
 
   it('classifies a max-token stop without a tool as content failure', async () => {
-    class MaxTokenAdapter extends LlmAdapter {
+    class MaxTokenAdapter extends ReasoningAwareScriptedAdapter {
       async *stream(): AsyncIterable<StreamChunk> {
         yield* terminalTextResponse({ kind: 'max-tokens' });
       }
@@ -941,7 +967,8 @@ describe('DSH model bakeoff transport', () => {
       persistenceRoot: testRoot('max-token'),
       dshHome: testRoot('max-token-attachments'),
       providerKind: 'scripted',
-      roleCaps,
+      roleCaps: replacementRoleCaps,
+      executionPolicy: createModelBakeoffExecutionPolicy(),
       mountAdapters(ctx) {
         ctx.llm.registerAdapter(['deepseek-official'], new MaxTokenAdapter());
       },
@@ -949,18 +976,89 @@ describe('DSH model bakeoff transport', () => {
     });
 
     const result = await transport.dispatch(requestFor(entry, 1));
+    const [diagnostic] = transport.diagnostics();
     await transport.dispose();
 
     expect(result).toMatchObject({
       kind: 'content_failure',
-      detailCode: 'MODEL_BAKEOFF_OUTPUT_MAX_TOKENS',
+      detailCode: 'MODEL_BAKEOFF_MAX_TOKENS_NO_TOOL',
       preSideEffect: true,
       sideEffectAccepted: false,
+    });
+    expect(diagnostic).toMatchObject({
+      diagnosticSchemaVersion: 'cp03-model-bakeoff-dsh-diagnostic/0.2',
+      primaryOutcome: {
+        kind: 'content_failure',
+        detailCode: 'MODEL_BAKEOFF_MAX_TOKENS_NO_TOOL',
+      },
+      secondaryConditions: [],
+      terminalFinish: { kind: 'max-tokens', failureCode: null },
+    });
+  });
+
+  it('classifies the local hard deadline as late without waiting for a provider finish', async () => {
+    class HangingAdapter extends ReasoningAwareScriptedAdapter {
+      async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+        await new Promise<void>((resolve) => {
+          if (options.signal?.aborted === true) {
+            resolve();
+            return;
+          }
+          const fallback = setTimeout(resolve, 250);
+          options.signal?.addEventListener('abort', () => {
+            clearTimeout(fallback);
+            resolve();
+          }, { once: true });
+        });
+        if (options.signal?.aborted !== true) {
+          yield* terminalTextResponse({ kind: 'max-tokens' });
+        }
+      }
+    }
+
+    const fixtures = createModelBakeoffFixtures();
+    const entry = createModelBakeoffPlan(fixtures.manifest).find(
+      ({ model, role }) => model === 'deepseek-v4-pro' && role === 'Guardian',
+    )!;
+    const transport = await createModelBakeoffDshTransport({
+      fixtures,
+      persistenceRoot: testRoot('hard-timeout'),
+      dshHome: testRoot('hard-timeout-attachments'),
+      providerKind: 'scripted',
+      roleCaps: replacementRoleCaps,
+      executionPolicy: createModelBakeoffExecutionPolicy(),
+      attemptTimeoutMs: 25,
+      mountAdapters(ctx) {
+        ctx.llm.registerAdapter(['deepseek-official'], new HangingAdapter());
+      },
+      estimateCostUsd: () => 0,
+    });
+
+    const startedAt = Date.now();
+    const result = await transport.dispatch(requestFor(entry, 1));
+    const [diagnostic] = transport.diagnostics();
+    await transport.dispose();
+
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    expect(result).toMatchObject({
+      kind: 'late',
+      detailCode: 'MODEL_BAKEOFF_ATTEMPT_TIMEOUT',
+      preSideEffect: true,
+      sideEffectAccepted: false,
+    });
+    expect(diagnostic).toMatchObject({
+      diagnosticSchemaVersion: 'cp03-model-bakeoff-dsh-diagnostic/0.2',
+      primaryOutcome: {
+        kind: 'late',
+        detailCode: 'MODEL_BAKEOFF_ATTEMPT_TIMEOUT',
+      },
+      secondaryConditions: [],
+      streamCount: 1,
     });
   });
 
   it('stops after the first rejected expected tool result', async () => {
-    class AlwaysWrappedAdapter extends LlmAdapter {
+    class AlwaysWrappedAdapter extends ReasoningAwareScriptedAdapter {
       readonly requests: GenerateOptions[] = [];
 
       async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
@@ -984,7 +1082,8 @@ describe('DSH model bakeoff transport', () => {
       persistenceRoot: testRoot('rejected-one-shot'),
       dshHome: testRoot('rejected-one-shot-attachments'),
       providerKind: 'scripted',
-      roleCaps,
+      roleCaps: replacementRoleCaps,
+      executionPolicy: createModelBakeoffExecutionPolicy(),
       mountAdapters(ctx) {
         ctx.llm.registerAdapter(['deepseek-official'], adapter);
       },
@@ -998,6 +1097,9 @@ describe('DSH model bakeoff transport', () => {
     expect(result.kind).toBe('schema_failure');
     expect(adapter.requests).toHaveLength(1);
     expect(diagnostic).toMatchObject({
+      diagnosticSchemaVersion: 'cp03-model-bakeoff-dsh-diagnostic/0.2',
+      primaryOutcome: { kind: 'schema_failure' },
+      secondaryConditions: [],
       streamCount: 1,
       undeclaredStreamCount: 0,
       toolCallCount: 1,

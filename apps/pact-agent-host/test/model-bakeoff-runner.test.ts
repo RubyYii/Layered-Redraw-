@@ -313,6 +313,7 @@ describe('bounded model bakeoff runner', () => {
     ['schema failure', { kind: 'schema_failure', preSideEffect: true, sideEffectAccepted: false }],
     ['content failure', { kind: 'content_failure', preSideEffect: true, sideEffectAccepted: false }],
     ['grounding failure', { kind: 'grounding_failure', preSideEffect: true, sideEffectAccepted: false }],
+    ['provider error', { kind: 'provider_error', preSideEffect: true, sideEffectAccepted: false }],
     ['late result', { kind: 'late', preSideEffect: true, sideEffectAccepted: false }],
     ['accepted side effect', { kind: 'transport_failure', preSideEffect: false, sideEffectAccepted: true }],
   ] as const)('never retries a %s', async (_label, failure) => {

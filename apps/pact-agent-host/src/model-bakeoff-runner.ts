@@ -269,6 +269,12 @@ const expectedTool = (entry: ModelBakeoffCase): Pick<
 
 const finiteNonnegative = (value: number): boolean => Number.isFinite(value) && value >= 0;
 
+const isPreSideEffectTransportRetry = (
+  result: ModelBakeoffTransportResult,
+): boolean => result.kind === 'transport_failure'
+  && result.preSideEffect === true
+  && result.sideEffectAccepted === false;
+
 const transportEvidenceValid = (
   entry: ModelBakeoffCase,
   result: ModelBakeoffTransportResult,
@@ -547,9 +553,7 @@ export async function runModelBakeoff(input: {
           const retryEligible = !rejectedWithoutEvidence
             && integrityValid
             && prospectiveCost <= input.approval.maxUsd
-            && recordedResult.kind === 'transport_failure'
-            && recordedResult.preSideEffect === true
-            && recordedResult.sideEffectAccepted === false
+            && isPreSideEffectTransportRetry(recordedResult)
             && !retryUsed[entry.provider]
             && sent < BAKEOFF_MAXIMUM_DISPATCHES;
           const attempt = createAttempt({
