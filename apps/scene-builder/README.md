@@ -31,6 +31,7 @@
 - 可视化电影镜头编辑器：选择现有相机片段、从透视视口记录 A／B 机位、精确编辑时间／FOV／位置／注视点／速度曲线与多点轨道、独立播放所选镜头
 - 物品交互锚点、可执行 affordance 与可追踪 interaction 时间线片段
 - OBJ／GLB 导入与灰模替换，按比例适配灰模边界；OBJ 用作静态网格，GLB 承载蒙皮、骨架、动作和 Morph 表情；二进制按 SHA-256 写入浏览器资产库
+- 单图深度建模：PNG／JPEG／WebP 在浏览器内经 Depth Anything V2 生成相对深度，形成带顶点色、UV、法线和断层保护的 OBJ；可拖动 22 骨正面人形预设并导出四权重蒙皮 GLB
 - Layered Redraw `spatial-bridge.json` 工程导入：自动匹配 RGB／近白相对深度、校验两个 SHA-256，并生成可旋转的 2.5D 纹理高度场；载体位置、旋转和尺寸继续可编辑
 - 导入报告会列出网格、蒙皮网格、骨骼、动画片段与 Morph Target，并自动识别 `root/head/effector/statusLight`、常用骨骼和表情槽位
 - `AnimationMixer` 驱动的 `idle/move/interact/react` CrossFade，以及独立的动作、表情权重与骨骼姿态控制接口；模型变化不改写角色根轨道
@@ -38,6 +39,7 @@
 - 同角色每帧 IK 批处理与平滑 1–8 次迭代预算：离屏／远景减负，近景／选中角色恢复精度，固定步长成片始终使用完整预算
 - 25 槽位骨架映射编辑器：搜索、自动推断、必需槽位／重复骨骼诊断、实时姿势／双手／脚锁测试和工程持久化
 - `idle / approach / look / reach / grasp / carry / transfer / release / speak` 角色动作状态机，统一选择动画槽位与身体约束
+- 阶段感知角色表演配置：交互阶段和接触权重共同驱动有界对称双手握点、脚锁、头颈注视及自动 Morph 表情；对白口部／眨眼包络可确定性重放，手动表情保持最高优先级
 - 交互的预备、伸手、接触、恢复阶段，以及随持有者旋转的局部携带锚点
 - 固定 60Hz 导演预览，以及 `claim / transfer / release` 三阶段所有权状态机；非法持有者不能交接或释放物品
 - `interactionSpec.collisionProxy` 胶囊／箱体代理：角色避开静态场景、道具保持在支撑面之上，HUD 报告修正数量与残余穿透
@@ -48,7 +50,7 @@
 - 大模型意图观察器、校验器、计划器与 `runAgentBehaviorTurn` 适配入口；模型只能请求 `approach / look / reach / grasp / transfer / release / speak`，不能直接写入位置、旋转、路径、脚本或资源 URL；接受／拒绝都有哈希回执
 - 摄影机曲线缓存、轻量预览变换、增量时间线高亮、FPS/P95 监测、自适应像素比与弱设备阴影／局部灯降级；离线渲染固定为完整特效
 - 可复现仿真交付包：视频、场景快照、资产锁、逐帧增量轨迹、所有权／碰撞审计、离线 WebGL 回放和 SHA-256 验证器统一生成
-- 可移植工程包：项目 JSON、OBJ／GLB、动作 GLB、RGB-D 桥接／RGB／深度按内容寻址打入 `.blockout.zip`，导入时逐项复算哈希
+- 可移植工程包：项目 JSON、OBJ／GLB、动作 GLB、RGB-D 桥接／RGB／深度，以及单图生成的模型／处理后 RGB／深度 PNG／rig 配方按内容寻址打入 `.blockout.zip`，导入时逐项复算哈希
 - `?case=pact-cp03` 五动作观众台：Translate／Reframe／Merge／Continue／Keep Opaque 对应五种瞬态 Three.js 效果，并保留哈希批准、Capability Gate 与回执链；当前明确是零调用本地工程验收
 
 ## 电影镜头编辑器
@@ -59,6 +61,15 @@
 4. 可以直接输入开始时间、时长、FOV、相机位置和注视点，并选择电影缓入缓出、柔和或匀速曲线。
 5. 展开“高级 · 运镜路径”可用 A／B 自动建立三点轨道，或逐行输入 3–16 个 `x, y, z` 控制点。路径首尾始终与 A／B 同步。
 6. “播放本镜头”只播放当前片段；新建、复制、修改、删除都进入撤销／重做历史。大型工程由 IndexedDB 恢复库异步保存；“保存 JSON”和“保存可移植工程包”仍用于显式版本与跨机器交付。
+
+## 单图生成 OBJ 与骨架 GLB
+
+1. 选中一个可修改载体，在“角色／模型资产”中点击“单图 → OBJ / 骨架”。
+2. 选择 PNG、JPEG 或 WebP。图片会在浏览器内缩放到最长边 1024 px；透明通道会参与网格裁切。
+3. 点击“估算相对深度”。运行时会先检查真实 GPU adapter 与 `shader-f16`，兼容时使用 WebGPU，否则直接使用 WASM；首次运行下载模型，图片不会上传。
+4. 调整网格精度、纵深强度和断层阈值，点击“生成并载入 OBJ”。OBJ 包含顶点色、UV、法线，但仍是静态网格。
+5. 对人物图拖动青色关节点，使 22 骨正面预设对齐身体，再点击“生成并载入骨架 GLB”。GLB 含四权重蒙皮，可继续使用骨架映射、双手／双脚 IK 和动作 GLB 重定向。
+6. 普通工程 JSON 只保存内容哈希；“保存可移植工程包”会同时冻结模型、处理后 RGB、深度 PNG 和 rig 配方。单图只生成非米制可见表面，不能恢复背面、真实体积、姿态语义或生产级蒙皮。
 
 镜头编辑器直接修改已有 `director.timeline.clips`，不会触碰未选中的角色、物品、场景或对白片段，也不会调用剧本编译器。完整 166 秒工程包含手工编排轨道，不应在镜头微调后点击“编译时间线”；该按钮的职责仍是根据左侧剧本文本重新生成整条时间线。
 
@@ -97,6 +108,7 @@ npm run test:ui
 npm run test:rig-editor
 npm run test:camera-editor
 npm run test:cp03:audience
+npm run test:single-image-3d
 npm run test:large-autosave
 npm run build:interaction-demo
 npm run render:interaction-demo:video30
@@ -121,7 +133,7 @@ npm run package:window-case
 
 物理属性仍由结构化元数据决定。语义交互和所有权保持确定性运动学权威；静态障碍会生成半径膨胀的三角导航网格，离散代理继续审计角色／道具残余穿透；没有被时间线或持有关系控制的 `dynamic` 物体则交给按需加载的 Rapier 60Hz 世界处理重力与接触。这个组合仍不是完整游戏角色控制器，也没有把 RGB-D 高度场自动变成碰撞网格。
 
-OBJ、单文件 GLB、动作 GLB 与含 `spatial-bridge.json` 的 Layered Redraw 工程会写入浏览器内容寻址资产库。普通项目 JSON 只保存 SHA-256 引用；点击“保存可移植工程包”才会把项目与全部引用二进制打成跨机器 `.blockout.zip`，导入时复算清单和内容哈希。RGB-D 仍是相对 2.5D、非米制、无隐藏背面；OBJ 仍是静态网格。需要动作、表情、动画重定向、四肢 IK 和脚锁的角色应使用带蒙皮骨架的 GLB。
+OBJ、单文件 GLB、动作 GLB、单图模型工件与含 `spatial-bridge.json` 的 Layered Redraw 工程会写入浏览器内容寻址资产库。普通项目 JSON 只保存 SHA-256 引用；点击“保存可移植工程包”才会把项目与全部引用二进制打成跨机器 `.blockout.zip`，导入时复算清单和内容哈希。RGB-D 与单图生成仍是相对 2.5D、非米制、无隐藏背面；OBJ 仍是静态网格。单图的 22 骨预设适合透明背景的正面全身图，但不等同于姿态识别、自动分割、体积重建或生产级蒙皮。需要动作、表情、动画重定向、四肢 IK 和脚锁的角色应使用带蒙皮骨架的 GLB。
 
 ### 角色运行时接口
 

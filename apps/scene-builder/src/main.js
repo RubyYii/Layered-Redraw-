@@ -55,6 +55,17 @@ import {
   persistPortableFiles,
 } from "./portable-project-package.js";
 import {
+  browserDepthEstimator,
+  buildReliefMeshData,
+  createHumanoidRigDraft,
+  depthRasterToRgba,
+  exportRiggedReliefGlb,
+  moveRigDraftJoint,
+  prepareSingleImageFile,
+  serializeReliefObj,
+  serializeRigDraft,
+} from "./single-image-3d-runtime.js";
+import {
   applyGuardedInteractionPlan,
   compileGuardedInteractionPlan,
 } from "./cp03/capability-gate.js";
@@ -284,6 +295,7 @@ const elements = {
   entityFriction: $("#entity-friction"),
   entityRestitution: $("#entity-restitution"),
   physicsRuntimeStatus: $("#physics-runtime-status"),
+  openSingleImage3d: $("#open-single-image-3d"),
   chooseAssetFile: $("#choose-asset-file"),
   chooseAnimationFile: $("#choose-animation-file"),
   chooseSpatialBridge: $("#choose-spatial-bridge"),
@@ -409,6 +421,30 @@ const elements = {
   resetRigMapping: $("#reset-rig-mapping"),
   autoMapRig: $("#auto-map-rig"),
   saveRigMapping: $("#save-rig-mapping"),
+  singleImageDialog: $("#single-image-3d-dialog"),
+  closeSingleImage3d: $("#close-single-image-3d"),
+  chooseSingleImage: $("#choose-single-image"),
+  singleImageFile: $("#single-image-file"),
+  singleImageSize: $("#single-image-size"),
+  singleImageSourceCanvas: $("#single-image-source-canvas"),
+  singleImageSourceEmpty: $("#single-image-source-empty"),
+  singleImageDepthCanvas: $("#single-image-depth-canvas"),
+  singleImageDepthEmpty: $("#single-image-depth-empty"),
+  singleImageModelStatus: $("#single-image-model-status"),
+  singleImageDepthInvert: $("#single-image-depth-invert"),
+  estimateSingleImageDepth: $("#estimate-single-image-depth"),
+  singleImageProgress: $("#single-image-progress"),
+  singleImageProgressText: $("#single-image-progress-text"),
+  singleImageResolution: $("#single-image-resolution"),
+  singleImageResolutionOutput: $("#single-image-resolution-output"),
+  singleImageDepthStrength: $("#single-image-depth-strength"),
+  singleImageDepthStrengthOutput: $("#single-image-depth-strength-output"),
+  singleImageEdgeThreshold: $("#single-image-edge-threshold"),
+  singleImageEdgeThresholdOutput: $("#single-image-edge-threshold-output"),
+  buildSingleImageObj: $("#build-single-image-obj"),
+  downloadSingleImageObj: $("#download-single-image-obj"),
+  buildSingleImageGlb: $("#build-single-image-glb"),
+  downloadSingleImageGlb: $("#download-single-image-glb"),
   toast: $("#toast"),
 };
 
@@ -440,6 +476,19 @@ const rigMappingSession = {
   savedSources: {},
   draft: {},
   sources: {},
+};
+const singleImage3dSession = {
+  objectId: null,
+  image: null,
+  depth: null,
+  mesh: null,
+  rig: createHumanoidRigDraft(),
+  objFile: null,
+  glbFile: null,
+  busy: false,
+  dragSlot: null,
+  progress: 0,
+  progressText: "选择图片后开始。",
 };
 
 const cp02Evidence = {
@@ -1135,6 +1184,259 @@ const prepareReferenceImage = async (file) => {
   };
 };
 
+const clampUi = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
+
+const generatedFilename = (value, suffix) => {
+  const base = String(value ?? "single-image")
+    .replace(/\.[^.]+$/u, "")
+    .replace(/[\\/:*?"<>|\u0000-\u001f]+/gu, "-")
+    .trim()
+    .slice(0, 96) || "single-image";
+  return `${base}${suffix}`;
+};
+
+const fileFromBlob = (blob, name, type = blob.type || "application/octet-stream") => new File(
+  [blob],
+  name,
+  { type },
+);
+
+const downloadBrowserFile = (file) => {
+  const url = URL.createObjectURL(file);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = file.name;
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
+
+const drawPixelBuffer = (canvas, pixels, width, height) => {
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: true });
+  context.putImageData(new ImageData(new Uint8ClampedArray(pixels), width, height), 0, 0);
+  return context;
+};
+
+const drawSingleImageRig = (context, rig, width, height, activeSlot = null) => {
+  const bySlot = new Map(rig.joints.map((joint) => [joint.slot, joint]));
+  const point = (joint) => [joint.u * width, joint.v * height];
+  const scale = Math.max(1, Math.min(width, height) / 520);
+  context.save();
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  for (const joint of rig.joints) {
+    const parent = joint.parent ? bySlot.get(joint.parent) : null;
+    if (!parent) continue;
+    const [x1, y1] = point(parent);
+    const [x2, y2] = point(joint);
+    context.beginPath();
+    context.moveTo(x1, y1);
+    context.lineTo(x2, y2);
+    context.lineWidth = 5 * scale;
+    context.strokeStyle = "rgba(2, 8, 10, .78)";
+    context.stroke();
+    context.lineWidth = 2 * scale;
+    context.strokeStyle = "rgba(112, 239, 232, .94)";
+    context.stroke();
+  }
+  for (const joint of rig.joints) {
+    const [x, y] = point(joint);
+    const active = joint.slot === activeSlot;
+    context.beginPath();
+    context.arc(x, y, (active ? 6 : 4) * scale, 0, Math.PI * 2);
+    context.fillStyle = active ? "#f5c66d" : "#8ff3ee";
+    context.fill();
+    context.lineWidth = 2 * scale;
+    context.strokeStyle = "rgba(2, 8, 10, .86)";
+    context.stroke();
+    if (active) {
+      context.font = `${Math.max(10, 10 * scale)}px ui-monospace, monospace`;
+      context.fillStyle = "#fff3d2";
+      context.fillText(joint.name, x + 8 * scale, y - 8 * scale);
+    }
+  }
+  context.restore();
+};
+
+const invalidateSingleImageMesh = () => {
+  singleImage3dSession.mesh = null;
+  singleImage3dSession.objFile = null;
+  singleImage3dSession.glbFile = null;
+};
+
+const renderSingleImage3d = () => {
+  const session = singleImage3dSession;
+  const image = session.image;
+  elements.singleImageSourceCanvas.hidden = !image;
+  elements.singleImageSourceEmpty.hidden = Boolean(image);
+  elements.singleImageSize.textContent = image
+    ? `${image.width} × ${image.height}${image.originalSize.join("×") !== `${image.width}×${image.height}` ? ` · 原图 ${image.originalSize.join("×")}` : ""}`
+    : "尚未导入";
+  if (image) {
+    const context = drawPixelBuffer(elements.singleImageSourceCanvas, image.pixels, image.width, image.height);
+    drawSingleImageRig(context, session.rig, image.width, image.height, session.dragSlot);
+  }
+
+  elements.singleImageDepthCanvas.hidden = !session.depth;
+  elements.singleImageDepthEmpty.hidden = Boolean(session.depth);
+  if (session.depth) {
+    drawPixelBuffer(
+      elements.singleImageDepthCanvas,
+      depthRasterToRgba(session.depth),
+      session.depth.width,
+      session.depth.height,
+    );
+  }
+
+  const runtimeStatus = browserDepthEstimator.status();
+  elements.singleImageModelStatus.textContent = session.depth
+    ? `${session.depth.backend.toUpperCase()} · ${session.depth.modelId.split("/").at(-1)}`
+    : runtimeStatus.state === "ready"
+      ? `${runtimeStatus.backend.toUpperCase()} · 模型已缓存到本次会话`
+      : runtimeStatus.state === "loading"
+        ? "正在载入 Depth Anything V2"
+        : "首次运行需下载约 20–30 MB 模型权重";
+  elements.singleImageProgress.hidden = !session.busy;
+  elements.singleImageProgress.value = clampUi(Number(session.progress) || 0, 0, 100);
+  elements.singleImageProgressText.textContent = session.progressText;
+  elements.singleImageResolutionOutput.textContent = elements.singleImageResolution.value;
+  elements.singleImageDepthStrengthOutput.textContent = Number(elements.singleImageDepthStrength.value).toFixed(2);
+  elements.singleImageEdgeThresholdOutput.textContent = Number(elements.singleImageEdgeThreshold.value).toFixed(2);
+
+  elements.chooseSingleImage.disabled = session.busy;
+  elements.estimateSingleImageDepth.disabled = session.busy || !image;
+  elements.singleImageDepthInvert.disabled = session.busy || !image;
+  elements.buildSingleImageObj.disabled = session.busy || !session.depth;
+  elements.downloadSingleImageObj.disabled = session.busy || !session.objFile;
+  elements.buildSingleImageGlb.disabled = session.busy || !session.mesh;
+  elements.downloadSingleImageGlb.disabled = session.busy || !session.glbFile;
+  for (const control of [
+    elements.singleImageResolution,
+    elements.singleImageDepthStrength,
+    elements.singleImageEdgeThreshold,
+  ]) control.disabled = session.busy || !session.depth;
+};
+
+const depthPngFileForSession = async () => {
+  const { depth, image } = singleImage3dSession;
+  if (!depth || !image) throw new Error("请先生成深度图。");
+  const canvas = document.createElement("canvas");
+  drawPixelBuffer(canvas, depthRasterToRgba(depth), depth.width, depth.height);
+  const blob = await new Promise((resolve, reject) => canvas.toBlob(
+    (result) => result ? resolve(result) : reject(new Error("深度 PNG 编码失败。")),
+    "image/png",
+  ));
+  return fileFromBlob(blob, generatedFilename(image.sourceName, "-depth.png"), "image/png");
+};
+
+const restoreSingleImageRecipe = async (object) => {
+  const binding = object?.asset?.portable;
+  if (binding?.kind !== "single-image-model") return false;
+  const descriptors = await filesForPortableBinding(projectPersistence, binding);
+  const sourceFile = descriptors.find((entry) => entry.role === "rgb")?.file;
+  const depthFile = descriptors.find((entry) => entry.role === "depth")?.file;
+  const rigFile = descriptors.find((entry) => entry.role === "rig")?.file;
+  const modelFile = descriptors.find((entry) => entry.role === "model")?.file;
+  if (!sourceFile || !depthFile || !rigFile || !modelFile) throw new Error("单图生成配方缺少必要工件。");
+  const [image, depthImage, rigDocument] = await Promise.all([
+    prepareSingleImageFile(sourceFile, { maxEdge: 2_048 }),
+    prepareSingleImageFile(depthFile, { maxEdge: 2_048 }),
+    rigFile.text().then((text) => JSON.parse(text)),
+  ]);
+  if (image.width !== depthImage.width || image.height !== depthImage.height) {
+    throw new Error("已保存的单图 RGB 与深度 PNG 尺寸不一致。");
+  }
+  const values = new Float32Array(image.width * image.height);
+  let mean = 0;
+  for (let index = 0; index < values.length; index += 1) {
+    const offset = index * 4;
+    const value = (
+      depthImage.pixels[offset] * 0.2126
+      + depthImage.pixels[offset + 1] * 0.7152
+      + depthImage.pixels[offset + 2] * 0.0722
+    ) / 255;
+    values[index] = value;
+    mean += value;
+  }
+  image.sourceName = String(rigDocument?.source?.label ?? image.sourceName).slice(0, 80) || image.sourceName;
+  singleImage3dSession.image = image;
+  singleImage3dSession.depth = {
+    width: image.width,
+    height: image.height,
+    depth: values,
+    mean: mean / values.length,
+    range: [0, 1],
+    inverted: false,
+    backend: String(rigDocument?.source?.depthBackend ?? "restored-package"),
+    modelId: String(rigDocument?.source?.depthModel ?? "restored/relative-depth"),
+    dtype: "uint8-preview",
+  };
+  singleImage3dSession.rig = createHumanoidRigDraft(rigDocument);
+  const settings = rigDocument?.mesh?.settings ?? {};
+  elements.singleImageResolution.value = String(settings.resolution ?? 96);
+  elements.singleImageDepthStrength.value = String(settings.depthStrength ?? 0.35);
+  elements.singleImageEdgeThreshold.value = String(settings.edgeThreshold ?? 0.28);
+  singleImage3dSession.mesh = buildReliefMeshData({
+    rgbPixels: image.pixels,
+    depth: values,
+    width: image.width,
+    height: image.height,
+    resolution: Number(elements.singleImageResolution.value),
+    depthStrength: Number(elements.singleImageDepthStrength.value),
+    edgeThreshold: Number(elements.singleImageEdgeThreshold.value),
+    alphaCutoff: settings.alphaCutoff,
+  });
+  singleImage3dSession.objFile = /\.obj$/iu.test(modelFile.name) ? modelFile : null;
+  singleImage3dSession.glbFile = /\.glb$/iu.test(modelFile.name) ? modelFile : null;
+  singleImage3dSession.progress = 100;
+  singleImage3dSession.progressText = `已从内容库恢复单图、深度、${singleImage3dSession.rig.joints.length} 个关节点与网格参数。`;
+  return true;
+};
+
+const persistSingleImageModel = async (object, modelFile, { appliedRig = false } = {}) => {
+  const session = singleImage3dSession;
+  const sourceFile = fileFromBlob(
+    session.image.blob,
+    generatedFilename(session.image.sourceName, "-source.png"),
+    "image/png",
+  );
+  const depthFile = await depthPngFileForSession();
+  const rigJson = serializeRigDraft(session.rig, session.mesh, {
+    label: session.image.sourceName,
+    depthModel: session.depth.modelId,
+    depthBackend: session.depth.backend,
+    appliedToModel: appliedRig,
+  });
+  const rigFile = new File(
+    [rigJson],
+    generatedFilename(session.image.sourceName, "-rig.json"),
+    { type: "application/json" },
+  );
+  const portable = await persistPortableFiles(projectPersistence, "single-image-model", [
+    { role: "model", file: modelFile },
+    { role: "rgb", file: sourceFile },
+    { role: "depth", file: depthFile },
+    { role: "rig", file: rigFile },
+  ]);
+  const latest = store.getState().project.objects.find((candidate) => candidate.id === object.id);
+  if (!latest) throw new Error("生成模型后目标物体已被移除。");
+  const mapping = Object.fromEntries(session.rig.joints.map((joint) => [joint.slot, joint.name]));
+  if (appliedRig) editor.setAssetRigBindings(object.id, mapping);
+  store.updateObject(object.id, {
+    asset: {
+      scale: latest.asset?.scale ?? 1,
+      forwardAxis: latest.asset?.forwardAxis ?? "-Z",
+      nodes: {},
+      animations: {},
+      bones: appliedRig ? mapping : {},
+      expressions: {},
+      portable,
+    },
+  });
+  return portable;
+};
+
 const openReferenceWorkbench = () => {
   if (!elements.referenceDialog.open) elements.referenceDialog.showModal();
 };
@@ -1342,6 +1644,7 @@ const renderInspector = (state) => {
   elements.physicsRuntimeStatus.textContent = physicsCopy;
   const assetReport = editor.assetReport(object.id);
   const spatialReport = assetReport?.spatialBridge ?? null;
+  elements.openSingleImage3d.disabled = directorMode === "preview";
   elements.chooseAssetFile.disabled = directorMode === "preview";
   elements.chooseAnimationFile.disabled = directorMode === "preview";
   elements.chooseSpatialBridge.disabled = directorMode === "preview";
@@ -1414,7 +1717,7 @@ const renderInspector = (state) => {
       ? `已校验 RGB 与深度预览 2 个工件；合同指纹 ${spatialReport.contractSha256.slice(0, 12)}…。近白值沿表面法线向前，但仍是相对深度，不是米制重建。载体负责位置、旋转和尺寸；表面不会自动变成碰撞体。`
       : assetReport.format === "OBJ"
         ? "静态 OBJ：没有骨骼、蒙皮权重、动画或 Morph；如需角色控制请导出为 GLB。"
-        : `骨架映射：${boneBindings}。表情映射：${expressionBindings}。运行时接口：setBehaviorState、setRigBindings、setBonePose、setLimbIk、setFootLock、setLookTarget、retargetAnimationsFrom；角色状态机负责双手、双脚与头颈约束。`;
+        : `骨架映射：${boneBindings}。表情映射：${expressionBindings}。运行时接口：setBehaviorState、setRigBindings、setBonePose、setLimbIk、setFootLock、setLookTarget、retargetAnimationsFrom；角色表演状态机负责接触阶段、对称双手握点、脚底锁定、头颈注视与受控表情/口型。`;
     elements.assetRigDetail.textContent = `${rigSummary}${assetReport.warnings.length ? ` 提示：${assetReport.warnings.join("；")}` : ""}`;
   }
   elements.interactionTrigger.value = object.entity.interaction.trigger;
@@ -2590,6 +2893,255 @@ elements.removeReferenceImage.addEventListener("click", () => {
   if (store.removeReference()) showToast("参考图已移除，可使用撤销恢复");
 });
 
+elements.openSingleImage3d.addEventListener("click", async () => {
+  const object = selectedObject();
+  if (!object) {
+    showToast("请先选择一个承载生成模型的场景物体");
+    return;
+  }
+  const previousObjectId = singleImage3dSession.objectId;
+  singleImage3dSession.objectId = object.id;
+  if (!elements.singleImageDialog.open) elements.singleImageDialog.showModal();
+  if (
+    object.asset?.portable?.kind === "single-image-model"
+    && (previousObjectId !== object.id || !singleImage3dSession.image)
+  ) {
+    singleImage3dSession.busy = true;
+    singleImage3dSession.progress = 12;
+    singleImage3dSession.progressText = "正在从内容库恢复单图生成配方…";
+    renderSingleImage3d();
+    try {
+      await restoreSingleImageRecipe(object);
+    } catch (error) {
+      singleImage3dSession.progressText = error.message;
+      showToast(error.message);
+    } finally {
+      singleImage3dSession.busy = false;
+    }
+  }
+  renderSingleImage3d();
+});
+
+elements.closeSingleImage3d.addEventListener("click", () => elements.singleImageDialog.close());
+elements.singleImageDialog.addEventListener("cancel", () => elements.singleImageDialog.close());
+elements.chooseSingleImage.addEventListener("click", () => elements.singleImageFile.click());
+elements.singleImageFile.addEventListener("change", async () => {
+  const file = elements.singleImageFile.files?.[0];
+  if (!file) return;
+  singleImage3dSession.busy = true;
+  singleImage3dSession.progress = 4;
+  singleImage3dSession.progressText = "正在解码并缩放单图…";
+  renderSingleImage3d();
+  try {
+    singleImage3dSession.image = await prepareSingleImageFile(file);
+    singleImage3dSession.depth = null;
+    singleImage3dSession.rig = createHumanoidRigDraft();
+    singleImage3dSession.dragSlot = null;
+    elements.singleImageDepthInvert.checked = false;
+    invalidateSingleImageMesh();
+    singleImage3dSession.progressText = "单图已就绪；下一步估算相对深度。";
+    showToast(`已载入单图“${singleImage3dSession.image.sourceName}”`);
+  } catch (error) {
+    showToast(error.message);
+    singleImage3dSession.progressText = error.message;
+  } finally {
+    singleImage3dSession.busy = false;
+    singleImage3dSession.progress = 0;
+    elements.singleImageFile.value = "";
+    renderSingleImage3d();
+  }
+});
+
+elements.estimateSingleImageDepth.addEventListener("click", async () => {
+  const session = singleImage3dSession;
+  if (!session.image || session.busy) return;
+  session.busy = true;
+  session.progress = 2;
+  session.progressText = "准备本地深度模型…";
+  invalidateSingleImageMesh();
+  renderSingleImage3d();
+  const url = URL.createObjectURL(session.image.blob);
+  try {
+    const depth = await browserDepthEstimator.estimate(url, {
+      invert: elements.singleImageDepthInvert.checked,
+      onProgress: (event) => {
+        session.progressText = event.message;
+        const reported = Number(event.event?.progress);
+        session.progress = Number.isFinite(reported)
+          ? Math.max(3, Math.min(92, reported * 0.9))
+          : event.phase === "estimating" ? 94 : session.progress;
+        elements.singleImageProgress.hidden = false;
+        elements.singleImageProgress.value = session.progress;
+        elements.singleImageProgressText.textContent = session.progressText;
+        elements.singleImageModelStatus.textContent = event.backend
+          ? `${String(event.backend).toUpperCase()} · ${event.phase === "ready" ? "模型已就绪" : "正在运行"}`
+          : "正在载入 Depth Anything V2";
+      },
+    });
+    if (depth.width !== session.image.width || depth.height !== session.image.height) {
+      throw new Error(`深度输出 ${depth.width}×${depth.height} 与处理后单图 ${session.image.width}×${session.image.height} 不一致。`);
+    }
+    session.depth = depth;
+    session.progress = 100;
+    session.progressText = `深度估算完成 · ${depth.backend.toUpperCase()} · 白色为近处`;
+    showToast(`相对深度已生成：${depth.width}×${depth.height} · ${depth.backend.toUpperCase()}`);
+  } catch (error) {
+    session.progressText = error.message;
+    showToast(error.message);
+  } finally {
+    URL.revokeObjectURL(url);
+    session.busy = false;
+    renderSingleImage3d();
+  }
+});
+
+elements.singleImageDepthInvert.addEventListener("change", () => {
+  const depth = singleImage3dSession.depth?.depth;
+  if (depth) {
+    for (let index = 0; index < depth.length; index += 1) depth[index] = 1 - depth[index];
+    singleImage3dSession.depth.inverted = elements.singleImageDepthInvert.checked;
+    invalidateSingleImageMesh();
+    singleImage3dSession.progressText = elements.singleImageDepthInvert.checked
+      ? "已反转近／远解释；请重新生成 OBJ。"
+      : "已恢复模型默认近／远解释；请重新生成 OBJ。";
+  }
+  renderSingleImage3d();
+});
+
+for (const control of [
+  elements.singleImageResolution,
+  elements.singleImageDepthStrength,
+  elements.singleImageEdgeThreshold,
+]) {
+  control.addEventListener("input", () => {
+    invalidateSingleImageMesh();
+    renderSingleImage3d();
+  });
+}
+
+const singleImagePointerUv = (event) => {
+  const rect = elements.singleImageSourceCanvas.getBoundingClientRect();
+  return [
+    clampUi((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1),
+    clampUi((event.clientY - rect.top) / Math.max(1, rect.height), 0, 1),
+  ];
+};
+
+elements.singleImageSourceCanvas.addEventListener("pointerdown", (event) => {
+  if (!singleImage3dSession.image || singleImage3dSession.busy) return;
+  const [u, v] = singleImagePointerUv(event);
+  const nearest = singleImage3dSession.rig.joints
+    .map((joint) => ({ joint, distance: Math.hypot(joint.u - u, joint.v - v) }))
+    .sort((left, right) => left.distance - right.distance)[0];
+  if (!nearest || nearest.distance > 0.055) return;
+  singleImage3dSession.dragSlot = nearest.joint.slot;
+  elements.singleImageSourceCanvas.setPointerCapture(event.pointerId);
+  renderSingleImage3d();
+});
+
+elements.singleImageSourceCanvas.addEventListener("pointermove", (event) => {
+  const slot = singleImage3dSession.dragSlot;
+  if (!slot || !elements.singleImageSourceCanvas.hasPointerCapture(event.pointerId)) return;
+  const [u, v] = singleImagePointerUv(event);
+  singleImage3dSession.rig = moveRigDraftJoint(singleImage3dSession.rig, slot, u, v);
+  singleImage3dSession.glbFile = null;
+  renderSingleImage3d();
+});
+
+const releaseSingleImageJoint = (event) => {
+  if (elements.singleImageSourceCanvas.hasPointerCapture(event.pointerId)) {
+    elements.singleImageSourceCanvas.releasePointerCapture(event.pointerId);
+  }
+  singleImage3dSession.dragSlot = null;
+  renderSingleImage3d();
+};
+elements.singleImageSourceCanvas.addEventListener("pointerup", releaseSingleImageJoint);
+elements.singleImageSourceCanvas.addEventListener("pointercancel", releaseSingleImageJoint);
+
+elements.buildSingleImageObj.addEventListener("click", async () => {
+  const session = singleImage3dSession;
+  const object = currentState.project.objects.find((candidate) => candidate.id === session.objectId);
+  if (!object || !session.image || !session.depth || session.busy) return;
+  session.busy = true;
+  session.progress = 8;
+  session.progressText = "正在生成断层保护网格与 OBJ…";
+  renderSingleImage3d();
+  try {
+    session.mesh = buildReliefMeshData({
+      rgbPixels: session.image.pixels,
+      depth: session.depth.depth,
+      width: session.image.width,
+      height: session.image.height,
+      resolution: Number(elements.singleImageResolution.value),
+      depthStrength: Number(elements.singleImageDepthStrength.value),
+      edgeThreshold: Number(elements.singleImageEdgeThreshold.value),
+    });
+    const objText = serializeReliefObj(session.mesh, { name: session.image.sourceName });
+    session.objFile = new File(
+      [objText],
+      generatedFilename(session.image.sourceName, "-relief.obj"),
+      { type: "model/obj" },
+    );
+    session.glbFile = null;
+    session.progress = 70;
+    session.progressText = "正在载入 OBJ 并写入可移植资产库…";
+    renderSingleImage3d();
+    const report = await editor.loadAssetFile(object.id, session.objFile);
+    await persistSingleImageModel(object, session.objFile, { appliedRig: false });
+    session.progress = 100;
+    session.progressText = `OBJ 已载入 · ${session.mesh.vertexCount} 顶点 · ${session.mesh.faceCount} 三角面`;
+    renderInspector(currentState);
+    showToast(`彩色 OBJ 已生成并持久化：${report.meshCount} 网格 · ${session.mesh.faceCount} 三角面`);
+  } catch (error) {
+    session.progressText = error.message;
+    showToast(error.message);
+  } finally {
+    session.busy = false;
+    renderSingleImage3d();
+  }
+});
+
+elements.downloadSingleImageObj.addEventListener("click", () => {
+  if (singleImage3dSession.objFile) downloadBrowserFile(singleImage3dSession.objFile);
+});
+
+elements.buildSingleImageGlb.addEventListener("click", async () => {
+  const session = singleImage3dSession;
+  const object = currentState.project.objects.find((candidate) => candidate.id === session.objectId);
+  if (!object || !session.mesh || session.busy) return;
+  session.busy = true;
+  session.progress = 12;
+  session.progressText = "正在计算四权重蒙皮并导出 GLB…";
+  renderSingleImage3d();
+  try {
+    const exported = await exportRiggedReliefGlb(session.mesh, session.rig);
+    session.glbFile = new File(
+      [exported.buffer],
+      generatedFilename(session.image.sourceName, "-rigged.glb"),
+      { type: "model/gltf-binary" },
+    );
+    session.progress = 72;
+    session.progressText = "正在载入骨架 GLB 并写入可移植资产库…";
+    renderSingleImage3d();
+    const report = await editor.loadAssetFile(object.id, session.glbFile);
+    await persistSingleImageModel(object, session.glbFile, { appliedRig: true });
+    session.progress = 100;
+    session.progressText = `骨架 GLB 已载入 · ${report.boneCount} 骨骼 · ${report.skinnedMeshCount} 蒙皮`;
+    renderInspector(currentState);
+    showToast(`骨架 GLB 已生成并持久化：${report.boneCount} 骨骼；可继续打开骨架映射编辑器`);
+  } catch (error) {
+    session.progressText = error.message;
+    showToast(error.message);
+  } finally {
+    session.busy = false;
+    renderSingleImage3d();
+  }
+});
+
+elements.downloadSingleImageGlb.addEventListener("click", () => {
+  if (singleImage3dSession.glbFile) downloadBrowserFile(singleImage3dSession.glbFile);
+});
+
 elements.chooseAssetFile.addEventListener("click", () => elements.assetFile.click());
 elements.assetFile.addEventListener("change", async () => {
   const object = selectedObject();
@@ -2960,9 +3512,11 @@ const restorePortableAssets = async (project, { announce = true } = {}) => {
   for (const object of bindings) {
     try {
       const descriptors = await filesForPortableBinding(projectPersistence, object.asset.portable);
-      if (object.asset.portable.kind === "model") {
+      if (["model", "single-image-model"].includes(object.asset.portable.kind)) {
         await editor.loadAssetFile(object.id, descriptors.find((entry) => entry.role === "model").file);
-        const animation = descriptors.find((entry) => entry.role === "animation");
+        const animation = object.asset.portable.kind === "model"
+          ? descriptors.find((entry) => entry.role === "animation")
+          : null;
         if (animation) await editor.loadRetargetAnimationFile(object.id, animation.file);
       } else {
         await editor.loadSpatialBridgeFiles(object.id, descriptors.map((entry) => entry.file));
@@ -3210,9 +3764,58 @@ window.__BLOCKOUT_AGENT_BEHAVIOR__ = Object.freeze({
   }),
 });
 
+window.__BLOCKOUT_SINGLE_IMAGE_3D__ = Object.freeze({
+  installSyntheticDepthForSmoke() {
+    const image = singleImage3dSession.image;
+    if (!image) throw new Error("请先通过界面导入单图。");
+    const depth = new Float32Array(image.width * image.height);
+    for (let y = 0; y < image.height; y += 1) {
+      for (let x = 0; x < image.width; x += 1) {
+        const u = image.width === 1 ? 0.5 : x / (image.width - 1);
+        const v = image.height === 1 ? 0.5 : y / (image.height - 1);
+        const radial = Math.max(0, 1 - Math.hypot((u - 0.5) * 1.45, (v - 0.48) * 0.8));
+        depth[y * image.width + x] = radial;
+      }
+    }
+    singleImage3dSession.depth = {
+      width: image.width,
+      height: image.height,
+      depth,
+      mean: depth.reduce((sum, value) => sum + value, 0) / depth.length,
+      range: [0, 1],
+      inverted: false,
+      backend: "smoke-fixture",
+      modelId: "deterministic/single-image-depth-smoke",
+      dtype: "float32",
+    };
+    singleImage3dSession.progress = 100;
+    singleImage3dSession.progressText = "已安装离线 smoke 深度夹具。";
+    invalidateSingleImageMesh();
+    renderSingleImage3d();
+    return { width: image.width, height: image.height };
+  },
+  snapshot() {
+    return {
+      objectId: singleImage3dSession.objectId,
+      imageSize: singleImage3dSession.image
+        ? [singleImage3dSession.image.width, singleImage3dSession.image.height]
+        : null,
+      depthReady: Boolean(singleImage3dSession.depth),
+      mesh: singleImage3dSession.mesh ? {
+        vertexCount: singleImage3dSession.mesh.vertexCount,
+        faceCount: singleImage3dSession.mesh.faceCount,
+      } : null,
+      rigJointCount: singleImage3dSession.rig.joints.length,
+      objReady: Boolean(singleImage3dSession.objFile),
+      glbReady: Boolean(singleImage3dSession.glbFile),
+    };
+  },
+});
+
 window.addEventListener("beforeunload", () => {
   runtime?.dispose();
   editor.dispose();
+  void browserDepthEstimator.dispose();
 }, { once: true });
 
 setupCp02Case();

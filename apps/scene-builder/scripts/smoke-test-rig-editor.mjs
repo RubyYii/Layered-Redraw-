@@ -171,12 +171,15 @@ try {
   const contract = await page.evaluate(() => window.__BLOCKOUT_AGENT_BEHAVIOR__?.contract);
   assert(JSON.stringify(contract?.allowedActions) === JSON.stringify(["approach", "look", "reach", "grasp", "transfer", "release", "speak"]), "Agent 七动作合同未暴露。" );
   assert(contract?.authority?.runtime?.includes("IK"), "Agent 合同没有声明仿真运行时权威。" );
+  assert(contract?.performance?.contactPlanning?.includes("two-hand"), "Agent 合同没有声明受控双手接触规划。" );
+  assert(contract?.performance?.expressionControl?.includes("deterministic"), "Agent 合同没有声明确定性表情控制。" );
   assert(errors.length === 0, `页面出现错误：${errors.join(" | ")}`);
   process.stdout.write(JSON.stringify({
     status: "PASS",
     boneSlots: 25,
     persistedMappings: Object.values(persisted).filter(Boolean).length,
     agentActions: contract.allowedActions,
+    performance: contract.performance,
     screenshots: ["blockout-studio-rig-mapping.png", "blockout-studio-rig-mapping-panel.png", "blockout-studio-rig-mapping-mobile.png"],
   }, null, 2));
 } catch (error) {

@@ -660,6 +660,7 @@
                   <small id="asset-session-detail">OBJ 用于静态网格；GLB 可携带骨架、动作与表情 Morph。</small>
                 </div>
                 <div class="asset-import-actions">
+                  <button id="open-single-image-3d" class="text-button single-image-3d-trigger" type="button">单图 → OBJ / 骨架</button>
                   <button id="choose-asset-file" class="text-button is-primary" type="button">OBJ / GLB</button>
                   <button id="choose-animation-file" class="text-button" type="button" hidden>动作 GLB</button>
                   <button id="choose-spatial-bridge" class="text-button" type="button">RGB-D 工程</button>
@@ -860,6 +861,86 @@
         </div>
       </div>
     </dialog>
+    <dialog id="single-image-3d-dialog" class="single-image-3d-dialog" aria-labelledby="single-image-3d-title">
+      <div class="single-image-3d-shell">
+        <header class="single-image-3d-header">
+          <div>
+            <span class="eyebrow">LOCAL SINGLE-IMAGE 3D</span>
+            <h2 id="single-image-3d-title">单图深度建模与骨架</h2>
+            <p>图片在浏览器内处理；首次运行会下载并缓存 Depth Anything V2。OBJ 保存静态彩色浮雕，GLB 才能保存骨架与蒙皮。</p>
+          </div>
+          <button id="close-single-image-3d" class="icon-button" type="button" aria-label="关闭单图建模工作台" title="关闭">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
+        </header>
+
+        <div class="single-image-3d-workspace">
+          <section class="single-image-3d-preview" aria-label="单图与深度预览">
+            <div class="single-image-preview-heading">
+              <div><span class="step-number">01</span><div><strong>单图与骨架定位</strong><span>拖动青色关节点，让预设对齐正面人物</span></div></div>
+              <span id="single-image-size">尚未导入</span>
+            </div>
+            <div class="single-image-canvas-stage">
+              <canvas id="single-image-source-canvas" aria-label="源图与可编辑骨架预览" hidden></canvas>
+              <div id="single-image-source-empty" class="single-image-preview-empty">
+                <strong>选择一张单图</strong>
+                <span>角色建议使用正面、完整身体、透明或干净背景的 PNG。</span>
+              </div>
+            </div>
+            <div class="single-image-depth-stage">
+              <canvas id="single-image-depth-canvas" aria-label="相对深度预览" hidden></canvas>
+              <div id="single-image-depth-empty" class="single-image-preview-empty is-depth">
+                <strong>等待相对深度</strong>
+                <span>白色表示更靠近镜头；可在右侧反转。</span>
+              </div>
+            </div>
+            <div class="single-image-preview-legend">
+              <span><i class="single-image-legend-dot is-bone"></i> 可拖动关节</span>
+              <span><i class="single-image-legend-dot is-depth"></i> 相对深度，不是米制</span>
+            </div>
+          </section>
+
+          <section class="single-image-3d-controls" aria-label="单图建模步骤">
+            <div class="single-image-step-card">
+              <div class="single-image-step-heading"><span>1</span><div><strong>输入单图</strong><small>会缩放到最长边 1024 px，并保留透明通道</small></div></div>
+              <button id="choose-single-image" class="text-button is-primary" type="button">选择 PNG / JPEG / WebP</button>
+            </div>
+
+            <div class="single-image-step-card">
+              <div class="single-image-step-heading"><span>2</span><div><strong>本地估算深度</strong><small id="single-image-model-status">模型尚未载入</small></div></div>
+              <label class="single-image-switch" for="single-image-depth-invert"><span><strong>反转深度</strong><small>仅改变近／远解释，不修改原图</small></span><input id="single-image-depth-invert" type="checkbox" /></label>
+              <button id="estimate-single-image-depth" class="text-button" type="button" disabled>估算相对深度</button>
+              <progress id="single-image-progress" max="100" value="0" hidden></progress>
+              <p id="single-image-progress-text" role="status" aria-live="polite">选择图片后开始。</p>
+            </div>
+
+            <div class="single-image-step-card">
+              <div class="single-image-step-heading"><span>3</span><div><strong>生成静态 OBJ</strong><small>顶点色、UV、法线与深度断层保护</small></div></div>
+              <label class="single-image-range" for="single-image-resolution"><span>网格精度 <output id="single-image-resolution-output">96</output></span><input id="single-image-resolution" type="range" min="24" max="160" step="8" value="96" /></label>
+              <label class="single-image-range" for="single-image-depth-strength"><span>纵深强度 <output id="single-image-depth-strength-output">0.35</output></span><input id="single-image-depth-strength" type="range" min="0" max="1.2" step="0.05" value="0.35" /></label>
+              <label class="single-image-range" for="single-image-edge-threshold"><span>断层阈值 <output id="single-image-edge-threshold-output">0.28</output></span><input id="single-image-edge-threshold" type="range" min="0.05" max="0.8" step="0.01" value="0.28" /></label>
+              <div class="single-image-button-row">
+                <button id="build-single-image-obj" class="text-button is-primary" type="button" disabled>生成并载入 OBJ</button>
+                <button id="download-single-image-obj" class="text-button" type="button" disabled>下载 OBJ</button>
+              </div>
+            </div>
+
+            <div class="single-image-step-card is-rig">
+              <div class="single-image-step-heading"><span>4</span><div><strong>添加骨架与蒙皮</strong><small>22 骨正面人形预设；生成后可继续使用骨架映射、IK 与动作重定向</small></div></div>
+              <div class="single-image-button-row">
+                <button id="build-single-image-glb" class="text-button is-primary" type="button" disabled>生成并载入骨架 GLB</button>
+                <button id="download-single-image-glb" class="text-button" type="button" disabled>下载 GLB</button>
+              </div>
+            </div>
+
+            <aside class="single-image-boundary">
+              <strong>能力边界</strong>
+              <p>单图只能生成可见表面的相对 2.5D 浮雕，不能恢复背面、真实体积或米制尺度。自动骨架是可编辑起点，不等同于人体姿态识别；复杂角色仍建议换用专业建模后的带蒙皮 GLB。</p>
+            </aside>
+          </section>
+        </div>
+      </div>
+    </dialog>
     <dialog id="rig-mapping-dialog" class="rig-mapping-dialog" aria-labelledby="rig-mapping-title">
       <form method="dialog" class="rig-mapping-shell">
         <header class="rig-mapping-header">
@@ -908,6 +989,7 @@
       </form>
     </dialog>
     <input id="reference-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden />
+    <input id="single-image-file" type="file" accept="image/png,image/jpeg,image/webp" hidden />
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script type="module" src="/src/main.js"></script>
   </body>

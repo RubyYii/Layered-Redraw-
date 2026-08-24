@@ -562,6 +562,10 @@ export function evaluateTimeline(project, rawTime) {
             hand: clip.hand,
             clipId: clip.id,
             source: "timeline",
+            phase: phase.name,
+            phaseProgress: phase.progress,
+            contactWeight: phase.contactWeight,
+            interactionProgress: progress,
           };
         }
         if (clip.ownershipMode === "transfer" && clip.recipientId) {
@@ -576,6 +580,10 @@ export function evaluateTimeline(project, rawTime) {
               hand: clip.hand,
               clipId: clip.id,
               source: "timeline-recipient",
+              phase: phase.name,
+              phaseProgress: phase.progress,
+              contactWeight: phase.contactWeight,
+              interactionProgress: progress,
             };
           }
         }
@@ -612,6 +620,8 @@ export function evaluateTimeline(project, rawTime) {
           utterance: clip.text,
           clipId: clip.id,
           source: "timeline",
+          phaseProgress: eased,
+          interactionProgress: progress,
         };
       }
     } else if (clip.type === "behavior" && target && progress < 1 && clip.behaviorAction) {
@@ -624,6 +634,9 @@ export function evaluateTimeline(project, rawTime) {
         utterance: clip.text,
         clipId: clip.id,
         source: "timeline",
+        phaseProgress: eased,
+        contactWeight: eased,
+        interactionProgress: progress,
       };
     }
   }
@@ -686,7 +699,15 @@ export function evaluateTimeline(project, rawTime) {
     const holder = objects[hold.actorId];
     if (!holder || holder.behaviorState !== "idle") continue;
     holder.behaviorState = "carry";
-    holder.behaviorContext = { targetId: hold.targetId, clipId: hold.id, source: "simulation" };
+    holder.behaviorContext = {
+      targetId: hold.targetId,
+      clipId: hold.id,
+      source: "simulation",
+      phase: "contact",
+      phaseProgress: 1,
+      contactWeight: 1,
+      interactionProgress: 1,
+    };
   }
 
   return {

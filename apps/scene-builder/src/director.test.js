@@ -276,11 +276,22 @@ describe("timeline evaluation", () => {
 
     expect(contact.objects.giver).toMatchObject({
       behaviorState: "transfer",
-      behaviorContext: { targetId: "item", recipientId: "receiver" },
+      behaviorContext: {
+        targetId: "item",
+        recipientId: "receiver",
+        phase: "contact",
+        contactWeight: 1,
+      },
     });
     expect(contact.objects.receiver).toMatchObject({
       behaviorState: "grasp",
-      behaviorContext: { targetId: "item", hand: "right", source: "timeline-recipient" },
+      behaviorContext: {
+        targetId: "item",
+        hand: "right",
+        source: "timeline-recipient",
+        phase: "contact",
+        contactWeight: 1,
+      },
     });
   });
 

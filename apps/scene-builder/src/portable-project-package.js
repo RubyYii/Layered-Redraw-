@@ -92,7 +92,13 @@ const validateBindingEntry = (entry) => {
 
 export async function persistPortableFiles(persistence, kind, descriptors) {
   if (!persistence?.available) throw new Error("当前浏览器无法持久化二进制资产。");
-  const expectedRoles = kind === "model" ? ["model"] : kind === "spatial-bridge" ? ["bridge", "depth", "rgb"] : null;
+  const expectedRoles = kind === "model"
+    ? ["model"]
+    : kind === "spatial-bridge"
+      ? ["bridge", "depth", "rgb"]
+      : kind === "single-image-model"
+        ? ["model", "rgb", "depth", "rig"]
+        : null;
   if (!expectedRoles) throw new Error("未知的可移植资产类型。");
   const byRole = new Map((descriptors ?? []).map((descriptor) => [descriptor.role, descriptor.file]));
   if (byRole.size !== expectedRoles.length || expectedRoles.some((role) => !byRole.get(role))) {
@@ -109,7 +115,7 @@ export async function persistPortableFiles(persistence, kind, descriptors) {
 
 export async function persistPortableFile(persistence, role, file) {
   if (!persistence?.available) throw new Error("当前浏览器无法持久化二进制资产。");
-  if (!["model", "animation", "bridge", "rgb", "depth"].includes(role)) throw new Error("未知的可移植资产角色。");
+  if (!["model", "animation", "bridge", "rgb", "depth", "rig"].includes(role)) throw new Error("未知的可移植资产角色。");
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (!bytes.byteLength || bytes.byteLength > MAX_ASSET_BYTES) throw new Error("资产文件大小超出限制。");
   const record = {

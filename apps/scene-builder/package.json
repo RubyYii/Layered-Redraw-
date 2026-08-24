@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:ui": "node scripts/smoke-test.mjs",
     "test:rig-editor": "node scripts/smoke-test-rig-editor.mjs",
+    "test:single-image-3d": "node scripts/smoke-test-single-image-3d.mjs",
     "test:camera-editor": "node scripts/smoke-test-camera-editor.mjs",
     "test:cp02": "node scripts/smoke-test-cp02.mjs",
     "test:simulation-replay": "node scripts/smoke-test-delivery-replay.mjs --package artifacts/interaction-simulation/interaction-simulation-30fps.simulation-package --screenshot artifacts/interaction-simulation/replay-smoke.png --seek 6",
@@ -32,6 +33,7 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
+    "@huggingface/transformers": "^3.8.1",
     "@layered-redraw/pact-cp03-contracts": "file:../../packages/pact-cp03-contracts",
     "fflate": "^0.8.3",
     "three": "^0.185.1"

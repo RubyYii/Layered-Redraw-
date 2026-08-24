@@ -8,6 +8,10 @@ import {
   surfaceContactPosition,
 } from "./interaction-runtime.js";
 import { selectIkSolvePolicy } from "./character-ik-runtime.js";
+import {
+  characterPerformanceProfile,
+  planTwoHandContactTargets,
+} from "./character-performance-runtime.js";
 import { Cp03VisualEffects } from "./cp03/visual-effects.js";
 
 const DEG_TO_RAD = Math.PI / 180;
@@ -1399,27 +1403,52 @@ export class ThreeSceneAdapter {
         synchronize: true,
         recaptureFootLocks: transformedAssetIds.has(behavior.actorId),
       });
+      const performance = characterPerformanceProfile(behavior.state ?? "idle", behavior);
       const targetMesh = behavior.targetId && behavior.targetId !== behavior.actorId
         ? this.meshes.get(behavior.targetId)
         : null;
-      if (!targetMesh || !["look", "reach", "grasp", "transfer", "release"].includes(behavior.state)) continue;
+      if (!targetMesh || !["look", "reach", "grasp", "carry", "transfer", "release"].includes(behavior.state)) continue;
       const targetBounds = new THREE.Box3().setFromObject(targetMesh);
       const targetWorld = targetBounds.isEmpty()
         ? targetMesh.getWorldPosition(new THREE.Vector3())
         : targetBounds.getCenter(new THREE.Vector3());
-      controller.setLookTarget?.(targetWorld, { weight: behavior.state === "look" ? 1 : 0.72 });
-      if (behavior.state !== "reach") continue;
-      const hand = behavior.hand ?? "auto";
+      controller.setLookTarget?.(targetWorld, {
+        weight: performance.gazeWeight,
+        maxDegrees: performance.gazeMaxDegrees,
+      });
+      if (performance.handWeight <= 0) continue;
+      const targetSize = targetBounds.getSize(new THREE.Vector3());
+      const contactWorld = new THREE.Vector3().fromArray(surfaceContactPosition(
+        actorMesh.getWorldPosition(new THREE.Vector3()).toArray(),
+        targetWorld.toArray(),
+        [targetSize.x / 2, targetSize.y / 2, targetSize.z / 2],
+        0.035,
+      ));
+      const hand = performance.hand;
       if (hand === "both") {
-        const width = Math.max(0.08, targetBounds.getSize(new THREE.Vector3()).x * 0.24);
         const actorRight = new THREE.Vector3(1, 0, 0)
           .applyQuaternion(actorMesh.getWorldQuaternion(new THREE.Quaternion()))
-          .normalize()
-          .multiplyScalar(width);
-        controller.setHandIk?.("leftHand", targetWorld.clone().sub(actorRight), { iterations: 8 });
-        controller.setHandIk?.("rightHand", targetWorld.clone().add(actorRight), { iterations: 8 });
+          .normalize();
+        const contactPlan = planTwoHandContactTargets({
+          center: contactWorld.toArray(),
+          rightAxis: actorRight.toArray(),
+          targetWidth: targetSize.x,
+        });
+        if (contactPlan.valid) {
+          controller.setHandIk?.("leftHand", contactPlan.leftHand, {
+            weight: performance.handWeight,
+            iterations: 8,
+          });
+          controller.setHandIk?.("rightHand", contactPlan.rightHand, {
+            weight: performance.handWeight,
+            iterations: 8,
+          });
+        }
       } else {
-        controller.setHandIk?.(hand === "left" ? "leftHand" : "rightHand", targetWorld, { iterations: 8 });
+        controller.setHandIk?.(hand === "left" ? "leftHand" : "rightHand", contactWorld, {
+          weight: performance.handWeight,
+          iterations: 8,
+        });
       }
     }
   }
@@ -1475,7 +1504,7 @@ export class ThreeSceneAdapter {
       armMesh.scale.set(armBase.scale.x, armBase.scale.y, length);
       this.timelineInteractionObjectIds.add(armSource.id);
     };
-    const moveEffector = (rootSource, anchorWorld, nodeRole, weight, contactMesh) => {
+    const moveEffector = (rootSource, anchorWorld, nodeRole, weight, contactMesh, hand = "auto") => {
       if (!rootSource || weight <= 0) return;
       const rootMesh = this.meshes.get(rootSource.id);
       if (!rootMesh) return;
@@ -1491,7 +1520,23 @@ export class ThreeSceneAdapter {
           [targetSize.x / 2, targetSize.y / 2, targetSize.z / 2],
           0.035,
         ));
-        runtimeController.setHandIk?.(nodeRole, contactWorld, { weight, iterations: 6 });
+        if (hand === "both" && runtimeController.report?.capabilities?.twoHandIk) {
+          const actorRight = new THREE.Vector3(1, 0, 0)
+            .applyQuaternion(rootMesh.getWorldQuaternion(new THREE.Quaternion()))
+            .normalize();
+          const contactPlan = planTwoHandContactTargets({
+            center: contactWorld.toArray(),
+            rightAxis: actorRight.toArray(),
+            targetWidth: targetSize.x,
+          });
+          if (contactPlan.valid) {
+            runtimeController.setHandIk?.("leftHand", contactPlan.leftHand, { weight, iterations: 6 });
+            runtimeController.setHandIk?.("rightHand", contactPlan.rightHand, { weight, iterations: 6 });
+            return;
+          }
+        }
+        const handSlot = hand === "left" ? "leftHand" : hand === "right" ? "rightHand" : nodeRole;
+        runtimeController.setHandIk?.(handSlot, contactWorld, { weight, iterations: 6 });
         return;
       }
       const effectorSource = descendantForRole(rootSource, nodeRole);
@@ -1540,7 +1585,14 @@ export class ThreeSceneAdapter {
         this.timelineInteractionObjectIds.add(targetSource.id);
       }
       this.scene.updateMatrixWorld(true);
-      moveEffector(actorSource, targetWorld, interaction.actorNode, effectorWeights.actor, contactMesh);
+      moveEffector(
+        actorSource,
+        targetWorld,
+        interaction.actorNode,
+        effectorWeights.actor,
+        contactMesh,
+        interaction.hand,
+      );
       if (interaction.recipientId) {
         moveEffector(
           sourceById.get(interaction.recipientId),
@@ -1548,6 +1600,7 @@ export class ThreeSceneAdapter {
           interaction.actorNode,
           effectorWeights.recipient,
           contactMesh,
+          interaction.hand,
         );
       }
     }

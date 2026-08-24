@@ -97,7 +97,12 @@ export const AGENT_BEHAVIOR_CONTRACT = Object.freeze({
   forbiddenFields: FORBIDDEN_INTENT_FIELDS,
   authority: Object.freeze({
     model: "semantic action selection only",
-    runtime: "transforms, pathfinding, collision, animation, IK and ownership",
+    runtime: "transforms, pathfinding, collision, animation, phase-aware performance, IK and ownership",
+  }),
+  performance: Object.freeze({
+    contactPlanning: "actor-local symmetric two-hand targets with bounded span",
+    bodyControl: "foot lock, head/neck gaze and reach-constrained limb IK",
+    expressionControl: "deterministic semantic expression and dialogue mouth envelopes",
   }),
 });
 

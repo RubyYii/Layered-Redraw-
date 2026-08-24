@@ -17,6 +17,30 @@ describe("character action state machine", () => {
     expect(animationSlotForCharacterAction("grasp")).toBe("interact");
   });
 
+  it("preserves bounded interaction phase values for deterministic performance cues", () => {
+    const machine = createCharacterActionStateMachine();
+    const result = machine.synchronize("reach", {
+      targetId: "cup",
+      hand: "both",
+      phase: "reach",
+      phaseProgress: 0.4,
+      contactWeight: 1.4,
+      interactionProgress: -2,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      context: {
+        targetId: "cup",
+        hand: "both",
+        phase: "reach",
+        phaseProgress: 0.4,
+        contactWeight: 1,
+        interactionProgress: 0,
+      },
+    });
+  });
+
   it("rejects impossible transitions and incomplete semantic context", () => {
     const machine = createCharacterActionStateMachine();
 

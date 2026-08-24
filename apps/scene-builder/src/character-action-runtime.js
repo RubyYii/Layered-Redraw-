@@ -30,18 +30,34 @@ const CONTEXT_FIELDS = new Set([
   "utterance",
   "clipId",
   "source",
+  "phase",
+  "phaseProgress",
+  "contactWeight",
+  "interactionProgress",
 ]);
 
+const NUMERIC_CONTEXT_FIELDS = new Set([
+  "phaseProgress",
+  "contactWeight",
+  "interactionProgress",
+]);
+const INTERACTION_PHASES = new Set(["anticipation", "reach", "contact", "recovery"]);
+
 const cleanContext = (value = {}) => Object.fromEntries(Object.entries(value)
-  .filter(([key, entry]) => (
-    CONTEXT_FIELDS.has(key)
-    && ["string", "number"].includes(typeof entry)
-    && String(entry).trim()
-  ))
-  .map(([key, entry]) => {
+  .flatMap(([key, entry]) => {
+    if (
+      !CONTEXT_FIELDS.has(key)
+      || !["string", "number"].includes(typeof entry)
+      || !String(entry).trim()
+    ) return [];
     const text = String(entry).trim();
-    if (key === "hand") return [key, ["auto", "left", "right", "both"].includes(text) ? text : "auto"];
-    return [key, text.slice(0, key === "utterance" ? 500 : 160)];
+    if (key === "hand") return [[key, ["auto", "left", "right", "both"].includes(text) ? text : "auto"]];
+    if (key === "phase") return INTERACTION_PHASES.has(text) ? [[key, text]] : [];
+    if (NUMERIC_CONTEXT_FIELDS.has(key)) {
+      const number = Number(entry);
+      return Number.isFinite(number) ? [[key, Math.min(1, Math.max(0, number))]] : [];
+    }
+    return [[key, text.slice(0, key === "utterance" ? 500 : 160)]];
   }));
 
 export const animationSlotForCharacterAction = (state) => ({

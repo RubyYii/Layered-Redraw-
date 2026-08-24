@@ -160,10 +160,13 @@ describe("replaceable OBJ/GLB asset bindings", () => {
     const head = new THREE.Bone();
     head.name = "Head";
     const geometry = new THREE.BoxGeometry(1, 2, 1);
-    geometry.morphAttributes.position = [geometry.attributes.position.clone()];
+    geometry.morphAttributes.position = [
+      geometry.attributes.position.clone(),
+      geometry.attributes.position.clone(),
+    ];
     const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
-    mesh.morphTargetDictionary = { Smile: 0 };
-    mesh.morphTargetInfluences = [0];
+    mesh.morphTargetDictionary = { Smile: 0, JawOpen: 1 };
+    mesh.morphTargetInfluences = [0, 0];
     scene.add(hand, head, mesh);
     const controller = createAssetController({
       scene,
@@ -172,21 +175,38 @@ describe("replaceable OBJ/GLB asset bindings", () => {
       animations: { idle: "Idle", move: "Walk" },
       nodes: { effector: "RightHand" },
       bones: { head: "Head" },
-      expressions: { smile: "Smile" },
+      expressions: { smile: "Smile", mouthOpen: "JawOpen" },
     }, "agent.glb");
 
     expect(controller.report.meshCount).toBe(1);
-    expect(controller.report).toMatchObject({ format: "GLB", boneCount: 1, morphTargetNames: ["Smile"], preserveAspect: true });
+    expect(controller.report).toMatchObject({
+      format: "GLB",
+      boneCount: 1,
+      morphTargetNames: ["Smile", "JawOpen"],
+      preserveAspect: true,
+      capabilities: { semanticPerformance: true, automaticExpressions: true },
+    });
     expect(controller.nodeFor("effector")).toBe(hand);
     expect(controller.boneFor("head")).toBe(head);
     expect(controller.setState("move")).toBe(true);
     expect(controller.setState("move")).toBe(false);
     expect(controller.playAction("Walk", { restart: true })).toBe(true);
     expect(controller.setExpression("smile", 0.75)).toBe(true);
+    expect(controller.setBehaviorState("speak", {
+      utterance: "The room remembers us.",
+      phaseProgress: 0.5,
+    }).ok).toBe(true);
     expect(controller.setBonePose("head", { rotationDegrees: [0, 30, 0] })).toBe(true);
     controller.fitToCarrier([2, 4, 8]);
     expect(() => controller.update(1 / 60)).not.toThrow();
     expect(mesh.morphTargetInfluences[0]).toBeCloseTo(0.75);
+    expect(mesh.morphTargetInfluences[1]).toBeGreaterThan(0);
+    expect(controller.getState()).toMatchObject({
+      performance: { state: "speak", footLock: true },
+      automaticExpressions: { JawOpen: expect.any(Number) },
+    });
+    expect(controller.setBehaviorState("idle").ok).toBe(true);
+    expect(mesh.morphTargetInfluences[1]).toBe(0);
     expect(head.rotation.y).toBeCloseTo(Math.PI / 6);
     expect(controller.root.scale.toArray()).toEqual([2, 1, 0.5]);
     controller.dispose();

@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import {
   animationSlotForCharacterAction,
-  characterActionUsesFootLock,
   createCharacterActionStateMachine,
 } from "./character-action-runtime.js";
+import { characterPerformanceProfile } from "./character-performance-runtime.js";
 import {
   autoMapRigBones,
   evaluateRigMapping,
@@ -261,10 +261,13 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
   const boneByUuid = new Map([...boneByName.values()].map((bone) => [bone.uuid, bone]));
   let mixer = clips.length ? new THREE.AnimationMixer(content) : null;
   const expressionOverrides = new Map();
+  let automaticExpressionOverrides = new Map();
+  const expressionNamesToClear = new Set();
   const bonePoseOverrides = new Map();
   const ikTargets = new Map();
   const ikPreSolve = new Map();
   const actionStateMachine = createCharacterActionStateMachine();
+  let performanceProfile = characterPerformanceProfile("idle");
   let lookTarget = null;
   const boneRestPose = new Map([...boneByName.values()].map((bone) => [bone.uuid, {
     position: bone.position.clone(),
@@ -294,11 +297,34 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
     return name ? boneByName.get(name) ?? null : null;
   };
   const applyExpressionOverrides = () => {
-    for (const [name, weight] of expressionOverrides) {
+    const names = new Set([
+      ...expressionNamesToClear,
+      ...automaticExpressionOverrides.keys(),
+      ...expressionOverrides.keys(),
+    ]);
+    for (const name of names) {
+      const weight = expressionOverrides.has(name)
+        ? expressionOverrides.get(name)
+        : automaticExpressionOverrides.get(name) ?? 0;
       for (const target of morphTargets.get(name) ?? []) {
         if (target.mesh.morphTargetInfluences) target.mesh.morphTargetInfluences[target.index] = weight;
       }
     }
+    expressionNamesToClear.clear();
+  };
+  const setAutomaticExpressions = (weights = {}) => {
+    const next = new Map();
+    for (const [slot, weight] of Object.entries(weights)) {
+      const name = resolveExpressionName(slot);
+      const safeWeight = clamp01(weight);
+      if (!name || safeWeight <= 0) continue;
+      next.set(name, Math.max(next.get(name) ?? 0, safeWeight));
+    }
+    for (const name of automaticExpressionOverrides.keys()) {
+      if (!next.has(name)) expressionNamesToClear.add(name);
+    }
+    automaticExpressionOverrides = next;
+    applyExpressionOverrides();
   };
   const applyBonePoseOverrides = () => {
     for (const { bone, pose } of bonePoseOverrides.values()) {
@@ -541,6 +567,9 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
         ikReachClamping: validChains.length > 0,
         ikBatching: validChains.length > 0,
         adaptiveIkBudget: validChains.length > 0,
+        semanticPerformance: true,
+        automaticExpressions: morphTargetNames.length > 0,
+        twoHandContactPlanning: handChains.length === 2,
       },
     };
   };
@@ -620,20 +649,18 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       if (!name) return false;
       if (exclusive) controller.clearExpressions();
       const safeWeight = clamp01(weight);
-      for (const target of morphTargets.get(name) ?? []) {
-        if (target.mesh.morphTargetInfluences) target.mesh.morphTargetInfluences[target.index] = safeWeight;
-      }
       if (safeWeight > 0) expressionOverrides.set(name, safeWeight);
-      else expressionOverrides.delete(name);
+      else {
+        expressionOverrides.delete(name);
+        expressionNamesToClear.add(name);
+      }
+      applyExpressionOverrides();
       return true;
     },
     clearExpressions() {
-      for (const name of expressionOverrides.keys()) {
-        for (const target of morphTargets.get(name) ?? []) {
-          if (target.mesh.morphTargetInfluences) target.mesh.morphTargetInfluences[target.index] = 0;
-        }
-      }
+      for (const name of expressionOverrides.keys()) expressionNamesToClear.add(name);
       expressionOverrides.clear();
+      applyExpressionOverrides();
     },
     beginIkBatch() {
       ikBatchDepth += 1;
@@ -763,6 +790,7 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       controller.clearIkTargets();
       rigConfig = nextRigConfig;
       rigBindings = nextRigBindings;
+      setAutomaticExpressions(performanceProfile.expressions);
       const nextRigReport = rigRuntimeReport();
       Object.assign(controller.report, {
         bones: nextRigReport.bones,
@@ -780,10 +808,12 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
         ? actionStateMachine.synchronize(state, context, { source: context.source ?? "timeline" })
         : actionStateMachine.transition(state, context, { source: context.source ?? "runtime" });
       if (!result.ok) return result;
+      performanceProfile = characterPerformanceProfile(state, result.context);
+      setAutomaticExpressions(performanceProfile.expressions);
       controller.setState(animationSlotForCharacterAction(state));
       controller.beginIkBatch();
       try {
-        if (!characterActionUsesFootLock(state)) {
+        if (!performanceProfile.footLock) {
           controller.clearFootLock("leftFoot");
           controller.clearFootLock("rightFoot");
         } else if (result.changed || recaptureFootLocks) {
@@ -897,6 +927,8 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
         actionSlot: currentSlot,
         behavior: { state: behavior.state, context: behavior.context, sequence: behavior.sequence },
         expressions: Object.fromEntries(expressionOverrides),
+        automaticExpressions: Object.fromEntries(automaticExpressionOverrides),
+        performance: structuredClone(performanceProfile),
         bonePoses: [...bonePoseOverrides.values()].map(({ bone }) => bone.name),
         ikTargets: [...ikTargets.keys()],
         footLocks: [...ikTargets.entries()].filter(([, entry]) => entry.locked).map(([slot]) => slot),
@@ -917,6 +949,8 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
     },
     dispose() {
       controller.clearIkTargets();
+      automaticExpressionOverrides.clear();
+      expressionNamesToClear.clear();
       mixer?.stopAllAction();
       mixer?.uncacheRoot(content);
       root.removeFromParent();

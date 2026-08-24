@@ -3,6 +3,7 @@ import catalogFixture from "../projects/window-case-cp02/asset-catalog.json" wit
 import cp02ProjectFixture from "../projects/window-case-cp02/cp02-mutable-room.blockout.json" with { type: "json" };
 import slotFixture from "../projects/window-case-cp02/scene-slots.json" with { type: "json" };
 import {
+  AGENT_BEHAVIOR_CONTRACT,
   buildAgentObservation,
   compileAgentBehaviorCommand,
   compileAgentPlan,
@@ -207,6 +208,14 @@ describe("LLM agent intent boundary", () => {
 });
 
 describe("constrained seven-action Agent behavior interface", () => {
+  it("keeps performance control inside the deterministic runtime contract", () => {
+    expect(AGENT_BEHAVIOR_CONTRACT.authority.runtime).toContain("phase-aware performance");
+    expect(AGENT_BEHAVIOR_CONTRACT.performance).toMatchObject({
+      contactPlanning: expect.stringContaining("two-hand"),
+      bodyControl: expect.stringContaining("foot lock"),
+      expressionControl: expect.stringContaining("deterministic"),
+    });
+  });
   it.each([
     [{ action: "approach", actorId: "interaction-actor-a", targetId: "interaction-cup" }, "move"],
     [{ action: "look", actorId: "interaction-actor-a", targetId: "interaction-cup" }, "behavior"],

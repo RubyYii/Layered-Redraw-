@@ -173,8 +173,8 @@ const normalizeNullableStringMap = (value, limit = 32) => {
     .filter(([key, entry]) => key && (entry === null || entry)));
 };
 
-const PORTABLE_ASSET_ROLES = new Set(["model", "animation", "bridge", "rgb", "depth"]);
-const PORTABLE_ASSET_KINDS = new Set(["model", "spatial-bridge"]);
+const PORTABLE_ASSET_ROLES = new Set(["model", "animation", "bridge", "rgb", "depth", "rig"]);
+const PORTABLE_ASSET_KINDS = new Set(["model", "spatial-bridge", "single-image-model"]);
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 
 const normalizePortableAsset = (value) => {
@@ -183,7 +183,7 @@ const normalizePortableAsset = (value) => {
   if (!kind) return null;
   const seenRoles = new Set();
   const entries = (Array.isArray(value.entries) ? value.entries : [])
-    .slice(0, 4)
+    .slice(0, 5)
     .map((entry) => {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
       const role = PORTABLE_ASSET_ROLES.has(entry.role) ? entry.role : null;
@@ -199,9 +199,14 @@ const normalizePortableAsset = (value) => {
     })
     .filter(Boolean)
     .sort((left, right) => left.role.localeCompare(right.role));
-  const requiredRoles = kind === "model" ? ["model"] : ["bridge", "depth", "rgb"];
+  const requiredRoles = kind === "model"
+    ? ["model"]
+    : kind === "single-image-model"
+      ? ["depth", "model", "rgb", "rig"]
+      : ["bridge", "depth", "rgb"];
   if (requiredRoles.some((role) => !seenRoles.has(role))) return null;
   if (kind === "model" && entries.some((entry) => !["model", "animation"].includes(entry.role))) return null;
+  if (kind === "single-image-model" && entries.length !== requiredRoles.length) return null;
   if (kind === "spatial-bridge" && entries.length !== requiredRoles.length) return null;
   return { schemaVersion: 1, kind, entries };
 };

@@ -89,4 +89,26 @@ describe("portable project package", () => {
     const restored = await filesForPortableBinding(destinationStore, imported.project.objects[0].asset.portable);
     expect(restored.map((entry) => entry.role).sort()).toEqual(["animation", "model"]);
   });
+
+  it("round-trips a reproducible single-image model with source, depth, and rig recipe", async () => {
+    const sourceStore = new MemoryPersistence();
+    const binding = await persistPortableFiles(sourceStore, "single-image-model", [
+      { role: "model", file: namedBlob("portrait.glb", [1, 2, 3], "model/gltf-binary") },
+      { role: "rgb", file: namedBlob("portrait-source.png", [4, 5], "image/png") },
+      { role: "depth", file: namedBlob("portrait-depth.png", [6, 7], "image/png") },
+      { role: "rig", file: namedBlob("portrait-rig.json", [123, 125], "application/json") },
+    ]);
+    const project = normalizeProject({
+      ...createEmptyProject("single-image-portable"),
+      objects: [{ id: "portrait", name: "Portrait", type: "plane", asset: { portable: binding } }],
+    });
+
+    const built = await createPortableProjectPackage(project, sourceStore, serializeProject);
+    const destinationStore = new MemoryPersistence();
+    const imported = await importPortableProjectPackage(built.blob, destinationStore, parseProject);
+    const restored = await filesForPortableBinding(destinationStore, imported.project.objects[0].asset.portable);
+
+    expect(imported.project.objects[0].asset.portable.kind).toBe("single-image-model");
+    expect(restored.map((entry) => entry.role).sort()).toEqual(["depth", "model", "rgb", "rig"]);
+  });
 });
