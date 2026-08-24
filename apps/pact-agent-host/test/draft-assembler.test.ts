@@ -490,6 +490,29 @@ describe('deterministic council draft assembler', () => {
     });
   });
 
+  it('rejects Guardian contested evidence absent from the selected Witness shard', async () => {
+    const fixtures = await createFullCouncilFixtures();
+    const guardian = fixtures.shards.Guardian as GuardianShard;
+    const shards = {
+      ...validShards(fixtures.shards),
+      Guardian: {
+        ...guardian,
+        childSessionId: validChildSessionIds.Guardian,
+        content: {
+          ...guardian.content,
+          contestedEvidenceIds: ['observation_missing01'],
+        },
+      } as GuardianShard,
+    };
+
+    const result = await assembleCouncilDraft(await makeInputWithShards(shards));
+
+    expect(result).toMatchObject({
+      status: 'NEEDS_CLARIFICATION',
+      reasonCodes: ['ASSEMBLY_CONTESTED_EVIDENCE_UNKNOWN'],
+    });
+  });
+
   it('rejects duplicate Witness observation IDs before copying evidence', async () => {
     const fixtures = await createFullCouncilFixtures();
     const witness = fixtures.shards.Witness as WitnessShard;

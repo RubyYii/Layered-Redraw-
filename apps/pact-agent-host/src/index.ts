@@ -60,6 +60,26 @@ export {
   registerCouncilTools,
 } from './council-tools.js';
 export {
+  CouncilToolBindingRegistry,
+  type CouncilToolBinding,
+  type CouncilToolPhase,
+} from './council-tool-binding.js';
+export {
+  bindConductorCommitSubmission,
+  bindCouncilRoleSubmission,
+  type BindConductorCommitSubmissionInput,
+  type BindCouncilRoleSubmissionInput,
+  type ConductorCommitSubmission,
+  type CouncilRoleSubmission,
+} from './council-submission-binding.js';
+export {
+  CouncilReferenceValidationError,
+  validateCouncilAssemblyReferences,
+  validateCouncilShardReferences,
+  type CouncilAssemblyReferenceFailure,
+  type CouncilReferenceErrorCode,
+} from './council-reference-validation.js';
+export {
   durableConductorCommit,
   durableCouncilShard,
   recoverCouncilTraceProjection,

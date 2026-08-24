@@ -29,7 +29,11 @@ declare module '@layered-redraw/pact-cp03-contracts' {
 
   export const agentContributionSchema: Readonly<Record<string, unknown>>;
   export const agentActionDraftSchema: Readonly<Record<string, unknown>>;
+  export const conductorCommitSubmissionSchema:
+    Readonly<Record<string, unknown>>;
   export const councilShardSchema: Readonly<Record<string, unknown>>;
+  export const councilRoleSubmissionSchema:
+    Readonly<Record<string, unknown>>;
   export const conductorDraftCommitSchema: Readonly<Record<string, unknown>>;
   export const providerCallEnvelopeSchema: Readonly<Record<string, unknown>>;
   export const providerRoutingManifestSchema:
@@ -41,6 +45,8 @@ declare module '@layered-redraw/pact-cp03-contracts' {
     value: unknown,
   ): AgentContribution;
   export function validateAgentActionDraft(value: unknown): AgentActionDraft;
+  export function validateConductorCommitSubmission(value: unknown): unknown;
+  export function validateCouncilRoleSubmission(value: unknown): unknown;
   export function validateCouncilShard(value: unknown): CouncilShard;
   export function validateConductorDraftCommit(
     value: unknown,

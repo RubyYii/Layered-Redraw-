@@ -7,21 +7,25 @@ import type {
   ToolRunContext,
 } from '@deepseek-ai/dsh-tools';
 import {
-  conductorDraftCommitSchema,
-  councilShardSchema,
-  validateConductorDraftCommit,
-  validateCouncilShard,
+  conductorCommitSubmissionSchema,
+  councilRoleSubmissionSchema,
 } from '@layered-redraw/pact-cp03-contracts';
 
-import type {
-  CouncilShard,
-  ConductorDraftCommit,
-} from './contract-types.js';
 import {
   CouncilRegistry,
   type CouncilCommitReceipt,
   type CouncilShardReceipt,
 } from './council-registry.js';
+import {
+  bindConductorCommitSubmission,
+  bindCouncilRoleSubmission,
+} from './council-submission-binding.js';
+import {
+  CouncilToolBindingRegistry,
+} from './council-tool-binding.js';
+import {
+  validateCouncilShardReferences,
+} from './council-reference-validation.js';
 import type { PactRole } from './events.js';
 import { SubmissionRegistry } from './submission-registry.js';
 
@@ -102,24 +106,32 @@ const assertRole = (
 
 export const councilToolDefinitions = (
   registry: CouncilRegistry,
+  toolBindings: CouncilToolBindingRegistry,
   submissions: SubmissionRegistry = registry.submissions,
 ): readonly ToolDefinition[] => {
   const submitShard = {
     name: 'pact_submit_council_shard',
     description:
-      'Submit one typed council-v2 shard from the runtime-bound council role.',
-    parameters: councilShardSchema,
+      'Submit only agent-owned council role content; the host binds runtime identity.',
+    parameters: councilRoleSubmissionSchema,
     output: receiptOutput,
     async execute(args: unknown, exec: ToolRunContext): Promise<CouncilShardReceipt> {
       const agent = requireAgent(exec);
-      const binding = submissions.bindingFor(agent.id);
-      const shard = validateCouncilShard(args) as CouncilShard;
+      const roleBinding = submissions.bindingFor(agent.id);
+      const toolBinding = toolBindings.require(agent.id);
       if (
-        shard.role !== binding.role ||
-        shard.childSessionId !== String(agent.id)
+        String(toolBinding.sessionId) !== String(agent.id) ||
+        toolBinding.role !== roleBinding.role
       ) {
         throw new Error('PACT_ROLE_OR_SESSION_FORGERY');
       }
+      const turn = registry.frozenTurn(toolBinding.turn.snapshot.turnId);
+      const shard = bindCouncilRoleSubmission({
+        binding: toolBinding,
+        turn,
+        submission: args,
+      });
+      validateCouncilShardReferences(turn, shard);
       return registry.acceptShard(agent.session, shard);
     },
   } satisfies ToolDefinition;
@@ -127,12 +139,18 @@ export const councilToolDefinitions = (
   const submitCommit = {
     name: 'pact_submit_conductor_commit',
     description:
-      'Submit one typed conductor commit; assembly remains behind durability.',
-    parameters: conductorDraftCommitSchema,
+      'Submit only the Conductor selection; the host binds turn identity and status.',
+    parameters: conductorCommitSubmissionSchema,
     output: receiptOutput,
     async execute(args: unknown, exec: ToolRunContext): Promise<CouncilCommitReceipt> {
       const agent = assertRole(submissions, exec, 'CaseConductor');
-      const commit = validateConductorDraftCommit(args) as ConductorDraftCommit;
+      const toolBinding = toolBindings.require(agent.id);
+      const turn = registry.frozenTurn(toolBinding.turn.snapshot.turnId);
+      const commit = bindConductorCommitSubmission({
+        binding: toolBinding,
+        turn,
+        submission: args,
+      });
       return registry.acceptCommit(agent.session, commit);
     },
   } satisfies ToolDefinition;
@@ -143,11 +161,14 @@ export const councilToolDefinitions = (
 export const registerCouncilTools = (
   ctx: Context,
   registry: CouncilRegistry,
+  toolBindings: CouncilToolBindingRegistry,
 ): (() => void) => {
   const submissions = registry.submissions;
-  const disposers = councilToolDefinitions(registry, submissions).map((definition) =>
-    ctx.tools.register(definition)
-  );
+  const disposers = councilToolDefinitions(
+    registry,
+    toolBindings,
+    submissions,
+  ).map((definition) => ctx.tools.register(definition));
   let active = true;
   return () => {
     if (!active) return;

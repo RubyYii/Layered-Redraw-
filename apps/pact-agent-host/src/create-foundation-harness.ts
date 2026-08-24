@@ -30,6 +30,7 @@ import {
   registerCouncilTools,
 } from './council-tools.js';
 import { CouncilRegistry } from './council-registry.js';
+import { CouncilToolBindingRegistry } from './council-tool-binding.js';
 import { SubmissionRegistry } from './submission-registry.js';
 
 const childRoleByLabel = new Map<string, Exclude<PactRole, 'CaseConductor'>>([
@@ -86,6 +87,7 @@ export interface FoundationHarness {
   readonly ctx: Context;
   readonly registry: SubmissionRegistry;
   readonly councilRegistry?: CouncilRegistry;
+  readonly councilToolBindings?: CouncilToolBindingRegistry;
   readonly persistenceRoot: string;
   createConductor(
     sessionId: SessionId,
@@ -136,10 +138,13 @@ export const createFoundationHarness = async (
       ? new CouncilRegistry({ submissions: registry })
       : new CouncilRegistry({ submissions: registry, now: options.now })
     : undefined;
+  const councilToolBindings = councilRegistry === undefined
+    ? undefined
+    : new CouncilToolBindingRegistry();
   if (councilRegistry === undefined) {
     registerPactTools(ctx, registry);
   } else {
-    registerCouncilTools(ctx, councilRegistry);
+    registerCouncilTools(ctx, councilRegistry, councilToolBindings!);
   }
   ctx.subagents.registerContinuableSetup((childCtx) => {
     const child = childCtx.agent;
@@ -167,6 +172,7 @@ export const createFoundationHarness = async (
     ctx,
     registry,
     ...(councilRegistry === undefined ? {} : { councilRegistry }),
+    ...(councilToolBindings === undefined ? {} : { councilToolBindings }),
     persistenceRoot: options.persistenceRoot,
     createConductor: async (sessionId, conductorOptions = {}) => {
       const handle = await ctx.agents.create({
