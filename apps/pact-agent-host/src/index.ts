@@ -73,10 +73,12 @@ export {
   type CouncilRoleSubmission,
 } from './council-submission-binding.js';
 export {
+  allowedCouncilReferences,
   CouncilReferenceValidationError,
   validateCouncilAssemblyReferences,
   validateCouncilShardReferences,
   type CouncilAssemblyReferenceFailure,
+  type AllowedCouncilReferences,
   type CouncilReferenceErrorCode,
 } from './council-reference-validation.js';
 export {

@@ -4,6 +4,41 @@ import type {
 } from './contract-types.js';
 import type { FrozenCouncilTurn } from './council-turn.js';
 
+export interface AllowedCouncilReferences {
+  readonly registeredAssetIds: readonly string[];
+  readonly registeredSpatialBridgeIds: readonly string[];
+  readonly registeredRightsIds: readonly string[];
+  readonly registeredSceneObjectIds: readonly string[];
+  readonly registeredAffordanceIds: readonly string[];
+  readonly supportedRollbackCapabilityIds: readonly string[];
+  readonly allowedSemanticCapabilityIds: readonly string[];
+  readonly sourceLockIds: readonly string[];
+  readonly inputRefIds: readonly string[];
+}
+
+const frozenList = (values: readonly string[]): readonly string[] =>
+  Object.freeze([...values]);
+
+export const allowedCouncilReferences = (
+  turn: FrozenCouncilTurn,
+): AllowedCouncilReferences => Object.freeze({
+  registeredAssetIds: frozenList(turn.snapshot.registeredAssetIds),
+  registeredSpatialBridgeIds: frozenList(
+    turn.snapshot.registeredSpatialBridgeIds,
+  ),
+  registeredRightsIds: frozenList(turn.snapshot.registeredRightsIds),
+  registeredSceneObjectIds: frozenList(turn.snapshot.registeredSceneObjectIds),
+  registeredAffordanceIds: frozenList(turn.snapshot.registeredAffordanceIds),
+  supportedRollbackCapabilityIds: frozenList(
+    turn.snapshot.supportedRollbackCapabilityIds,
+  ),
+  allowedSemanticCapabilityIds: frozenList(
+    turn.snapshot.allowedSemanticCapabilityIds,
+  ),
+  sourceLockIds: frozenList(turn.snapshot.sourceLockIds),
+  inputRefIds: frozenList(turn.snapshot.inputRefs.map(({ refId }) => refId)),
+});
+
 export type CouncilReferenceErrorCode =
   | 'PACT_COUNCIL_REFERENCE_UNKNOWN'
   | 'PACT_COUNCIL_REFERENCE_UNAVAILABLE'

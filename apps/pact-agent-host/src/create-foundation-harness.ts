@@ -154,9 +154,12 @@ export const createFoundationHarness = async (
     const releaseIdentity = childCtx.systemPrompt.section({
       name: 'pact:runtime-identity',
       order: 10,
-      text:
-        `PACT runtime identity: role=${role}; sessionId=${child.id}. ` +
-        'Use these exact runtime-bound values in PACT tool arguments; never invent or alter them.',
+      text: councilRegistry === undefined
+        ? `PACT runtime identity: role=${role}; sessionId=${child.id}. ` +
+          'Use these exact runtime-bound values in PACT tool arguments; never invent or alter them.'
+        : `PACT runtime role=${role}. The host binds session, turn, phase, ` +
+          'schema, hashes, versions, deadline, and shard identity. Submit only ' +
+          'the agent-owned fields exposed by the council tool.',
     });
     if (councilRegistry !== undefined) {
       childCtx.tools.restrict({ allow: COUNCIL_ROLE_TOOLS });
@@ -190,9 +193,12 @@ export const createFoundationHarness = async (
           agentCtx.systemPrompt.section({
             name: 'pact:runtime-identity',
             order: 10,
-            text:
-              `PACT runtime identity: role=CaseConductor; sessionId=${conductor.id}. ` +
-              'Use these exact runtime-bound values in PACT tool arguments; never invent or alter them.',
+            text: councilRegistry === undefined
+              ? `PACT runtime identity: role=CaseConductor; sessionId=${conductor.id}. ` +
+                'Use these exact runtime-bound values in PACT tool arguments; never invent or alter them.'
+              : 'PACT runtime role=CaseConductor. The host binds session, turn, ' +
+                'phase, schema, hashes, versions, deadline, and shard identity. ' +
+                'Submit only the agent-owned fields exposed by the council tool.',
           });
           agentCtx.tools.restrict({
             allow: councilRegistry === undefined

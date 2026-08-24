@@ -27,6 +27,12 @@ import {
   type FoundationHarness,
 } from './create-foundation-harness.js';
 import {
+  allowedCouncilReferences,
+  CouncilReferenceValidationError,
+  validateCouncilShardReferences,
+  type AllowedCouncilReferences,
+} from './council-reference-validation.js';
+import {
   freezeCouncilTurn,
   type FrozenCouncilTurn,
 } from './council-turn.js';
@@ -193,10 +199,7 @@ const turnFor = async (
       'synthetic-actor-01',
     ],
     registeredAffordanceIds: ['pickup', 'place'],
-    registeredRightsIds: [
-      'rights_synthetic_fixture_only',
-      'rights_no_production_licence_claim',
-    ],
+    registeredRightsIds: ['rights_synthetic_fixture'],
     supportedRollbackCapabilityIds: [
       'restore-scene-snapshot',
       'release-object-claim',
@@ -222,7 +225,7 @@ const turnFor = async (
 };
 
 export interface ModelBakeoffPromptContext {
-  readonly contextVersion: 'cp03-model-bakeoff-prompt-context/0.2';
+  readonly contextVersion: 'cp03-model-bakeoff-prompt-context/0.3';
   readonly runId: string;
   readonly approvalId: string;
   readonly caseId: string;
@@ -230,15 +233,7 @@ export interface ModelBakeoffPromptContext {
   readonly role: ModelBakeoffRole;
   readonly repetition: 1 | 2;
   readonly continuityKey: string | null;
-  readonly turn: {
-    readonly caseSessionId: string;
-    readonly turnId: string;
-    readonly snapshotHash: string;
-    readonly parentSceneHash: string;
-    readonly registryVersion: string;
-    readonly routingManifestVersion: string;
-    readonly deadlineId: string;
-  };
+  readonly allowedReferences: AllowedCouncilReferences;
   readonly imageInputRefId: typeof SYNTHETIC_IMAGE_REF | null;
   readonly priorAcceptedShardHashes: readonly string[];
 }
@@ -306,9 +301,11 @@ interface DispatchObservation {
   session: Session | null;
   agent: Agent | null;
   toolCallCount: number;
+  firstToolResultErrorCode: string | null;
   acceptedEvents: SessionEvent[];
   quarantineCount: number;
   firstPublicTraceAtMs: number | null;
+  releaseToolBinding: (() => void) | null;
 }
 
 interface CandidateScope {
@@ -322,6 +319,7 @@ interface CandidateScope {
   activeTurn: FrozenCouncilTurn | null;
   active: DispatchObservation | null;
   pendingChild: DispatchObservation | null;
+  pendingChildRole: Exclude<ModelBakeoffRole, 'CaseConductor'> | null;
   disposed: boolean;
 }
 
@@ -333,6 +331,20 @@ const appendObserved = (
   if (observation.capture.sessionId !== String(session.id)) return;
   if (event.type === 'tool/call') observation.toolCallCount += 1;
   if (event.type === 'tool/result' && observation.toolCallCount > 0) {
+    if (observation.firstToolResultErrorCode === null) {
+      const block = event.data.message.content[0];
+      if (
+        block?.type === 'tool-result' &&
+        (block.isError === true || event.data.error !== undefined)
+      ) {
+        const bounded = JSON.stringify(block).slice(0, 8_192);
+        observation.firstToolResultErrorCode =
+          bounded.includes('PACT_COUNCIL_REFERENCE_') ||
+          bounded.includes('PACT_COUNCIL_EXPECTED_CHANGES_MISMATCH')
+            ? 'MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED'
+            : 'MODEL_BAKEOFF_SCHEMA_REJECTED';
+      }
+    }
     observation.agent?.cancel({ kind: 'user' });
   }
   if (event.type === 'pact/quarantine') observation.quarantineCount += 1;
@@ -403,94 +415,6 @@ const latestTurnRange = (session: Session): {
         ? end.data.reason.error.code
         : null,
   };
-};
-
-const outputKindFor = (phase: ModelBakeoffPhase): string => {
-  switch (phase) {
-    case 'ConductorIntent': return 'CONDUCTOR_INTENT';
-    case 'Archivist': return 'ARCHIVIST';
-    case 'Guardian': return 'GUARDIAN';
-    case 'Witness': return 'WITNESS';
-    case 'Rewriter': return 'REWRITER';
-    case 'ConductorCommit': return 'CONDUCTOR_DRAFT_COMMIT';
-  }
-};
-
-const containsEvery = (
-  values: readonly string[],
-  allowed: ReadonlySet<string>,
-): boolean => values.every((value) => allowed.has(value));
-
-const validateModelBakeoffReferences = (
-  shard: CouncilShard,
-  turn: FrozenCouncilTurn,
-): void => {
-  const snapshot = turn.snapshot;
-  const inputRefIds = new Set(snapshot.inputRefs.map(({ refId }) => refId));
-  const assetIds = new Set(snapshot.registeredAssetIds);
-  const spatialBridgeIds = new Set(snapshot.registeredSpatialBridgeIds);
-  const sceneObjectIds = new Set(snapshot.registeredSceneObjectIds);
-  const affordanceIds = new Set(snapshot.registeredAffordanceIds);
-  const rightsIds = new Set(snapshot.registeredRightsIds);
-  const rollbackIds = new Set(snapshot.supportedRollbackCapabilityIds);
-  const sourceLockIds = new Set(snapshot.sourceLockIds);
-  const semanticCapabilityIds = new Set(snapshot.allowedSemanticCapabilityIds);
-  const evidenceIds = new Set([
-    ...inputRefIds,
-    ...assetIds,
-    ...spatialBridgeIds,
-    ...sceneObjectIds,
-    ...rightsIds,
-    ...sourceLockIds,
-  ]);
-  const reject = (): never => {
-    throw new Error('MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED');
-  };
-
-  if (!containsEvery(shard.evidenceAnchors, evidenceIds)) reject();
-  switch (shard.kind) {
-    case 'CONDUCTOR_INTENT':
-      return;
-    case 'WITNESS':
-      if (shard.content.observations.some(({ inputRefIds: refs }) =>
-        !containsEvery(refs, inputRefIds)
-      )) reject();
-      return;
-    case 'ARCHIVIST':
-      if (
-        !containsEvery(shard.content.requestedAssetIds, assetIds)
-        || !containsEvery(shard.content.requestedSpatialBridgeIds, spatialBridgeIds)
-        || !containsEvery(shard.content.provenanceAnchors, evidenceIds)
-        || !containsEvery(shard.content.rightsRequirements, rightsIds)
-      ) reject();
-      return;
-    case 'REWRITER':
-      if (!containsEvery(shard.content.expectedChanges, sceneObjectIds)) reject();
-      for (const call of shard.content.semanticCapabilityCalls) {
-        if (
-          !semanticCapabilityIds.has(call.capability)
-          || !sceneObjectIds.has(call.arguments.actorId)
-          || !sceneObjectIds.has(call.arguments.targetId)
-          || !affordanceIds.has(call.arguments.affordance)
-          || (call.arguments.recipientId !== undefined
-            && !sceneObjectIds.has(call.arguments.recipientId))
-          || (call.arguments.placementTargetId !== undefined
-            && !sceneObjectIds.has(call.arguments.placementTargetId))
-        ) reject();
-      }
-      return;
-    case 'GUARDIAN':
-      if (
-        !containsEvery(shard.content.requiredSourceLockIds, sourceLockIds)
-        || !containsEvery(shard.content.requiredRightsIds, rightsIds)
-        || !containsEvery(shard.content.requiredRollbackCapabilityIds, rollbackIds)
-        || !containsEvery(shard.content.contestedEvidenceIds, evidenceIds)
-        || shard.content.requiredDissentRecords.some(({ evidenceIds: refs }) =>
-          !containsEvery(refs, evidenceIds)
-        )
-      ) reject();
-      return;
-  }
 };
 
 const eventPayload = (event: SessionEvent): unknown =>
@@ -626,15 +550,21 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         session: null,
         agent: null,
         toolCallCount: 0,
+        firstToolResultErrorCode: null,
         acceptedEvents: [],
         quarantineCount: 0,
         firstPublicTraceAtMs: null,
+        releaseToolBinding: null,
       };
       scope.active = observation;
 
       turn = await turnFor(request.case, this.now, request.attemptId);
       scope.activeTurn = turn;
       scope.harness.councilRegistry?.openTurn(turn);
+      const toolBindings = scope.harness.councilToolBindings;
+      if (toolBindings === undefined) {
+        throw new Error('MODEL_BAKEOFF_COUNCIL_TOOL_BINDINGS_MISSING');
+      }
       const prompt = this.promptFor(request, scope, turn);
       promptImageBlockCount = prompt.filter(({ type }) => type === 'image').length;
       const remainingBeforeDrive = HARD_ATTEMPT_TIMEOUT_MS - (this.now() - startedAtMs);
@@ -653,6 +583,14 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         observation.session = scope.conductor.agent.session;
         observation.agent = scope.conductor.agent;
         observation.capture.sessionId = String(scope.conductor.agent.id);
+        observation.releaseToolBinding = toolBindings.bind({
+          sessionId: scope.conductor.agent.id,
+          role: 'CaseConductor',
+          phase: request.case.phase === 'ConductorCommit'
+            ? 'CONDUCTOR_COMMIT'
+            : 'SHARD',
+          turn,
+        });
         session = scope.conductor.agent.session;
         turnNumber = session.events.filter((event) => event.type === 'turn/start').length + 1;
         if (timedOut) scope.conductor.agent.cancel({ kind: 'user' });
@@ -665,6 +603,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         scope.settlementParents.push(parent);
         scope.pendingChild = observation;
         const role = request.case.role as Exclude<ModelBakeoffRole, 'CaseConductor'>;
+        scope.pendingChildRole = role;
         const childAbort = new AbortController();
         const started = await scope.harness.ctx.subagents.startContinuable({
           provider: 'spawn',
@@ -685,6 +624,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
           signal: childAbort.signal,
         });
         scope.pendingChild = null;
+        scope.pendingChildRole = null;
         const child = scope.harness.ctx.agents.get(started.childId);
         if (child === undefined) throw new Error('MODEL_BAKEOFF_CHILD_MISSING');
         observation.agent = child;
@@ -733,21 +673,30 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
             ) {
               throw new Error('MODEL_BAKEOFF_IMAGE_GROUNDING_MISSING');
             }
-            validateModelBakeoffReferences(shard, turn);
+            validateCouncilShardReferences(turn, shard);
             referencesValid = true;
           }
           schemaValid = true;
         } catch (error) {
           const code = detailCode(error, this.options.forbiddenSubstrings);
-          if (code === 'MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED') {
+          if (error instanceof CouncilReferenceValidationError) {
             schemaValid = true;
             referencesValid = false;
-            referenceFailureCode = code;
+            referenceFailureCode = 'MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED';
           } else {
             schemaValid = false;
             schemaFailureCode = code;
           }
         }
+      } else if (
+        observation.firstToolResultErrorCode ===
+          'MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED'
+      ) {
+        schemaValid = true;
+        referencesValid = false;
+        referenceFailureCode = 'MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED';
+      } else if (observation.firstToolResultErrorCode !== null) {
+        schemaFailureCode = observation.firstToolResultErrorCode;
       } else if (acceptedEvent !== null) {
         schemaFailureCode = `MODEL_BAKEOFF_ACCEPTED_PAYLOAD_MISSING_${detailCode(acceptedEvent.type)}`;
       }
@@ -843,7 +792,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         resultKind = 'schema_failure';
         resultDetailCode = schemaFailureCode;
       } else if (!referencesValid) {
-        resultKind = 'content_failure';
+        resultKind = 'grounding_failure';
         resultDetailCode = referenceFailureCode;
       } else {
         resultKind = 'content_failure';
@@ -996,6 +945,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
       return result;
     } finally {
       if (scope !== null) {
+        observation?.releaseToolBinding?.();
         if (scope.activeTurn !== null) {
           try {
             scope.harness.councilRegistry?.closeTurn(scope.activeTurn.snapshot.turnId);
@@ -1005,6 +955,8 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
           scope.activeTurn = null;
         }
         scope.active = null;
+        scope.pendingChild = null;
+        scope.pendingChildRole = null;
       }
     }
   }
@@ -1069,6 +1021,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         activeTurn: null,
         active: null,
         pendingChild: null,
+        pendingChildRole: null,
         disposed: false,
       };
       harness.ctx.subagents.registerContinuableSetup((childCtx) => {
@@ -1077,10 +1030,23 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         }
         const child = childCtx.agent;
         if (child === undefined) throw new Error('MODEL_BAKEOFF_CHILD_MISSING');
+        if (scope.pendingChildRole === null || scope.activeTurn === null) {
+          throw new Error('MODEL_BAKEOFF_CHILD_BINDING_MISSING');
+        }
         scope.pendingChild.session = child.session;
         scope.pendingChild.agent = child;
         scope.pendingChild.capture.sessionId = String(child.id);
-        return () => undefined;
+        const release = scope.harness.councilToolBindings?.bind({
+          sessionId: child.id,
+          role: scope.pendingChildRole,
+          phase: 'SHARD',
+          turn: scope.activeTurn,
+        });
+        if (release === undefined) {
+          throw new Error('MODEL_BAKEOFF_COUNCIL_TOOL_BINDINGS_MISSING');
+        }
+        scope.pendingChild.releaseToolBinding = release;
+        return release;
       });
       harness.ctx.on('tools/pre-execute', async (exec, next) => {
         const active = scope?.active;
@@ -1164,9 +1130,8 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
     if (imageRole && scope.imageBlock === null) {
       throw new Error('MODEL_BAKEOFF_SYNTHETIC_IMAGE_MISSING');
     }
-    const snapshot = turn.snapshot;
     const context: ModelBakeoffPromptContext = deepFreeze({
-      contextVersion: 'cp03-model-bakeoff-prompt-context/0.2',
+      contextVersion: 'cp03-model-bakeoff-prompt-context/0.3',
       runId: request.runId,
       approvalId: request.approvalId,
       caseId: request.case.caseId,
@@ -1174,25 +1139,16 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
       role: request.case.role,
       repetition: request.case.repetition,
       continuityKey: request.case.continuityKey,
-      turn: {
-        caseSessionId: snapshot.caseSessionId,
-        turnId: snapshot.turnId,
-        snapshotHash: turn.snapshotHash,
-        parentSceneHash: snapshot.parentSceneHash,
-        registryVersion: snapshot.registryVersion,
-        routingManifestVersion: snapshot.routingManifestVersion,
-        deadlineId: snapshot.deadlineId,
-      },
+      allowedReferences: allowedCouncilReferences(turn),
       imageInputRefId: imageRole ? SYNTHETIC_IMAGE_REF : null,
       priorAcceptedShardHashes: [...scope.acceptedShardHashes],
     });
     const toolArgumentRules = deepFreeze({
       argumentShape: 'direct-object',
-      outputSchemaVersion: 'cp03-council/0.2',
-      outputKind: outputKindFor(request.case.phase),
-      outputRole: request.case.role,
+      modelFacingContract: request.case.phase === 'ConductorCommit'
+        ? 'conductor-commit-submission/0.1'
+        : 'council-role-submission/0.1',
       semanticCapabilityId: 'performRegisteredInteraction',
-      registeredRightsIds: [...snapshot.registeredRightsIds],
     });
     const template = this.options.fixtures.promptManifest.templates[request.case.phase];
     if (template === undefined) throw new Error('MODEL_BAKEOFF_PROMPT_TEMPLATE_MISSING');
@@ -1202,7 +1158,7 @@ class DshModelBakeoffTransport implements ModelBakeoffDshTransport {
         template,
         'Use only the immutable fictional fixture below. Call the phase tool exactly once.',
         'Pass one JSON object directly as the tool arguments: never wrap it under shard or argument and never JSON-stringify it.',
-        'For the tool argument field schemaVersion, copy outputSchemaVersion from PACT_BAKEOFF_TOOL_ARGUMENT_RULES_JSON; never copy a context or fixture version.',
+        'Author only fields in modelFacingContract. The host binds role, kind, session, turn, schema, hashes, versions, deadline, shard identity, and commit status; never add those fields.',
         'For Rewriter semanticCapabilityCalls, capability must equal semanticCapabilityId from the same rules object.',
         `PACT_BAKEOFF_TOOL_ARGUMENT_RULES_JSON=${canonicalJson(toolArgumentRules)}`,
         `PACT_BAKEOFF_CONTEXT_JSON=${canonicalJson(context)}`,

@@ -15,7 +15,7 @@ describe('model bakeoff fixtures', () => {
     const { fixtureManifestSha256, ...unsignedManifest } = fixtures.manifest;
 
     expect(fixtures.manifest).toMatchObject({
-      schemaVersion: 'cp03-model-bakeoff-fixtures/0.1',
+      schemaVersion: 'cp03-model-bakeoff-fixtures/0.2',
       syntheticImage: {
         inputRefId: 'synthetic-spatial-image-01',
         mediaType: 'image/png',
@@ -25,11 +25,11 @@ describe('model bakeoff fixtures', () => {
         sha256: '138a8df995ff3d991c2b62b44673148d5286b8c2973ca08095225a9fcd3a6f27',
       },
       promptManifestSha256:
-        '1f1e01b41f37b79742ad1b49e3980f2eea2e0480768188f835401c0399cdbbf8',
+        '04a650d91227e3757881cd2e0bf72a9ce1069edd3e35dfee1c38681bdc136e65',
       schemaManifestSha256:
-        '831f7c184ac418f15683bccf34b0e21a7b985f789791f1708bf74b4a02a16f16',
+        '231bea0a134a514aa143e8d049ce1eb9e9935d0302820a5a53c98738cbb9138d',
       fixtureManifestSha256:
-        '62246223ddbe6e86de584639c4058c192a38bdda108fe60734f49ddf98d1c7ef',
+        '3dff87b785fe64b2adbe4a63ebad04b36fc6ebef289067b42802544bb4477c50',
     });
     expect(sha256(fixtures.syntheticImage)).toBe(fixtures.manifest.syntheticImage.sha256);
     expect(sha256(canonicalJson(fixtures.promptManifest))).toBe(
@@ -65,8 +65,7 @@ describe('model bakeoff fixtures', () => {
       entry.provenance === 'programmatic-test-fixture' && !entry.productionAsset
     )).toBe(true);
     expect(manifest.rights).toEqual([
-      'rights_synthetic_fixture_only',
-      'rights_no_production_licence_claim',
+      'rights_synthetic_fixture',
     ]);
     expect(manifest.rollbackCapabilities).toEqual([
       'restore-scene-snapshot',
@@ -76,6 +75,33 @@ describe('model bakeoff fixtures', () => {
     expect(manifest.fictionalText).toMatch(/ambiguous.*uncertainty/i);
     expect(manifest.fictionalText).toMatch(
       /no claim about a real memory, person, source image, asset, or licence/i,
+    );
+  });
+
+  it('separates model-facing submissions from canonical accepted payloads', () => {
+    const fixtures = createModelBakeoffFixtures();
+    expect(fixtures.promptManifest.schemaVersion)
+      .toBe('cp03-model-bakeoff-prompts/0.2');
+    expect(fixtures.schemaManifest).toMatchObject({
+      schemaVersion: 'cp03-model-bakeoff-schemas/0.2',
+      phases: {
+        Witness: {
+          role: 'Witness',
+          tool: 'pact_submit_council_shard',
+          modelFacingContract: 'council-role-submission/0.1',
+          acceptedCanonicalContract: 'cp03-council/0.2',
+        },
+        ConductorCommit: {
+          role: 'CaseConductor',
+          tool: 'pact_submit_conductor_commit',
+          modelFacingContract: 'conductor-commit-submission/0.1',
+          acceptedCanonicalContract: 'cp03-council/0.2',
+        },
+      },
+    });
+    expect(fixtures.promptManifest.templates.Witness).toMatch(/submission/i);
+    expect(fixtures.promptManifest.templates.Witness).not.toMatch(
+      /session|turnId|snapshotHash|schemaVersion/i,
     );
   });
 

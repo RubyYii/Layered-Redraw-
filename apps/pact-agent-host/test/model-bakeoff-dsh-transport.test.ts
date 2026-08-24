@@ -13,8 +13,8 @@ import {
 } from '@deepseek-ai/dsh-llm';
 import { SessionId } from '@deepseek-ai/dsh-session';
 import {
-  validateConductorDraftCommit,
-  validateCouncilShard,
+  validateConductorCommitSubmission,
+  validateCouncilRoleSubmission,
 } from '@layered-redraw/pact-cp03-contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -24,6 +24,10 @@ import {
   type ModelBakeoffPromptContext,
 } from '../src/model-bakeoff-dsh-transport.js';
 import { coldInspect } from '../src/create-foundation-harness.js';
+import type {
+  ConductorCommitSubmission,
+  CouncilRoleSubmission,
+} from '../src/council-submission-binding.js';
 import { createModelBakeoffFixtures } from '../src/model-bakeoff-fixtures.js';
 import {
   createModelBakeoffPlan,
@@ -72,37 +76,19 @@ const promptJson = <T>(
 
 interface PromptToolRules {
   readonly argumentShape: string;
-  readonly outputSchemaVersion: string;
-  readonly outputKind: string;
-  readonly outputRole: string;
+  readonly modelFacingContract: string;
   readonly semanticCapabilityId: string;
-  readonly registeredRightsIds: readonly string[];
 }
 
 const toolRules = (options: GenerateOptions): PromptToolRules | undefined =>
   promptJson<PromptToolRules>(options, 'PACT_BAKEOFF_TOOL_ARGUMENT_RULES_JSON=');
 
 const shardFor = (
-  options: GenerateOptions,
+  _options: GenerateOptions,
   context: ModelBakeoffPromptContext,
-): unknown => {
-  if (options.sessionId === undefined) throw new Error('DSH session identity missing');
+): CouncilRoleSubmission => {
   const suffix = sha(context.caseId).slice(0, 16);
   const base = {
-    schemaVersion: 'cp03-council/0.2',
-    shardId: `shard_${suffix}`,
-    kind: context.role === 'CaseConductor'
-      ? 'CONDUCTOR_INTENT'
-      : context.role.toUpperCase(),
-    role: context.role,
-    childSessionId: String(options.sessionId),
-    caseSessionId: context.turn.caseSessionId,
-    turnId: context.turn.turnId,
-    snapshotHash: context.turn.snapshotHash,
-    parentSceneHash: context.turn.parentSceneHash,
-    registryVersion: context.turn.registryVersion,
-    routingManifestVersion: context.turn.routingManifestVersion,
-    deadlineId: context.turn.deadlineId,
     publicTrace: `Synthetic ${context.role} contribution preserves ambiguity.`,
     uncertainties: ['Synthetic overlap remains deliberately unresolved.'],
     evidenceAnchors: context.imageInputRefId === null
@@ -135,7 +121,7 @@ const shardFor = (
           requestedAssetIds: ['synthetic-cup-01'],
           requestedSpatialBridgeIds: ['synthetic-spatial-bridge-01'],
           provenanceAnchors: ['synthetic-scene-01'],
-          rightsRequirements: ['rights_synthetic_fixture_only'],
+          rightsRequirements: ['rights_synthetic_fixture'],
           unavailableRefs: [],
         }
         : context.role === 'Rewriter'
@@ -163,7 +149,7 @@ const shardFor = (
             disposition: 'ALLOW',
             forbiddenCapabilityIds: ['rawTransform'],
             requiredSourceLockIds: ['synthetic-source-plane-01'],
-            requiredRightsIds: ['rights_synthetic_fixture_only'],
+            requiredRightsIds: ['rights_synthetic_fixture'],
             requiredRollbackCapabilityIds: ['restore-scene-snapshot'],
             contestedEvidenceIds: ['synthetic-spatial-image-01'],
             requiredDissentRecords: [{
@@ -173,7 +159,7 @@ const shardFor = (
             }],
             guardianChallenge: 'Execute only within the synthetic registry.',
           };
-  return { ...base, content };
+  return { ...base, content } as CouncilRoleSubmission;
 };
 
 const responseFor = (
@@ -230,15 +216,12 @@ class BakeoffScriptedAdapter extends ReasoningAwareScriptedAdapter {
     this.requests.push(options);
     const context = promptContext(options);
     if (context.phase === 'ConductorCommit') {
-      const commit = validateConductorDraftCommit({
-        schemaVersion: 'cp03-council/0.2',
-        turnId: context.turn.turnId,
-        status: 'PROPOSED',
+      const commit = validateConductorCommitSubmission({
         actionSequence: ['Reframe', 'Continue'],
         selectedShardHashes: context.priorAcceptedShardHashes,
         selectedDissentIds: [],
         terminalIntent: 'Continue',
-      });
+      }) as ConductorCommitSubmission;
       yield* responseFor(
         `tool_commit_${sha(context.caseId).slice(0, 16)}`,
         'pact_submit_conductor_commit',
@@ -246,7 +229,9 @@ class BakeoffScriptedAdapter extends ReasoningAwareScriptedAdapter {
       );
       return;
     }
-    const shard = validateCouncilShard(shardFor(options, context));
+    const shard = validateCouncilRoleSubmission(
+      shardFor(options, context),
+    ) as CouncilRoleSubmission;
     yield* responseFor(
       `tool_shard_${sha(context.caseId).slice(0, 16)}`,
       'pact_submit_council_shard',
@@ -423,15 +408,12 @@ describe('DSH model bakeoff transport', () => {
           return;
         }
         if (context.phase === 'ConductorCommit') {
-          const commit = validateConductorDraftCommit({
-            schemaVersion: 'cp03-council/0.2',
-            turnId: context.turn.turnId,
-            status: 'PROPOSED',
+          const commit = validateConductorCommitSubmission({
             actionSequence: ['Continue'],
             selectedShardHashes: context.priorAcceptedShardHashes,
             selectedDissentIds: [],
             terminalIntent: 'Continue',
-          });
+          }) as ConductorCommitSubmission;
           yield* responseFor(
             `tool_commit_${sha(context.caseId).slice(0, 16)}`,
             'pact_submit_conductor_commit',
@@ -439,7 +421,9 @@ describe('DSH model bakeoff transport', () => {
           );
           return;
         }
-        const shard = validateCouncilShard(shardFor(options, context));
+        const shard = validateCouncilRoleSubmission(
+          shardFor(options, context),
+        ) as CouncilRoleSubmission;
         yield* responseFor(
           `tool_shard_${sha(context.caseId).slice(0, 16)}`,
           'pact_submit_council_shard',
@@ -483,16 +467,49 @@ describe('DSH model bakeoff transport', () => {
     expect(new Set(adapter.requests.map(({ sessionId }) => String(sessionId))).size).toBe(1);
   });
 
-  it('states the council output schema separately from prompt metadata', async () => {
+  it('keeps runtime schema and identity fields out of model-authored arguments', async () => {
     class SchemaCopyingAdapter extends LlmAdapter {
       async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
         const context = promptContext(options);
         const rules = toolRules(options);
-        const contextRecord = context as unknown as Record<string, unknown>;
-        const shard = {
-          ...(shardFor(options, context) as Record<string, unknown>),
-          schemaVersion: rules?.outputSchemaVersion ?? contextRecord.schemaVersion,
-        };
+        expect(rules?.modelFacingContract).toBe('council-role-submission/0.1');
+        expect(JSON.stringify(context)).not.toMatch(
+          /schemaVersion|turnId|sessionId|snapshotHash|parentSceneHash|registryVersion|routingManifestVersion|deadlineId/,
+        );
+        expect(context.allowedReferences).toEqual({
+          registeredAssetIds: [
+            'synthetic-window-01',
+            'synthetic-bed-01',
+            'synthetic-table-01',
+            'synthetic-chair-01',
+            'synthetic-cup-01',
+            'synthetic-thermos-01',
+            'synthetic-source-plane-01',
+            'synthetic-floor-grid-01',
+          ],
+          registeredSpatialBridgeIds: ['synthetic-spatial-bridge-01'],
+          registeredRightsIds: ['rights_synthetic_fixture'],
+          registeredSceneObjectIds: [
+            'synthetic-window-01',
+            'synthetic-bed-01',
+            'synthetic-table-01',
+            'synthetic-chair-01',
+            'synthetic-cup-01',
+            'synthetic-thermos-01',
+            'synthetic-source-plane-01',
+            'synthetic-floor-grid-01',
+            'synthetic-actor-01',
+          ],
+          registeredAffordanceIds: ['pickup', 'place'],
+          supportedRollbackCapabilityIds: [
+            'restore-scene-snapshot',
+            'release-object-claim',
+          ],
+          allowedSemanticCapabilityIds: ['performRegisteredInteraction'],
+          sourceLockIds: ['synthetic-source-plane-01'],
+          inputRefIds: ['synthetic-scene-01', 'synthetic-spatial-image-01'],
+        });
+        const shard = shardFor(options, context);
         yield* responseFor('tool_schema_copy_0001', 'pact_submit_council_shard', shard);
       }
     }
@@ -557,7 +574,7 @@ describe('DSH model bakeoff transport', () => {
     class CapabilityCopyingAdapter extends LlmAdapter {
       async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
         const context = promptContext(options);
-        const shard = shardFor(options, context) as Record<string, unknown>;
+        const shard = shardFor(options, context) as unknown as Record<string, unknown>;
         const content = shard.content as Record<string, unknown>;
         const calls = content.semanticCapabilityCalls as Array<Record<string, unknown>>;
         calls[0] = {
@@ -601,10 +618,10 @@ describe('DSH model bakeoff transport', () => {
         if (fixture === undefined) throw new Error('fixture missing');
         const rules = toolRules(options);
         if (rules === undefined) throw new Error('tool rules missing');
-        const shard = shardFor(options, context) as Record<string, unknown>;
+        const shard = shardFor(options, context) as unknown as Record<string, unknown>;
         const content = shard.content as Record<string, unknown>;
         content.rightsRequirements = [...fixture.rights];
-        expect(rules.registeredRightsIds).toEqual(fixture.rights);
+        expect(context.allowedReferences.registeredRightsIds).toEqual(fixture.rights);
         yield* responseFor('tool_fixture_rights_01', 'pact_submit_council_shard', shard);
       }
     }
@@ -635,7 +652,7 @@ describe('DSH model bakeoff transport', () => {
     class ArchivedFalseGreenAdapter extends LlmAdapter {
       async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
         const context = promptContext(options);
-        const shard = shardFor(options, context) as Record<string, unknown>;
+        const shard = shardFor(options, context) as unknown as Record<string, unknown>;
         const content = shard.content as Record<string, unknown>;
         content.requestedSpatialBridgeIds = ['synthetic-scene-01'];
         content.rightsRequirements = [
@@ -670,10 +687,10 @@ describe('DSH model bakeoff transport', () => {
     await transport.dispose();
 
     expect(result).toMatchObject({
-      kind: 'content_failure',
+      kind: 'grounding_failure',
       detailCode: 'MODEL_BAKEOFF_REFERENCE_NOT_REGISTERED',
-      preSideEffect: false,
-      sideEffectAccepted: true,
+      preSideEffect: true,
+      sideEffectAccepted: false,
       toolResult: { accepted: false },
     });
   });
@@ -696,7 +713,9 @@ describe('DSH model bakeoff transport', () => {
           return;
         }
         const context = promptContext(options);
-        const shard = validateCouncilShard(shardFor(options, context));
+        const shard = validateCouncilRoleSubmission(
+          shardFor(options, context),
+        ) as CouncilRoleSubmission;
         yield* responseFor('tool_gemini_37_low_01', 'pact_submit_council_shard', shard);
       }
     }
@@ -851,14 +870,10 @@ describe('DSH model bakeoff transport', () => {
   it('fails closed when the adapter calls the wrong council tool', async () => {
     class WrongToolAdapter extends LlmAdapter {
       async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
-        const context = promptContext(options);
         yield* responseFor(
           'tool_wrong_00000001',
           'pact_submit_conductor_commit',
           {
-            schemaVersion: 'cp03-council/0.2',
-            turnId: context.turn.turnId,
-            status: 'PROPOSED',
             actionSequence: ['Continue'],
             selectedShardHashes: [],
             selectedDissentIds: [],

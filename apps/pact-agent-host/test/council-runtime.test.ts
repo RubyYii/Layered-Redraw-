@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { LlmAdapter, LlmError, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm';
-import { sha256Canonical } from '@layered-redraw/pact-cp03-contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -19,10 +18,12 @@ import {
 } from '../src/council-run-evidence.js';
 import type {
   CouncilRole,
-  CouncilShard,
-  ConductorDraftCommit,
   ProviderRoutingManifest,
 } from '../src/contract-types.js';
+import type {
+  ConductorCommitSubmission,
+  CouncilRoleSubmission,
+} from '../src/council-submission-binding.js';
 import { type FrozenCouncilTurn } from '../src/council-turn.js';
 import {
   createFullCouncilFixtures,
@@ -67,6 +68,13 @@ const textOf = (options: GenerateOptions): string => options.messages
   .flatMap((message) => message.content)
   .flatMap((block) => block.type === 'text' ? [block.text] : [])
   .join('\n');
+
+const markedJson = <T>(options: GenerateOptions, marker: string): T => {
+  const line = textOf(options).split('\n')
+    .find((candidate) => candidate.startsWith(marker));
+  if (line === undefined) throw new Error(`test adapter marker missing: ${marker}`);
+  return JSON.parse(line.slice(marker.length)) as T;
+};
 
 const roleOf = (options: GenerateOptions): CouncilRole => {
   const role = options.system?.match(
@@ -120,7 +128,6 @@ class CouncilScriptedAdapter extends LlmAdapter {
   private readonly firstWaveOpened = deferred<void>();
   private readonly firstWaveFailures = new Set<number>();
   private readonly attemptsByOrdinal = new Map<number, number>();
-  private readonly shardsByRole = new Map<CouncilRole, CouncilShard>();
   private readonly roleReleases = new Map<CouncilRole, ReturnType<typeof deferred<void>>>();
 
   constructor(private readonly options: AdapterOptions) {
@@ -236,7 +243,7 @@ class CouncilScriptedAdapter extends LlmAdapter {
       }
 
       if (phase === 'CONDUCTOR_COMMIT') {
-        const commit = await this.commit();
+        const commit = this.commit(options);
         yield* toolCallResponse(
           `tool_commit_${declaredDispatchOrdinal}_${attempt}`,
           'pact_submit_conductor_commit',
@@ -245,8 +252,7 @@ class CouncilScriptedAdapter extends LlmAdapter {
         return;
       }
 
-      const shard = await this.shard(role, options);
-      this.shardsByRole.set(role, shard);
+      const shard = this.shard(role);
       yield* toolCallResponse(
         `tool_shard_${declaredDispatchOrdinal}_${attempt}`,
         'pact_submit_council_shard',
@@ -257,11 +263,13 @@ class CouncilScriptedAdapter extends LlmAdapter {
     }
   }
 
-  private async shard(role: CouncilRole, request: GenerateOptions): Promise<CouncilShard> {
+  private shard(role: CouncilRole): CouncilRoleSubmission {
     const source = this.options.fixtures.shards[role];
-    const shard = structuredClone({
-      ...source,
-      childSessionId: String(request.sessionId),
+    return structuredClone({
+      publicTrace: source.publicTrace,
+      uncertainties: source.uncertainties,
+      evidenceAnchors: source.evidenceAnchors,
+      content: source.content,
       ...(role === 'Guardian' && this.options.withholdGuardian === true
         ? {
             content: {
@@ -277,25 +285,24 @@ class CouncilScriptedAdapter extends LlmAdapter {
               },
             }
         : {}),
-    }) as CouncilShard;
-    return shard;
+    }) as CouncilRoleSubmission;
   }
 
-  private async commit(): Promise<ConductorDraftCommit> {
-    const hashes = await Promise.all(roleOrder.map(async (role) => {
-      const shard = this.shardsByRole.get(role);
-      if (shard === undefined) throw new Error(`missing scripted ${role} shard`);
-      return sha256Canonical(shard);
-    }));
-    const guardian = this.shardsByRole.get('Guardian');
-    if (guardian?.kind !== 'GUARDIAN') throw new Error('missing scripted Guardian shard');
+  private commit(options: GenerateOptions): ConductorCommitSubmission {
+    const projections = markedJson<readonly {
+      readonly role: CouncilRole;
+      readonly payloadHash: string;
+      readonly content: Record<string, unknown>;
+    }[]>(options, 'PACT_COUNCIL_DURABLE_SHARDS_JSON=');
+    const guardian = projections.find(({ role }) => role === 'Guardian');
+    if (guardian === undefined) throw new Error('missing scripted Guardian projection');
+    const dissentRecords = guardian.content.requiredDissentRecords as readonly {
+      readonly dissentId: string;
+    }[];
     return {
-      schemaVersion: 'cp03-council/0.2',
-      turnId: this.options.turn.snapshot.turnId,
-      status: this.options.withholdGuardian === true ? 'WITHHELD' : 'PROPOSED',
       actionSequence: ['Reframe', 'Continue'],
-      selectedShardHashes: hashes,
-      selectedDissentIds: guardian.content.requiredDissentRecords.map(
+      selectedShardHashes: projections.map(({ payloadHash }) => payloadHash),
+      selectedDissentIds: dissentRecords.map(
         (record) => record.dissentId,
       ),
       terminalIntent: 'Continue',
@@ -457,6 +464,52 @@ describe('Task 5 council-v2 critical path', () => {
     expect(completed.attemptRecords.map((record) => record.council.declaredDispatchOrdinal))
       .toEqual([1, 2, 3, 4, 5, 6]);
     expect(completed.selectionBarrierClosed).toBe(true);
+  });
+
+  it('shows exact frozen references while keeping runtime envelope fields host-owned', async () => {
+    const { result, adapter, turn } = await run();
+    success(result);
+    const witnessRequest = adapter.requests.find(({ role, phase }) =>
+      role === 'Witness' && phase === 'SHARD'
+    )?.options;
+    if (witnessRequest === undefined) throw new Error('Witness request missing');
+    const context = markedJson<{
+      readonly role: CouncilRole;
+      readonly allowedReferences: Record<string, readonly string[]>;
+    }>(witnessRequest, 'PACT_COUNCIL_CONTEXT_JSON=');
+
+    expect(context).toEqual({
+      contextVersion: 'cp03-council-role-prompt/0.2',
+      role: 'Witness',
+      allowedReferences: {
+        registeredAssetIds: turn.snapshot.registeredAssetIds,
+        registeredSpatialBridgeIds: turn.snapshot.registeredSpatialBridgeIds,
+        registeredRightsIds: turn.snapshot.registeredRightsIds,
+        registeredSceneObjectIds: turn.snapshot.registeredSceneObjectIds,
+        registeredAffordanceIds: turn.snapshot.registeredAffordanceIds,
+        supportedRollbackCapabilityIds:
+          turn.snapshot.supportedRollbackCapabilityIds,
+        allowedSemanticCapabilityIds:
+          turn.snapshot.allowedSemanticCapabilityIds,
+        sourceLockIds: turn.snapshot.sourceLockIds,
+        inputRefIds: turn.snapshot.inputRefs.map(({ refId }) => refId),
+      },
+    });
+    expect(JSON.stringify(context)).not.toMatch(
+      /turnId|sessionId|snapshotHash|parentSceneHash|registryVersion|routingManifestVersion|deadlineId/,
+    );
+    const shardTool = witnessRequest.tools?.find(
+      ({ name }) => name === 'pact_submit_council_shard',
+    );
+    const parameters = shardTool?.parameters as {
+      readonly properties?: Readonly<Record<string, unknown>>;
+    } | undefined;
+    expect(Object.keys(parameters?.properties ?? {}).sort()).toEqual([
+      'content',
+      'evidenceAnchors',
+      'publicTrace',
+      'uncertainties',
+    ]);
   });
 
   it('returns a normal local runtime archive that passes the independent Task 6 verifier', async () => {

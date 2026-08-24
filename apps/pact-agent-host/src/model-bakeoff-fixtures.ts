@@ -5,7 +5,7 @@ import { canonicalJson } from '@layered-redraw/pact-cp03-contracts';
 import { createSyntheticSpatialImage } from './synthetic-spatial-image.js';
 
 export interface ModelBakeoffFixtureManifest {
-  readonly schemaVersion: 'cp03-model-bakeoff-fixtures/0.1';
+  readonly schemaVersion: 'cp03-model-bakeoff-fixtures/0.2';
   readonly fictionalText: string;
   readonly syntheticImage: {
     readonly inputRefId: 'synthetic-spatial-image-01';
@@ -25,12 +25,12 @@ export interface ModelBakeoffFixtureManifest {
 }
 
 export interface ModelBakeoffPromptManifest {
-  readonly schemaVersion: 'cp03-model-bakeoff-prompts/0.1';
+  readonly schemaVersion: 'cp03-model-bakeoff-prompts/0.2';
   readonly templates: Readonly<Record<string, string>>;
 }
 
 export interface ModelBakeoffSchemaManifest {
-  readonly schemaVersion: 'cp03-model-bakeoff-schemas/0.1';
+  readonly schemaVersion: 'cp03-model-bakeoff-schemas/0.2';
   readonly phases: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
 
@@ -60,55 +60,61 @@ const sha256Canonical = (value: unknown): string => createHash('sha256')
   .digest('hex');
 
 const promptManifest = deepFreeze<ModelBakeoffPromptManifest>({
-  schemaVersion: 'cp03-model-bakeoff-prompts/0.1',
+  schemaVersion: 'cp03-model-bakeoff-prompts/0.2',
   templates: {
     ConductorIntent:
-      'Submit exactly one CaseConductor intent shard from the fictional fixture. Preserve uncertainty and use no unregistered source, asset, licence, permission, URL, path, or code.',
+      'Submit exactly one CaseConductor role submission from the fictional fixture. Preserve uncertainty and use no unregistered source, asset, licence, permission, URL, path, or code.',
     Archivist:
-      'Submit exactly one Archivist shard from the fictional fixture. Bind every provenance or rights statement to the supplied synthetic registry facts and invent nothing.',
+      'Submit exactly one Archivist role submission from the fictional fixture. Bind every provenance or rights reference to the supplied synthetic registry facts and invent nothing.',
     Guardian:
-      'Submit exactly one Guardian shard from the fictional fixture. Preserve dissent, identify unsupported authority, and withhold any action that exceeds registered synthetic capabilities.',
+      'Submit exactly one Guardian role submission from the fictional fixture. Preserve dissent, identify unsupported authority, and withhold any action that exceeds registered synthetic capabilities.',
     ConductorCommit:
-      'Submit exactly one minimal CaseConductor commit selecting only the durable shard hashes supplied for this fictional fixture; add no new evidence or creative content.',
+      'Submit exactly one minimal CaseConductor commit submission selecting only the durable shard hashes supplied for this fictional fixture; add no new evidence or creative content.',
     Witness:
-      'Submit exactly one Witness shard grounded in inputRefId synthetic-spatial-image-01. Describe visible spatial relations and explicit uncertainty without claiming a real person, memory, source image, asset, or licence.',
+      'Submit exactly one Witness role submission grounded in inputRefId synthetic-spatial-image-01. Describe visible spatial relations and explicit uncertainty without claiming a real person, memory, source image, asset, or licence.',
     Rewriter:
-      'Submit exactly one Rewriter shard grounded in inputRefId synthetic-spatial-image-01 and the immutable synthetic scene. Propose typed poetic and spatial intent while preserving seams and ambiguity.',
+      'Submit exactly one Rewriter role submission grounded in inputRefId synthetic-spatial-image-01 and the immutable synthetic scene. Propose typed poetic and spatial intent while preserving seams and ambiguity.',
   },
 });
 
 const schemaManifest = deepFreeze<ModelBakeoffSchemaManifest>({
-  schemaVersion: 'cp03-model-bakeoff-schemas/0.1',
+  schemaVersion: 'cp03-model-bakeoff-schemas/0.2',
   phases: {
     ConductorIntent: {
       role: 'CaseConductor',
       tool: 'pact_submit_council_shard',
-      contract: 'council-shard/0.1',
+      modelFacingContract: 'council-role-submission/0.1',
+      acceptedCanonicalContract: 'cp03-council/0.2',
     },
     Archivist: {
       role: 'Archivist',
       tool: 'pact_submit_council_shard',
-      contract: 'council-shard/0.1',
+      modelFacingContract: 'council-role-submission/0.1',
+      acceptedCanonicalContract: 'cp03-council/0.2',
     },
     Guardian: {
       role: 'Guardian',
       tool: 'pact_submit_council_shard',
-      contract: 'council-shard/0.1',
+      modelFacingContract: 'council-role-submission/0.1',
+      acceptedCanonicalContract: 'cp03-council/0.2',
     },
     ConductorCommit: {
       role: 'CaseConductor',
       tool: 'pact_submit_conductor_commit',
-      contract: 'conductor-draft-commit/0.1',
+      modelFacingContract: 'conductor-commit-submission/0.1',
+      acceptedCanonicalContract: 'cp03-council/0.2',
     },
     Witness: {
       role: 'Witness',
       tool: 'pact_submit_council_shard',
-      contract: 'council-shard/0.1',
+      modelFacingContract: 'council-role-submission/0.1',
+      acceptedCanonicalContract: 'cp03-council/0.2',
     },
     Rewriter: {
       role: 'Rewriter',
       tool: 'pact_submit_council_shard',
-      contract: 'council-shard/0.1',
+      modelFacingContract: 'council-role-submission/0.1',
+      acceptedCanonicalContract: 'cp03-council/0.2',
     },
   },
 });
@@ -161,7 +167,7 @@ const registry = deepFreeze({
 export function createModelBakeoffFixtures(): ModelBakeoffFixtures {
   const syntheticImage = createSyntheticSpatialImage();
   const unsignedManifest = {
-    schemaVersion: 'cp03-model-bakeoff-fixtures/0.1' as const,
+    schemaVersion: 'cp03-model-bakeoff-fixtures/0.2' as const,
     fictionalText:
       'A fictional room contains a rear window, bed, table, chair, cup, thermos, source plane, and floor grid. Two overlaps are deliberately ambiguous; describe uncertainty rather than resolving either relation. This is synthetic test material and makes no claim about a real memory, person, source image, asset, or licence.',
     syntheticImage: {
@@ -174,10 +180,7 @@ export function createModelBakeoffFixtures(): ModelBakeoffFixtures {
     },
     sceneSnapshot,
     registry,
-    rights: [
-      'rights_synthetic_fixture_only',
-      'rights_no_production_licence_claim',
-    ] as const,
+    rights: ['rights_synthetic_fixture'] as const,
     rollbackCapabilities: [
       'restore-scene-snapshot',
       'release-object-claim',

@@ -8,6 +8,7 @@ import {
 } from '@deepseek-ai/dsh-llm';
 import { SessionId, type Session } from '@deepseek-ai/dsh-session';
 import { foldSubagentDescriptor } from '@deepseek-ai/dsh-subagent';
+import { canonicalJson } from '@layered-redraw/pact-cp03-contracts';
 
 import type {
   AgentActionDraft,
@@ -29,6 +30,7 @@ import {
   monotonicNowMs,
   type FrozenCouncilTurn,
 } from './council-turn.js';
+import { allowedCouncilReferences } from './council-reference-validation.js';
 import { assembleCouncilDraft } from './draft-assembler.js';
 import { waitForTurnEnd } from './durable-turn.js';
 import {
@@ -265,13 +267,19 @@ const withSnapshot = (
   ? assignment
   : { ...assignment, council: { ...assignment.council, snapshotHash } };
 
-const shardPrompt = (turn: FrozenCouncilTurn, role: CouncilRole): ContentBlock[] =>
-  message(
-    `COUNCIL_SHARD turnId=${turn.snapshot.turnId} role=${role}. ` +
-    `Use the frozen snapshotHash=${turn.snapshotHash}. ` +
-    'Submit exactly one pact_submit_council_shard using only the runtime-bound ' +
-    'session identity, registered references, and fictional turn inputs.',
-  );
+const shardPrompt = (turn: FrozenCouncilTurn, role: CouncilRole): ContentBlock[] => {
+  const context = {
+    contextVersion: 'cp03-council-role-prompt/0.2',
+    role,
+    allowedReferences: allowedCouncilReferences(turn),
+  } as const;
+  return message([
+    'COUNCIL_SHARD. Submit exactly one pact_submit_council_shard direct object.',
+    'Author only publicTrace, uncertainties, evidenceAnchors, and role content. ' +
+      'The host binds all runtime envelope fields; do not add or infer them.',
+    `PACT_COUNCIL_CONTEXT_JSON=${canonicalJson(context)}`,
+  ].join('\n'));
+};
 
 const projectShard = (entry: {
   readonly shard: CouncilShard;
@@ -285,16 +293,18 @@ const projectShard = (entry: {
 });
 
 const commitPrompt = (
-  turn: FrozenCouncilTurn,
   durableShards: readonly {
     readonly shard: CouncilShard;
     readonly payloadHash: string;
   }[],
 ): ContentBlock[] => message(
-  `COUNCIL_COMMIT turnId=${turn.snapshot.turnId}. ` +
+  'COUNCIL_COMMIT. ' +
   'Select only from these deterministic plain-JSON typed shard projections; ' +
-  'do not add prose, files, assets, evidence, licences, or scene references: ' +
-  JSON.stringify(durableShards.map(projectShard)),
+  'submit only actionSequence, selectedShardHashes, selectedDissentIds, and ' +
+  'terminalIntent. The host binds turn, schema, and status; add no new evidence.\n' +
+  `PACT_COUNCIL_DURABLE_SHARDS_JSON=${canonicalJson(
+    durableShards.map(projectShard),
+  )}`,
 );
 
 const statusForAssembly = (
@@ -327,6 +337,9 @@ export const runCouncilRuntime = async (
   let ledger: ProviderDispatchLedger | undefined;
   let harness: FoundationHarness | undefined;
   let councilRegistry: NonNullable<FoundationHarness['councilRegistry']> | undefined;
+  let councilToolBindings:
+    NonNullable<FoundationHarness['councilToolBindings']> | undefined;
+  let releaseConductorToolBinding: (() => void) | undefined;
   let activeConductor: Awaited<ReturnType<FoundationHarness['createConductor']>> | undefined;
   const settlementSinks: Awaited<ReturnType<FoundationHarness['createConductor']>>[] = [];
   const synthesisAgents = new Set<Agent>();
@@ -536,7 +549,8 @@ export const runCouncilRuntime = async (
     });
     remainingMs();
     councilRegistry = harness.councilRegistry;
-    if (councilRegistry === undefined) {
+    councilToolBindings = harness.councilToolBindings;
+    if (councilRegistry === undefined || councilToolBindings === undefined) {
       return resultFailure('FAILED_NO_MUTATION', ['COUNCIL_REGISTRY_UNAVAILABLE']);
     }
     councilRegistry.openTurn(options.turn);
@@ -585,13 +599,28 @@ export const runCouncilRuntime = async (
       }
       pendingAssignments.delete(label!);
       ledger?.assignSession({ ...assignment, sessionId: String(child.id) });
-      return () => undefined;
+      const role = assignment.council?.role;
+      if (role === undefined || role === 'CaseConductor') {
+        throw new Error('COUNCIL_CHILD_ROLE_BINDING_MISSING');
+      }
+      return councilToolBindings!.bind({
+        sessionId: child.id,
+        role,
+        phase: 'SHARD',
+        turn: options.turn,
+      });
     });
 
     activeConductor = await harness.createConductor(
       SessionId(randomUUID()),
       { parked: false },
     );
+    releaseConductorToolBinding = councilToolBindings.bind({
+      sessionId: activeConductor.agent.id,
+      role: 'CaseConductor',
+      phase: 'SHARD',
+      turn: options.turn,
+    });
     trackSynthesisAgent(activeConductor.agent);
     for (const role of ROLE_ORDER.slice(1)) {
       const sink = await harness.createConductor(
@@ -771,7 +800,6 @@ export const runCouncilRuntime = async (
 
     const proposalBeforeCommit = councilRegistry.durableProposal(options.turn.snapshot.turnId);
     const commitContent = commitPrompt(
-      options.turn,
       proposalBeforeCommit.durableShards.map((entry) => ({
         shard: entry.shard,
         payloadHash: entry.payloadHash,
@@ -788,6 +816,13 @@ export const runCouncilRuntime = async (
       ),
       options.turn.snapshotHash,
     ));
+    releaseConductorToolBinding?.();
+    releaseConductorToolBinding = councilToolBindings.bind({
+      sessionId: activeConductor.agent.id,
+      role: 'CaseConductor',
+      phase: 'CONDUCTOR_COMMIT',
+      turn: options.turn,
+    });
     remainingMs();
     activeConductor.agent.followup(createUserMessage({
       content: commitContent,
@@ -892,6 +927,7 @@ export const runCouncilRuntime = async (
     );
   } finally {
     if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+    releaseConductorToolBinding?.();
     if (councilRegistry !== undefined) {
       try {
         councilRegistry.closeTurn(options.turn.snapshot.turnId);
