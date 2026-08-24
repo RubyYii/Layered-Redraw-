@@ -4,9 +4,14 @@ import { canonicalJson } from '@layered-redraw/pact-cp03-contracts';
 import * as cp03Contracts from '@layered-redraw/pact-cp03-contracts';
 
 import type { ModelBakeoffDshDiagnostic } from './model-bakeoff-dsh-transport.js';
+import {
+  verifyModelBakeoffExecutionPolicy,
+  type ModelBakeoffExecutionPolicy,
+} from './model-bakeoff-execution-policy.js';
 import type { ModelBakeoffFixtureManifest } from './model-bakeoff-fixtures.js';
 import {
   authorizeModelBakeoff,
+  MODEL_BAKEOFF_APPROVAL_MAX_AGE_MS,
   type ModelBakeoffApproval,
 } from './model-bakeoff-gate.js';
 import type {
@@ -15,9 +20,11 @@ import type {
   ModelBakeoffProvider,
 } from './model-bakeoff-plan.js';
 import {
+  verifyModelBakeoffPreflight,
   verifyModelBakeoffKeychainReferenceManifest,
   type ModelBakeoffKeychainReferenceManifest,
   type ModelBakeoffPreflight,
+  type ModelBakeoffReplacementPreflight,
 } from './model-bakeoff-preflight.js';
 import {
   verifyModelBakeoffPricingManifest,
@@ -35,6 +42,11 @@ const validateModelBakeoffAttempt = (
     readonly validateModelBakeoffAttempt: (value: unknown) => unknown;
   }
 ).validateModelBakeoffAttempt;
+const validateModelBakeoffApproval = (
+  cp03Contracts as unknown as {
+    readonly validateModelBakeoffApproval: (value: unknown) => unknown;
+  }
+).validateModelBakeoffApproval;
 
 const sha256 = (value: string): string => createHash('sha256')
   .update(value, 'utf8')
@@ -57,8 +69,7 @@ export type ModelBakeoffRoleDecision =
   | 'Rewriter'
   | 'Guardian';
 
-export interface ModelBakeoffTechnicalArchive {
-  readonly schemaVersion: 'cp03-model-bakeoff-technical-archive/0.1';
+interface ModelBakeoffTechnicalArchiveCommon {
   readonly approval: ModelBakeoffApproval;
   readonly preflight: ModelBakeoffPreflight;
   readonly plan: readonly ModelBakeoffCase[];
@@ -69,6 +80,23 @@ export interface ModelBakeoffTechnicalArchive {
   readonly result: ModelBakeoffRunResult;
   readonly diagnostics: readonly ModelBakeoffDshDiagnostic[];
 }
+
+export interface ModelBakeoffLegacyTechnicalArchive
+  extends ModelBakeoffTechnicalArchiveCommon {
+  readonly schemaVersion: 'cp03-model-bakeoff-technical-archive/0.1';
+  readonly executionPolicy?: never;
+}
+
+export interface ModelBakeoffReplacementTechnicalArchive
+  extends ModelBakeoffTechnicalArchiveCommon {
+  readonly schemaVersion: 'cp03-model-bakeoff-technical-archive/0.2';
+  readonly preflight: ModelBakeoffReplacementPreflight;
+  readonly executionPolicy: ModelBakeoffExecutionPolicy;
+}
+
+export type ModelBakeoffTechnicalArchive =
+  | ModelBakeoffLegacyTechnicalArchive
+  | ModelBakeoffReplacementTechnicalArchive;
 
 export interface ModelBakeoffPairRepetitionEvidence {
   readonly repetition: 1 | 2;
@@ -88,7 +116,9 @@ export interface ModelBakeoffPairEvidence {
 }
 
 export interface ModelBakeoffEvidenceReport {
-  readonly schemaVersion: 'cp03-model-bakeoff-evidence/0.1';
+  readonly schemaVersion:
+    | 'cp03-model-bakeoff-evidence/0.1'
+    | 'cp03-model-bakeoff-evidence/0.2';
   readonly runId: string;
   readonly status: 'PASS' | 'FAIL';
   readonly checks: {
@@ -102,6 +132,7 @@ export interface ModelBakeoffEvidenceReport {
     readonly usageAndCost: ModelBakeoffEvidenceCheck;
     readonly dshTrace: ModelBakeoffEvidenceCheck;
     readonly secretScan: ModelBakeoffEvidenceCheck;
+    readonly policy?: ModelBakeoffEvidenceCheck;
   };
   readonly findings: readonly string[];
   readonly pairs: readonly ModelBakeoffPairEvidence[];
@@ -146,6 +177,86 @@ const check = (findings: readonly string[], prefix: string): ModelBakeoffEvidenc
 const add = (findings: string[], prefix: string, code: string): void => {
   findings.push(`${prefix}:${code}`);
 };
+
+const archiveBoundAuthorizationValid = (
+  archive: ModelBakeoffTechnicalArchive,
+  now: number,
+): boolean => {
+  try {
+    validateModelBakeoffApproval(archive.approval);
+  } catch {
+    return false;
+  }
+  const approvedAt = Date.parse(archive.approval.approvedAt);
+  const age = now - approvedAt;
+  const expectedCandidates = archive.preflight.candidateFacts.map((candidate) => ({
+    provider: candidate.provider,
+    route: candidate.route,
+    model: candidate.model,
+  }));
+  const sortCandidates = (candidates: readonly {
+    readonly provider: string;
+    readonly route: string;
+    readonly model: string;
+  }[]): readonly unknown[] => [...candidates].sort((left, right) =>
+    `${left.provider}\u0000${left.route}\u0000${left.model}`
+      .localeCompare(`${right.provider}\u0000${right.route}\u0000${right.model}`)
+  );
+  const {
+    fixtureManifestSha256,
+    ...unsignedFixtureManifest
+  } = archive.fixtures;
+  return archive.preflight.status === 'ELIGIBLE_AWAITING_EXPLICIT_APPROVAL'
+    && verifyModelBakeoffPreflight(archive.preflight).status === 'PASS'
+    && canonicalSha256(unsignedFixtureManifest) === fixtureManifestSha256
+    && fixtureManifestSha256 === archive.preflight.fixtureManifestSha256
+    && archive.fixtures.promptManifestSha256 === archive.preflight.promptManifestSha256
+    && archive.fixtures.schemaManifestSha256 === archive.preflight.schemaManifestSha256
+    && Number.isFinite(approvedAt)
+    && age >= 0
+    && age <= MODEL_BAKEOFF_APPROVAL_MAX_AGE_MS
+    && archive.approval.runId === archive.preflight.runId
+    && archive.approval.planSha256 === archive.preflight.planSha256
+    && archive.approval.preflightSha256 === archive.preflight.preflightSha256
+    && archive.approval.fixtureManifestSha256 === archive.preflight.fixtureManifestSha256
+    && archive.approval.promptManifestSha256 === archive.preflight.promptManifestSha256
+    && archive.approval.schemaManifestSha256 === archive.preflight.schemaManifestSha256
+    && archive.approval.pricingManifestSha256 === archive.preflight.pricingManifestSha256
+    && archive.approval.tokenCapsSha256 === archive.preflight.roleCapsSha256
+    && archive.approval.keychainReferencesSha256 ===
+      archive.preflight.keychainReferencesSha256
+    && archive.approval.worstCaseEstimatedUsd ===
+      archive.preflight.worstCaseEstimatedUsd
+    && archive.preflight.worstCaseEstimatedUsd !== null
+    && archive.approval.maxUsd >= archive.preflight.worstCaseEstimatedUsd
+    && canonicalJson(sortCandidates(archive.approval.candidates)) ===
+      canonicalJson(sortCandidates(expectedCandidates))
+    && canonicalJson(archive.approval.counts) === canonicalJson(archive.preflight.counts)
+    && canonicalSha256(archive.plan) === archive.preflight.planSha256
+    && archive.approval.repetitions === 2
+    && archive.approval.retrySlots.deepseek === 1
+    && archive.approval.retrySlots.gemini === 1
+    && archive.approval.oneRunOnly === true
+    && archive.approval.automaticRerun === false
+    && archive.approval.externalCapabilities.length === 0;
+};
+
+const replacementPolicyValid = (
+  archive: ModelBakeoffTechnicalArchive,
+): boolean => archive.schemaVersion === 'cp03-model-bakeoff-technical-archive/0.2'
+  && archive.preflight.schemaVersion === 'cp03-model-bakeoff-preflight/0.2'
+  && 'executionPolicy' in archive
+  && archive.executionPolicy !== undefined
+  && verifyModelBakeoffExecutionPolicy(archive.executionPolicy).status === 'PASS'
+  && archive.executionPolicy.executionPolicySha256 ===
+    archive.preflight.executionPolicySha256
+  && archive.executionPolicy.pairEligibilityPolicy ===
+    'pair-local-two-repetition/0.1'
+  && Object.entries(archive.executionPolicy.roleCaps).every(
+    ([phase, maxOutputTokens]) =>
+      archive.roleCaps.caps[phase as keyof typeof archive.roleCaps.caps]
+        ?.maxOutputTokens === maxOutputTokens,
+  );
 
 const expectedToolName = (phase: ModelBakeoffPhase): string =>
   phase === 'ConductorCommit'
@@ -326,10 +437,31 @@ const validDshTrace = (
     entry.role === 'Witness' || entry.role === 'Rewriter' ? 1 : 0
   );
 
+const validReplacementDiagnostic = (
+  attempt: ModelBakeoffAttemptRecord,
+  diagnostic: ModelBakeoffDshDiagnostic,
+): boolean => {
+  const primaryKind = attempt.finish.kind === 'refused'
+    ? 'refusal'
+    : attempt.finish.kind;
+  return diagnostic.diagnosticSchemaVersion ===
+      'cp03-model-bakeoff-dsh-diagnostic/0.2'
+    && diagnostic.primaryOutcome?.kind === primaryKind
+    && diagnostic.primaryOutcome.detailCode === attempt.finish.detailCode
+    && Array.isArray(diagnostic.secondaryConditions)
+    && (attempt.finish.kind !== 'accepted'
+      || (
+        diagnostic.secondaryConditions.length === 0
+        && diagnostic.terminalFinish?.kind === 'tool-calls'
+        && diagnostic.terminalFinish.failureCode === null
+      ));
+};
+
 const validDiagnosticEnvelope = (
   attempt: ModelBakeoffAttemptRecord,
   diagnostic: ModelBakeoffDshDiagnostic,
   entry: ModelBakeoffCase,
+  replacementPolicy: boolean,
 ): boolean => exactDiagnosticBinding(diagnostic, attempt, entry)
   && Number.isInteger(diagnostic.streamCount)
   && diagnostic.streamCount >= 0
@@ -350,7 +482,8 @@ const validDiagnosticEnvelope = (
   )
   && (attempt.finish.kind === 'accepted'
     ? diagnostic.redactedOutputText !== null
-    : diagnostic.redactedOutputText === null);
+    : diagnostic.redactedOutputText === null)
+  && (!replacementPolicy || validReplacementDiagnostic(attempt, diagnostic));
 
 const validFinishEvidence = (attempt: ModelBakeoffAttemptRecord): boolean => {
   if (attempt.finish.kind === 'accepted') {
@@ -485,9 +618,19 @@ export function verifyModelBakeoffEvidence(input: {
   readonly secretValues?: readonly string[];
 }): ModelBakeoffEvidenceReport {
   const archive = input.archive;
+  const legacyPolicy =
+    archive.schemaVersion === 'cp03-model-bakeoff-technical-archive/0.1';
+  const replacementPolicy =
+    archive.schemaVersion === 'cp03-model-bakeoff-technical-archive/0.2';
+  const versionBindingInvalid = !legacyPolicy && !replacementPolicy
+    || (replacementPolicy
+      ? archive.preflight.schemaVersion !== 'cp03-model-bakeoff-preflight/0.2'
+        || !('executionPolicy' in archive)
+      : archive.preflight.schemaVersion !== 'cp03-model-bakeoff-preflight/0.1'
+        || 'executionPolicy' in archive);
   const findings: string[] = [];
   if (
-    archive.schemaVersion !== 'cp03-model-bakeoff-technical-archive/0.1'
+    versionBindingInvalid
     || archive.result.cases.length !== 28
     || archive.result.attempts.length !== archive.result.counts.sent
     || archive.diagnostics.length !== archive.result.counts.sent
@@ -498,6 +641,7 @@ export function verifyModelBakeoffEvidence(input: {
   const authorization = authorizeModelBakeoff({
     approval: archive.approval,
     preflight: archive.preflight,
+    ...(!replacementPolicy ? {} : { executionPolicy: archive.executionPolicy }),
     plan: archive.plan,
     fixtures: archive.fixtures,
     pricing: archive.pricing,
@@ -506,12 +650,19 @@ export function verifyModelBakeoffEvidence(input: {
     archiveState: { resultExists: false, pendingResultExists: false },
     now: firstStartedAt,
   });
-  if (authorization.status !== 'AUTHORIZED') add(findings, 'approval', 'BINDING_INVALID');
+  if (
+    authorization.status !== 'AUTHORIZED'
+    && !archiveBoundAuthorizationValid(archive, firstStartedAt)
+  ) add(findings, 'approval', 'BINDING_INVALID');
   if (
     verifyModelBakeoffPricingManifest(archive.pricing, firstStartedAt).status !== 'PASS'
     || verifyModelBakeoffRoleCapsManifest(archive.roleCaps).status !== 'PASS'
     || verifyModelBakeoffKeychainReferenceManifest(archive.keychainReferences).status !== 'PASS'
   ) add(findings, 'approval', 'BOUND_MANIFEST_INVALID');
+
+  if (replacementPolicy && !replacementPolicyValid(archive)) {
+    add(findings, 'policy', 'EXECUTION_POLICY_INVALID');
+  }
 
   if (
     archive.plan.length !== 28
@@ -579,7 +730,7 @@ export function verifyModelBakeoffEvidence(input: {
     if (
       entry === undefined
       || diagnostic === undefined
-      || !validDiagnosticEnvelope(attempt, diagnostic, entry)
+      || !validDiagnosticEnvelope(attempt, diagnostic, entry, replacementPolicy)
     ) {
       add(findings, 'dshTrace', `ATTEMPT_INVALID:${attempt.attemptId}`);
       caseEligible.set(attempt.caseId, false);
@@ -712,7 +863,7 @@ export function verifyModelBakeoffEvidence(input: {
     )
   ) add(findings, 'secretScan', 'FORBIDDEN_CONTENT');
 
-  const checks = deepFreeze({
+  const legacyChecks = {
     archive: check(findings, 'archive'),
     approval: check(findings, 'approval'),
     plan: check(findings, 'plan'),
@@ -723,17 +874,35 @@ export function verifyModelBakeoffEvidence(input: {
     usageAndCost: check(findings, 'usageAndCost'),
     dshTrace: check(findings, 'dshTrace'),
     secretScan: check(findings, 'secretScan'),
+  } as const;
+  const policyCheck = check(findings, 'policy');
+  const checks = deepFreeze(replacementPolicy
+    ? { ...legacyChecks, policy: policyCheck }
+    : legacyChecks);
+  const pairBaseEligible = replacementPolicy
+    ? [
+      checks.archive,
+      checks.approval,
+      checks.plan,
+      policyCheck,
+      checks.secretScan,
+    ].every((value) => value === 'PASS')
+    : [
+      checks.archive,
+      checks.approval,
+      checks.plan,
+      checks.dispatchBudget,
+      checks.secretScan,
+    ].every((value) => value === 'PASS');
+  const pairs = buildPairs({
+    archive,
+    baseEligible: pairBaseEligible,
+    caseEligible,
   });
-  const baseEligible = [
-    checks.archive,
-    checks.approval,
-    checks.plan,
-    checks.dispatchBudget,
-    checks.secretScan,
-  ].every((value) => value === 'PASS');
-  const pairs = buildPairs({ archive, baseEligible, caseEligible });
   const unsigned = {
-    schemaVersion: 'cp03-model-bakeoff-evidence/0.1' as const,
+    schemaVersion: replacementPolicy
+      ? 'cp03-model-bakeoff-evidence/0.2' as const
+      : 'cp03-model-bakeoff-evidence/0.1' as const,
     runId: archive.preflight.runId,
     status: Object.values(checks).every((value) => value === 'PASS')
       ? 'PASS' as const
@@ -742,8 +911,9 @@ export function verifyModelBakeoffEvidence(input: {
     findings: [...new Set(findings)].sort(),
     pairs,
     fullCouncilTimingProven: false as const,
-    claimCeiling:
-      'fixed-input bounded model-selection evidence; two repetitions; not a reliability benchmark; not a Ruby interaction',
+    claimCeiling: replacementPolicy
+      ? 'pair-local fixed-input evidence; exact run status remains global; two repetitions; not a reliability benchmark; not a Ruby interaction'
+      : 'fixed-input bounded model-selection evidence; two repetitions; not a reliability benchmark; not a Ruby interaction',
   };
   return deepFreeze({
     ...unsigned,

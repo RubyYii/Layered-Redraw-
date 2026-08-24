@@ -1,6 +1,12 @@
+import { readFile } from 'node:fs/promises';
+
 import { describe, expect, it } from 'vitest';
 
-import { verifyModelBakeoffEvidence } from '../src/model-bakeoff-evidence.js';
+import {
+  verifyModelBakeoffEvidence,
+  type ModelBakeoffEvidenceReport,
+  type ModelBakeoffTechnicalArchive,
+} from '../src/model-bakeoff-evidence.js';
 import {
   cloneArchive,
   createPassingModelBakeoffArchive,
@@ -20,6 +26,30 @@ const ALL_CHECKS = [
 ] as const;
 
 describe('model bakeoff technical evidence', () => {
+  it('reverifies the committed Task 8 archive without changing its legacy result or hash', async () => {
+    const historicalRoot = new URL(
+      '../../../checkpoints/cp03/model-bakeoff/cp03-model-bakeoff-20260824T055034Z/result/',
+      import.meta.url,
+    );
+    const archive = JSON.parse(await readFile(
+      new URL('technical-archive.json', historicalRoot),
+      'utf8',
+    )) as ModelBakeoffTechnicalArchive;
+    const archived = JSON.parse(await readFile(
+      new URL('technical-evidence.json', historicalRoot),
+      'utf8',
+    )) as ModelBakeoffEvidenceReport;
+
+    const reverified = verifyModelBakeoffEvidence({ archive });
+
+    expect(reverified.status).toBe('FAIL');
+    expect(reverified.pairs.filter(({ technicallyEligible }) => technicallyEligible))
+      .toHaveLength(0);
+    expect(reverified.technicalEvidenceSha256)
+      .toBe(archived.technicalEvidenceSha256);
+    expect(reverified).toEqual(archived);
+  });
+
   it('verifies every bound fact while preserving the Stage B timing ceiling', async () => {
     const archive = await createPassingModelBakeoffArchive();
     const report = verifyModelBakeoffEvidence({
@@ -110,5 +140,58 @@ describe('model bakeoff technical evidence', () => {
     expect(affected.repetitions).toHaveLength(1);
     expect(unaffected.technicallyEligible).toBe(true);
     expect(unaffected.repetitions).toHaveLength(2);
+  });
+
+  it('keeps a complete replacement-policy Witness pair eligible when an unrelated Guardian case fails', async () => {
+    const archive = cloneArchive(await createPassingModelBakeoffArchive({
+      replacementPolicy: true,
+    }));
+    const guardianCase = archive.plan.find((entry) =>
+      entry.role === 'Guardian'
+      && entry.model === 'deepseek-v4-pro'
+      && entry.repetition === 1
+    )!;
+    const guardianOutcome = archive.result.cases.find(
+      ({ caseId }) => caseId === guardianCase.caseId,
+    )!;
+    (guardianOutcome as unknown as { status: string; code: string }).status = 'FAILED';
+    (guardianOutcome as unknown as { status: string; code: string }).code =
+      'SYNTHETIC_GUARDIAN_FAILURE';
+    (archive.result as unknown as { status: string }).status = 'PARTIAL';
+    (archive.result.counts as unknown as { accepted: number; failed: number }).accepted = 27;
+    (archive.result.counts as unknown as { accepted: number; failed: number }).failed = 1;
+
+    const report = verifyModelBakeoffEvidence({ archive });
+    const witness = report.pairs.find(({ roleDecision, model }) =>
+      roleDecision === 'Witness' && model === 'gemini-3.5-flash'
+    )!;
+    const guardian = report.pairs.find(({ roleDecision, model }) =>
+      roleDecision === 'Guardian' && model === 'deepseek-v4-pro'
+    )!;
+
+    expect(report.schemaVersion).toBe('cp03-model-bakeoff-evidence/0.2');
+    expect(report.status).toBe('FAIL');
+    expect(report.checks.dispatchBudget).toBe('FAIL');
+    expect(report.checks.policy).toBe('PASS');
+    expect(witness.technicallyEligible).toBe(true);
+    expect(witness.repetitions).toHaveLength(2);
+    expect(guardian.technicallyEligible).toBe(false);
+    expect(guardian.reasonCodes).toContain('REPETITION_1_TECHNICAL_INELIGIBLE');
+  });
+
+  it('fails every replacement pair closed when the bound execution policy drifts', async () => {
+    const archive = cloneArchive(await createPassingModelBakeoffArchive({
+      replacementPolicy: true,
+    }));
+    (archive.executionPolicy as unknown as { outputSanitizer: string })
+      .outputSanitizer = 'enabled';
+
+    const report = verifyModelBakeoffEvidence({ archive });
+
+    expect(report.schemaVersion).toBe('cp03-model-bakeoff-evidence/0.2');
+    expect(report.checks.policy).toBe('FAIL');
+    expect(report.status).toBe('FAIL');
+    expect(report.pairs.every(({ technicallyEligible }) => !technicallyEligible))
+      .toBe(true);
   });
 });

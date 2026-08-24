@@ -6,6 +6,7 @@ import type {
   ModelBakeoffTechnicalArchive,
 } from '../src/model-bakeoff-evidence.js';
 import type { ModelBakeoffDshDiagnostic } from '../src/model-bakeoff-dsh-transport.js';
+import { createModelBakeoffExecutionPolicy } from '../src/model-bakeoff-execution-policy.js';
 import { createModelBakeoffFixtures } from '../src/model-bakeoff-fixtures.js';
 import type { ModelBakeoffApproval } from '../src/model-bakeoff-gate.js';
 import { createModelBakeoffPlan } from '../src/model-bakeoff-plan.js';
@@ -89,6 +90,7 @@ class PassingArchiveTransport implements ModelBakeoffTransport {
 
   constructor(
     private readonly retryProviders: ReadonlySet<'deepseek' | 'gemini'> = new Set(),
+    private readonly replacementPolicy = false,
   ) {}
 
   async dispatch(request: ModelBakeoffDispatchRequest): Promise<ModelBakeoffTransportResult> {
@@ -138,6 +140,17 @@ class PassingArchiveTransport implements ModelBakeoffTransport {
         redactedOutputText: null,
         turnEndReason: null,
         sessionEventRange,
+        ...(this.replacementPolicy
+          ? {
+            diagnosticSchemaVersion: 'cp03-model-bakeoff-dsh-diagnostic/0.2' as const,
+            primaryOutcome: {
+              kind: 'transport_failure' as const,
+              detailCode: 'SYNTHETIC_PRE_SIDE_EFFECT_FAILURE',
+            },
+            secondaryConditions: [],
+            terminalFinish: null,
+          }
+          : {}),
       });
       return {
         kind: 'transport_failure',
@@ -186,6 +199,14 @@ class PassingArchiveTransport implements ModelBakeoffTransport {
       redactedOutputText: text,
       turnEndReason: 'aborted',
       sessionEventRange,
+      ...(this.replacementPolicy
+        ? {
+          diagnosticSchemaVersion: 'cp03-model-bakeoff-dsh-diagnostic/0.2' as const,
+          primaryOutcome: { kind: 'accepted' as const, detailCode: null },
+          secondaryConditions: [],
+          terminalFinish: { kind: 'tool-calls' as const, failureCode: null },
+        }
+        : {}),
     });
     return {
       kind: 'accepted',
@@ -220,11 +241,15 @@ class PassingArchiveTransport implements ModelBakeoffTransport {
 
 export async function createPassingModelBakeoffArchive(options: {
   readonly retryProviders?: readonly ('deepseek' | 'gemini')[];
+  readonly replacementPolicy?: boolean;
 } = {}): Promise<
   ModelBakeoffTechnicalArchive
 > {
   const fixtures = createModelBakeoffFixtures();
   const plan = createModelBakeoffPlan(fixtures.manifest);
+  const executionPolicy = options.replacementPolicy
+    ? createModelBakeoffExecutionPolicy()
+    : undefined;
   const pricing = createModelBakeoffPricingManifest({
     retrievedAt: '2000-01-01T00:00:00.000Z',
     sources: [
@@ -245,14 +270,21 @@ export async function createPassingModelBakeoffArchive(options: {
       assumption: 'synthetic test-only rate',
     }])),
   });
-  const roleCaps = createModelBakeoffRoleCapsManifest({
-    ConductorIntent: { maxInputTokens: 1_000, maxOutputTokens: 100 },
-    Archivist: { maxInputTokens: 1_000, maxOutputTokens: 100 },
-    Guardian: { maxInputTokens: 1_000, maxOutputTokens: 100 },
-    ConductorCommit: { maxInputTokens: 1_000, maxOutputTokens: 100 },
-    Witness: { maxInputTokens: 1_000, maxOutputTokens: 100 },
-    Rewriter: { maxInputTokens: 1_000, maxOutputTokens: 100 },
-  });
+  const roleCaps = createModelBakeoffRoleCapsManifest(Object.fromEntries(
+    [
+      'ConductorIntent',
+      'Archivist',
+      'Guardian',
+      'ConductorCommit',
+      'Witness',
+      'Rewriter',
+    ].map((phase) => [phase, {
+      maxInputTokens: options.replacementPolicy ? 8_192 : 1_000,
+      maxOutputTokens: executionPolicy?.roleCaps[
+        phase as keyof typeof executionPolicy.roleCaps
+      ] ?? 100,
+    }]),
+  ) as Parameters<typeof createModelBakeoffRoleCapsManifest>[0]);
   const keychainReferences = createModelBakeoffKeychainReferenceManifest([
     {
       provider: 'deepseek',
@@ -279,6 +311,7 @@ export async function createPassingModelBakeoffArchive(options: {
       present: true,
     })),
     candidateFacts: candidates(),
+    ...(executionPolicy === undefined ? {} : { executionPolicy }),
     now: NOW,
   });
   const approval: ModelBakeoffApproval = {
@@ -315,13 +348,16 @@ export async function createPassingModelBakeoffArchive(options: {
     keychainReferencesSha256: keychainReferences.manifestSha256,
     retrySlots: { deepseek: 1, gemini: 1 },
     worstCaseEstimatedUsd: preflight.worstCaseEstimatedUsd!,
-    maxUsd: 0.05,
+    maxUsd: options.replacementPolicy ? 0.5 : 0.05,
     oneRunOnly: true,
     automaticRerun: false,
     externalCapabilities: [],
   };
   let clock = NOW;
-  const transport = new PassingArchiveTransport(new Set(options.retryProviders ?? []));
+  const transport = new PassingArchiveTransport(
+    new Set(options.retryProviders ?? []),
+    options.replacementPolicy === true,
+  );
   const result = await runModelBakeoff({
     approval,
     preflight,
@@ -333,8 +369,7 @@ export async function createPassingModelBakeoffArchive(options: {
       return current;
     },
   });
-  return {
-    schemaVersion: 'cp03-model-bakeoff-technical-archive/0.1',
+  const common = {
     approval,
     preflight,
     plan,
@@ -344,6 +379,26 @@ export async function createPassingModelBakeoffArchive(options: {
     keychainReferences,
     result,
     diagnostics: transport.diagnostics,
+  };
+  if (options.replacementPolicy === true) {
+    if (
+      executionPolicy === undefined
+      || preflight.schemaVersion !== 'cp03-model-bakeoff-preflight/0.2'
+    ) throw new Error('replacement archive fixture policy binding missing');
+    return {
+      ...common,
+      schemaVersion: 'cp03-model-bakeoff-technical-archive/0.2',
+      preflight,
+      executionPolicy,
+    };
+  }
+  if (preflight.schemaVersion !== 'cp03-model-bakeoff-preflight/0.1') {
+    throw new Error('legacy archive fixture preflight version invalid');
+  }
+  return {
+    ...common,
+    schemaVersion: 'cp03-model-bakeoff-technical-archive/0.1',
+    preflight,
   };
 }
 

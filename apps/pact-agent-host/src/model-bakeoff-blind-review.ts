@@ -64,7 +64,9 @@ export interface ModelBakeoffBlindRoleSection {
 }
 
 export interface ModelBakeoffBlindPacket {
-  readonly schemaVersion: 'cp03-model-bakeoff-blind-review/0.1';
+  readonly schemaVersion:
+    | 'cp03-model-bakeoff-blind-review/0.1'
+    | 'cp03-model-bakeoff-blind-review/0.2';
   readonly runId: string;
   readonly createdAt: string;
   readonly criteria: typeof MODEL_BAKEOFF_REVIEW_CRITERIA;
@@ -99,7 +101,10 @@ const unsignedEvidence = (evidence: ModelBakeoffEvidenceReport): unknown => {
 
 const assertEvidenceIntegrity = (evidence: ModelBakeoffEvidenceReport): void => {
   if (
-    evidence.schemaVersion !== 'cp03-model-bakeoff-evidence/0.1'
+    ![
+      'cp03-model-bakeoff-evidence/0.1',
+      'cp03-model-bakeoff-evidence/0.2',
+    ].includes(evidence.schemaVersion)
     || canonicalSha256(unsignedEvidence(evidence)) !== evidence.technicalEvidenceSha256
   ) {
     throw new Error('MODEL_BAKEOFF_TECHNICAL_EVIDENCE_HASH_INVALID');
@@ -181,13 +186,21 @@ export function createModelBakeoffBlindReview(input: {
     throw new Error('MODEL_BAKEOFF_BLIND_LABEL_COLLISION');
   }
 
+  const replacementEvidence =
+    input.evidence.schemaVersion === 'cp03-model-bakeoff-evidence/0.2';
+  const partialTechnicalCoverage = replacementEvidence
+    && input.evidence.pairs.some(({ technicallyEligible }) => !technicallyEligible);
+
   const unsignedPacket = {
-    schemaVersion: 'cp03-model-bakeoff-blind-review/0.1' as const,
+    schemaVersion: replacementEvidence
+      ? 'cp03-model-bakeoff-blind-review/0.2' as const
+      : 'cp03-model-bakeoff-blind-review/0.1' as const,
     runId: input.evidence.runId,
     createdAt,
     criteria: MODEL_BAKEOFF_REVIEW_CRITERIA,
-    claimCeiling:
-      'anonymous two-repetition review material; author adjudication is required; no automatic selection',
+    claimCeiling: partialTechnicalCoverage
+      ? 'anonymous two-repetition review material with partial technical coverage; author adjudication is required; no automatic selection or final routing'
+      : 'anonymous two-repetition review material; author adjudication is required; no automatic selection',
     roles,
   };
   const visiblePacket = canonicalJson(unsignedPacket).toLowerCase();
