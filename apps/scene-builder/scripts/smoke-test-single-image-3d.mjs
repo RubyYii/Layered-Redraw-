@@ -5,6 +5,9 @@ import { chromium } from "playwright-core";
 
 const root = process.cwd();
 const liveDepth = process.argv.includes("--live-depth");
+const universalRig = process.argv.includes("--universal-rig");
+const expectedImageSize = universalRig ? [240, 160] : [160, 240];
+const expectedRigJoints = universalRig ? 24 : 22;
 const artifactDir = path.join(root, "artifacts", "single-image-3d");
 fs.mkdirSync(artifactDir, { recursive: true });
 
@@ -80,6 +83,49 @@ const createPortraitPng = (width = 160, height = 240) => {
   ]);
 };
 
+const createQuadrupedPng = (width = 240, height = 160) => {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
+  const scanlines = Buffer.alloc(height * (1 + width * 4));
+  const distanceToSegment = (x, y, x1, y1, x2, y2) => {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const t = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy)));
+    return Math.hypot(x - (x1 + dx * t), y - (y1 + dy * t));
+  };
+  for (let y = 0; y < height; y += 1) {
+    const rowStart = y * (1 + width * 4);
+    scanlines[rowStart] = 0;
+    for (let x = 0; x < width; x += 1) {
+      const body = ((x - 120) / 70) ** 2 + ((y - 72) / 34) ** 2 < 1;
+      const neck = distanceToSegment(x, y, 168, 66, 190, 47) < 18;
+      const head = Math.hypot(x - 202, y - 43) < 23;
+      const snout = x > 203 && x < 235 && y > 43 && y < 62;
+      const ear = distanceToSegment(x, y, 194, 29, 184, 10) < 7;
+      const tail = distanceToSegment(x, y, 57, 62, 18, 25) < 8;
+      const frontNear = distanceToSegment(x, y, 165, 87, 170, 148) < 10;
+      const frontFar = distanceToSegment(x, y, 150, 88, 145, 146) < 8;
+      const hindNear = distanceToSegment(x, y, 82, 88, 72, 148) < 11;
+      const hindFar = distanceToSegment(x, y, 98, 89, 104, 146) < 8;
+      const inside = body || neck || head || snout || ear || tail || frontNear || frontFar || hindNear || hindFar;
+      const offset = rowStart + 1 + x * 4;
+      scanlines[offset] = inside ? 105 + Math.round(80 * x / width) : 0;
+      scanlines[offset + 1] = inside ? 166 - Math.round(45 * y / height) : 0;
+      scanlines[offset + 2] = inside ? 92 + Math.round(85 * y / height) : 0;
+      scanlines[offset + 3] = inside ? 255 : 0;
+    }
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", header),
+    pngChunk("IDAT", deflateSync(scanlines)),
+    pngChunk("IEND"),
+  ]);
+};
+
 const browser = await chromium.launch({
   executablePath,
   headless: true,
@@ -111,9 +157,9 @@ try {
   await page.locator("#open-single-image-3d").click();
   await page.waitForSelector("#single-image-3d-dialog[open]");
   await page.locator("#single-image-file").setInputFiles({
-    name: "single-image-smoke.png",
+    name: universalRig ? "single-image-quadruped-smoke.png" : "single-image-smoke.png",
     mimeType: "image/png",
-    buffer: createPortraitPng(),
+    buffer: universalRig ? createQuadrupedPng() : createPortraitPng(),
   });
   await page.waitForFunction(() => !document.querySelector("#single-image-source-canvas")?.hidden);
   if (liveDepth) {
@@ -134,16 +180,35 @@ try {
     ]);
   } else {
     const fixture = await page.evaluate(() => window.__BLOCKOUT_SINGLE_IMAGE_3D__.installSyntheticDepthForSmoke());
-    assert(fixture.width === 160 && fixture.height === 240, "离线深度夹具尺寸异常。");
+    assert(fixture.width === expectedImageSize[0] && fixture.height === expectedImageSize[1], "离线深度夹具尺寸异常。");
   }
   await page.waitForFunction(() => !document.querySelector("#single-image-depth-canvas")?.hidden);
+
+  if (universalRig) {
+    await page.locator("#single-image-rig-preset").selectOption("side-quadruped-22");
+    await page.waitForFunction(() => window.__BLOCKOUT_SINGLE_IMAGE_3D__?.snapshot?.().rigFamily === "quadruped");
+    await page.locator("#single-image-rig-joint").selectOption("head");
+    await page.locator("#single-image-add-joint").click();
+    await page.locator("#single-image-joint-name").fill("Sensor.L");
+    await page.locator("#single-image-joint-name").dispatchEvent("change");
+    await page.locator("#single-image-joint-role").fill("tentacleTip");
+    await page.locator("#single-image-joint-role").dispatchEvent("change");
+    await page.locator("#single-image-joint-chain").fill("sensor.L");
+    await page.locator("#single-image-joint-chain").dispatchEvent("change");
+    await page.locator("#single-image-mirror-joint").click();
+    const edited = await page.evaluate(() => window.__BLOCKOUT_SINGLE_IMAGE_3D__.snapshot());
+    assert(edited.rigJointCount === 24 && edited.rigValidation.valid, "非人类骨架的增骨、镜像或拓扑校验失败。");
+    assert(edited.rigCapabilities.includes("bite") && edited.rigCapabilities.includes("walk"), "四足能力标签缺失。");
+  }
 
   const canvas = page.locator("#single-image-source-canvas");
   const box = await canvas.boundingBox();
   assert(box, "骨架画布不可见。");
-  await page.mouse.move(box.x + box.width * 0.81, box.y + box.height * 0.61);
+  const dragFrom = universalRig ? [0.69, 0.88] : [0.81, 0.61];
+  const dragTo = universalRig ? [0.72, 0.84] : [0.85, 0.58];
+  await page.mouse.move(box.x + box.width * dragFrom[0], box.y + box.height * dragFrom[1]);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.85, box.y + box.height * 0.58, { steps: 5 });
+  await page.mouse.move(box.x + box.width * dragTo[0], box.y + box.height * dragTo[1], { steps: 5 });
   await page.mouse.up();
 
   await page.locator("#build-single-image-obj").click();
@@ -153,21 +218,28 @@ try {
 
   await page.locator("#build-single-image-glb").click();
   await page.waitForFunction(() => document.querySelector("#asset-session-title")?.textContent?.endsWith("-rigged.glb"));
-  await page.waitForFunction(() => document.querySelector("#asset-session-detail")?.textContent?.includes("22 骨骼"));
+  await page.waitForFunction(
+    (count) => document.querySelector("#asset-session-detail")?.textContent?.includes(`${count} 骨骼`),
+    expectedRigJoints,
+  );
   const glbSnapshot = await page.evaluate(() => window.__BLOCKOUT_SINGLE_IMAGE_3D__.snapshot());
-  assert(glbSnapshot.glbReady && glbSnapshot.rigJointCount === 22, "骨架 GLB 没有成功生成。");
-  await page.locator("#single-image-3d-dialog").screenshot({ path: path.join(artifactDir, "single-image-depth-rig-workbench.png") });
+  assert(glbSnapshot.glbReady && glbSnapshot.rigJointCount === expectedRigJoints, "骨架 GLB 没有成功生成。");
+  const workbenchScreenshot = universalRig ? "single-image-universal-rig-workbench.png" : "single-image-depth-rig-workbench.png";
+  await page.locator("#single-image-3d-dialog").screenshot({ path: path.join(artifactDir, workbenchScreenshot) });
 
   await page.locator("#close-single-image-3d").click();
   await page.locator('[data-camera="front"]').click();
   await page.waitForTimeout(200);
-  await page.locator("#viewport").screenshot({ path: path.join(artifactDir, "single-image-rigged-model-in-scene.png") });
+  const sceneScreenshot = universalRig ? "single-image-quadruped-rigged-in-scene.png" : "single-image-rigged-model-in-scene.png";
+  await page.locator("#viewport").screenshot({ path: path.join(artifactDir, sceneScreenshot) });
   assert(!await page.locator("#open-rig-mapping").isDisabled(), "生成的 GLB 未启用骨架映射编辑器。");
-  await page.locator("#open-rig-mapping").click();
-  await page.waitForSelector("#rig-mapping-dialog[open]");
-  assert((await page.locator("#rig-mapping-coverage").textContent())?.startsWith("22 /"), "22 骨预设没有进入映射诊断。");
-  await page.locator("#rig-mapping-dialog").screenshot({ path: path.join(artifactDir, "single-image-generated-rig-mapping.png") });
-  await page.locator("#close-rig-mapping").click();
+  if (!universalRig) {
+    await page.locator("#open-rig-mapping").click();
+    await page.waitForSelector("#rig-mapping-dialog[open]");
+    assert((await page.locator("#rig-mapping-coverage").textContent())?.startsWith("22 /"), "22 骨预设没有进入映射诊断。");
+    await page.locator("#rig-mapping-dialog").screenshot({ path: path.join(artifactDir, "single-image-generated-rig-mapping.png") });
+    await page.locator("#close-rig-mapping").click();
+  }
 
   await page.waitForFunction(() => document.querySelector("#autosave-status")?.textContent?.includes("恢复库已保存"));
   const persisted = await page.evaluate(() => {
@@ -184,10 +256,16 @@ try {
   await page.locator("#open-single-image-3d").click();
   await page.waitForFunction(() => {
     const snapshot = window.__BLOCKOUT_SINGLE_IMAGE_3D__?.snapshot?.();
-    return snapshot?.depthReady && snapshot?.mesh?.faceCount > 0 && snapshot?.rigJointCount === 22;
+    return snapshot?.depthReady && snapshot?.mesh?.faceCount > 0;
   });
   const restoredRecipe = await page.evaluate(() => window.__BLOCKOUT_SINGLE_IMAGE_3D__.snapshot());
-  assert(restoredRecipe.glbReady && restoredRecipe.imageSize.join("x") === "160x240", "刷新后没有恢复 GLB、单图或生成配方。");
+  assert(
+    restoredRecipe.glbReady
+      && restoredRecipe.imageSize.join("x") === expectedImageSize.join("x")
+      && restoredRecipe.rigJointCount === expectedRigJoints
+      && (!universalRig || restoredRecipe.rigFamily === "quadruped"),
+    "刷新后没有恢复 GLB、单图或通用骨架配方。",
+  );
   await page.locator("#close-single-image-3d").click();
   if (liveDepth) {
     assert(!networkEvents.some((entry) => entry.includes("cdn.jsdelivr.net")), "WASM 运行时仍从公共 CDN 载入。");
@@ -199,6 +277,9 @@ try {
     imageSize: glbSnapshot.imageSize,
     mesh: glbSnapshot.mesh,
     rigJointCount: glbSnapshot.rigJointCount,
+    rigPreset: glbSnapshot.rigPreset,
+    rigFamily: glbSnapshot.rigFamily,
+    rigCapabilities: glbSnapshot.rigCapabilities,
     portableRoles: portable.entries.map((entry) => entry.role).sort(),
     restoredRecipe: {
       imageSize: restoredRecipe.imageSize,
@@ -207,9 +288,9 @@ try {
     },
     wasmRuntime: liveDepth ? "self-hosted-build-asset" : "not-loaded",
     screenshots: [
-      "single-image-depth-rig-workbench.png",
-      "single-image-rigged-model-in-scene.png",
-      "single-image-generated-rig-mapping.png",
+      workbenchScreenshot,
+      sceneScreenshot,
+      ...(!universalRig ? ["single-image-generated-rig-mapping.png"] : []),
     ],
   }, null, 2));
 } catch (error) {

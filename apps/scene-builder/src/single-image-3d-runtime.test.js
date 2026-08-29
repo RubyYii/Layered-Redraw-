@@ -8,6 +8,7 @@ import {
   moveRigDraftJoint,
   serializeReliefObj,
 } from "./single-image-3d-runtime.js";
+import { createRigDraft } from "./universal-rig-runtime.js";
 
 const rgbaFixture = (width, height, alpha = 255) => {
   const pixels = new Uint8ClampedArray(width * height * 4);
@@ -123,5 +124,26 @@ describe("single image depth to rigged relief", () => {
       const total = weights.getX(vertex) + weights.getY(vertex) + weights.getZ(vertex) + weights.getW(vertex);
       expect(total).toBeCloseTo(1, 5);
     }
+  });
+
+  it("builds non-human skinned scenes with topology and capability metadata", () => {
+    const width = 8;
+    const height = 8;
+    const mesh = buildReliefMeshData({
+      rgbPixels: rgbaFixture(width, height),
+      depth: new Float32Array(width * height).fill(0.5),
+      width,
+      height,
+      resolution: 8,
+    });
+
+    const bird = buildRiggedReliefScene(mesh, createRigDraft("front-bird-20"));
+    const serpent = buildRiggedReliefScene(mesh, createRigDraft("side-serpentine-13"));
+
+    expect(bird.report).toMatchObject({ boneCount: 20, validation: { valid: true } });
+    expect(bird.report.rigProfile).toMatchObject({ family: "avian", jointCount: 20 });
+    expect(bird.report.rigProfile.capabilities).toContain("fly");
+    expect(serpent.report).toMatchObject({ boneCount: 13, validation: { valid: true } });
+    expect(serpent.report.rigProfile.capabilities).toEqual(expect.arrayContaining(["coil", "slither"]));
   });
 });

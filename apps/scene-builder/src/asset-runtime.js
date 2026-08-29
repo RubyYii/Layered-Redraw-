@@ -370,24 +370,40 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
     if (!effector || !lower || !upper || new Set([effector.uuid, lower.uuid, upper.uuid]).size !== 3) return null;
     return { slot, kind, effector, joints: [lower, upper] };
   };
+  const chainForProfile = (chainId) => {
+    const profile = rigConfig.rigProfile;
+    const definitions = Array.isArray(profile?.chains) ? profile.chains : [];
+    const definition = definitions.find((chain) => chain?.id === chainId);
+    if (!definition?.effector || !Array.isArray(definition.joints)) return null;
+    const mapping = profile?.mapping && typeof profile.mapping === "object" ? profile.mapping : {};
+    const resolveProfileBone = (slot) => resolveBone(mapping[slot] ?? slot);
+    const effector = resolveProfileBone(definition.effector);
+    if (!effector) return null;
+    const allowed = new Set(definition.joints.map(resolveProfileBone).filter(Boolean).map((bone) => bone.uuid));
+    const joints = [];
+    let cursor = effector.parent;
+    while (cursor?.isBone && allowed.has(cursor.uuid) && joints.length < 32) {
+      joints.push(cursor);
+      cursor = cursor.parent;
+    }
+    if (!joints.length) return null;
+    return { slot: `chain:${definition.id}`, chainId: definition.id, kind: "generic", effector, joints };
+  };
   const measureLimbChain = (chain) => {
     if (!chain) return { valid: false, reason: "missing_chain", segmentLengths: [] };
     root.updateWorldMatrix(true, true);
-    const upperPosition = chain.joints[1].getWorldPosition(new THREE.Vector3());
-    const lowerPosition = chain.joints[0].getWorldPosition(new THREE.Vector3());
+    const ordered = [...chain.joints].reverse();
+    const positions = ordered.map((bone) => bone.getWorldPosition(new THREE.Vector3()));
     const effectorPosition = chain.effector.getWorldPosition(new THREE.Vector3());
-    const segmentLengths = [
-      upperPosition.distanceTo(lowerPosition),
-      lowerPosition.distanceTo(effectorPosition),
-    ];
+    const segmentLengths = positions.map((position, index) => position.distanceTo(positions[index + 1] ?? effectorPosition));
     const valid = segmentLengths.every((length) => Number.isFinite(length) && length > 1e-5);
     return {
       valid,
       reason: valid ? null : "degenerate_chain",
-      origin: upperPosition,
+      origin: positions[0],
       currentEffector: effectorPosition,
       segmentLengths,
-      maximumReach: valid ? segmentLengths[0] + segmentLengths[1] : 0,
+      maximumReach: valid ? segmentLengths.reduce((sum, length) => sum + length, 0) : 0,
     };
   };
   const restoreIkPose = () => {
@@ -396,6 +412,32 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       if (bone) bone.quaternion.copy(quaternion);
     }
     ikPreSolve.clear();
+  };
+  const applyConfiguredJointLimit = (bone) => {
+    const profile = rigConfig.rigProfile;
+    if (!profile?.jointLimits || !profile?.mapping) return;
+    const slot = Object.entries(profile.mapping).find(([, boneName]) => boneName === bone.name)?.[0];
+    const limit = slot ? profile.jointLimits[slot] : null;
+    const rest = boneRestPose.get(bone.uuid);
+    if (!limit || limit.axis === "free" || !rest) return;
+    const minimum = THREE.MathUtils.degToRad(Number(limit.minDegrees) || 0);
+    const maximum = THREE.MathUtils.degToRad(Number(limit.maxDegrees) || 0);
+    const relative = rest.quaternion.clone().invert().multiply(bone.quaternion);
+    const euler = new THREE.Euler().setFromQuaternion(relative, "XYZ");
+    if (limit.axis === "hinge") {
+      euler.x = 0;
+      euler.y = 0;
+      euler.z = THREE.MathUtils.clamp(euler.z, minimum, maximum);
+    } else if (limit.axis === "twist") {
+      euler.x = 0;
+      euler.y = THREE.MathUtils.clamp(euler.y, minimum, maximum);
+      euler.z = 0;
+    } else {
+      euler.x = THREE.MathUtils.clamp(euler.x, minimum, maximum);
+      euler.y = THREE.MathUtils.clamp(euler.y, minimum, maximum);
+      euler.z = THREE.MathUtils.clamp(euler.z, minimum, maximum);
+    }
+    bone.quaternion.copy(rest.quaternion).multiply(new THREE.Quaternion().setFromEuler(euler));
   };
   const solveLimbIk = (entry) => {
     const { chain, target, weight, iterations } = entry;
@@ -452,6 +494,7 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
         else parentWorld.identity();
         const desiredLocal = parentWorld.multiply(desiredWorld);
         joint.quaternion.slerp(desiredLocal, weight);
+        applyConfiguredJointLimit(joint);
         joint.updateWorldMatrix(false, true);
       }
       chain.effector.getWorldPosition(effectorPosition);
@@ -531,11 +574,22 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
   };
 
   const rigRuntimeReport = () => {
-    const chains = ["leftHand", "rightHand", "leftFoot", "rightFoot"]
-      .map(chainForLimb)
-      .filter(Boolean);
+    const universalProfile = rigConfig.rigProfile && typeof rigConfig.rigProfile === "object"
+      ? structuredClone(rigConfig.rigProfile)
+      : null;
+    const nonHumanoidProfile = Boolean(universalProfile && universalProfile.family !== "humanoid");
+    const chains = nonHumanoidProfile
+      ? []
+      : ["leftHand", "rightHand", "leftFoot", "rightFoot"].map(chainForLimb).filter(Boolean);
     const measuredChains = chains.map((chain) => ({ chain, measurement: measureLimbChain(chain) }));
-    const validChains = measuredChains.filter(({ measurement }) => measurement.valid);
+    const profileChains = Array.isArray(universalProfile?.chains) ? universalProfile.chains : [];
+    const profileCapabilities = Array.isArray(universalProfile?.capabilities) ? universalProfile.capabilities : [];
+    const genericRuntimeChains = universalProfile?.family === "humanoid"
+      ? []
+      : profileChains.map((chain) => chainForProfile(chain?.id)).filter(Boolean);
+    const measuredGenericChains = genericRuntimeChains.map((chain) => ({ chain, measurement: measureLimbChain(chain) }));
+    const allMeasuredChains = [...measuredChains, ...measuredGenericChains];
+    const validChains = allMeasuredChains.filter(({ measurement }) => measurement.valid);
     const diagnostics = evaluateRigMapping(rigBindings.bones, uniqueBoneNames, {
       sources: rigBindings.boneSources,
     });
@@ -548,8 +602,9 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       boneConfidence: { ...rigBindings.boneConfidence },
       missingBones: [...rigBindings.missingBones],
       rigDiagnostics: diagnostics,
-      ikChains: measuredChains.map(({ chain, measurement }) => ({
+      ikChains: allMeasuredChains.map(({ chain, measurement }) => ({
         slot: chain.slot,
+        chainId: chain.chainId ?? null,
         kind: chain.kind,
         bones: [...chain.joints.map((bone) => bone.name), chain.effector.name],
         valid: measurement.valid,
@@ -557,6 +612,7 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
         segmentLengths: [...measurement.segmentLengths],
         reason: measurement.reason,
       })),
+      rigProfile: universalProfile,
       capabilities: {
         handIk: handChains.length > 0,
         twoHandIk: handChains.length === 2,
@@ -570,6 +626,10 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
         semanticPerformance: true,
         automaticExpressions: morphTargetNames.length > 0,
         twoHandContactPlanning: handChains.length === 2,
+        universalRig: Boolean(universalProfile),
+        nonHumanoidRig: Boolean(universalProfile && universalProfile.family !== "humanoid"),
+        genericIkChains: measuredGenericChains.filter(({ measurement }) => measurement.valid).length,
+        semanticActions: [...profileCapabilities],
       },
     };
   };
@@ -600,6 +660,7 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       },
       ikChains: initialRigReport.ikChains,
       rigDiagnostics: initialRigReport.rigDiagnostics,
+      rigProfile: initialRigReport.rigProfile,
       warnings: [...(options.warnings ?? [])],
       ...semanticBindings,
       ...rigBindings,
@@ -710,6 +771,29 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       requestIkSolve();
       return true;
     },
+    setChainIk(chainId, targetWorld, { weight = 1, iterations = 6, locked = false } = {}) {
+      const chain = chainForProfile(String(chainId ?? ""));
+      const target = vector3FromInput(targetWorld);
+      if (!chain || !target || !measureLimbChain(chain).valid) return false;
+      const safeWeight = clamp01(weight);
+      if (safeWeight <= 0) return controller.clearChainIk(chainId);
+      ikTargets.set(chain.slot, {
+        chain,
+        target,
+        weight: safeWeight,
+        iterations: Math.min(IK_MAX_ITERATIONS, Math.max(IK_MIN_ITERATIONS, Math.round(Number(iterations) || 6))),
+        locked: locked === true,
+        lastSolve: null,
+      });
+      requestIkSolve();
+      return true;
+    },
+    clearChainIk(chainId) {
+      const key = `chain:${String(chainId ?? "")}`;
+      if (!ikTargets.delete(key)) return false;
+      requestIkSolve();
+      return true;
+    },
     clearLimbIk(nameOrSlot, { kind = "hand" } = {}) {
       const slot = limbSlotFor(nameOrSlot, kind);
       if (!slot || !ikTargets.delete(slot)) return false;
@@ -778,8 +862,8 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
       requestIkSolve();
       return changed;
     },
-    setRigBindings(bones = {}) {
-      const nextRigConfig = { ...rigConfig, bones: { ...bones } };
+    setRigBindings(bones = {}, rigProfile = rigConfig.rigProfile) {
+      const nextRigConfig = { ...rigConfig, bones: { ...bones }, rigProfile: rigProfile ?? null };
       const nextRigBindings = resolveRigBindings(nextRigConfig, uniqueBoneNames, morphTargetNames);
       const nextDiagnostics = evaluateRigMapping(nextRigBindings.bones, uniqueBoneNames, {
         sources: nextRigBindings.boneSources,
@@ -799,6 +883,7 @@ export function createAssetController(asset, config = {}, sourceName = "model.gl
         missingBones: nextRigReport.missingBones,
         rigDiagnostics: nextRigReport.rigDiagnostics,
         ikChains: nextRigReport.ikChains,
+        rigProfile: nextRigReport.rigProfile,
       });
       Object.assign(controller.report.capabilities, nextRigReport.capabilities);
       return structuredClone({ ...nextRigReport.rigDiagnostics, applied: true });

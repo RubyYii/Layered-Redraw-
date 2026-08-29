@@ -18,21 +18,22 @@ export function constrainLimbTarget({
   epsilon = 1e-5,
 } = {}) {
   const lengths = Array.isArray(segmentLengths)
-    ? segmentLengths.slice(0, 2).map(Number)
+    ? segmentLengths.slice(0, 32).map(Number)
     : [];
   if (!finiteVector(origin) || !finiteVector(target) || !finiteVector(currentEffector)) {
     return { valid: false, reason: "non_finite_target", effectiveTarget: null };
   }
-  if (lengths.length !== 2 || lengths.some((length) => !Number.isFinite(length) || length <= epsilon)) {
+  if (!lengths.length || lengths.some((length) => !Number.isFinite(length) || length <= epsilon)) {
     return { valid: false, reason: "degenerate_chain", effectiveTarget: null };
   }
 
-  const totalLength = lengths[0] + lengths[1];
+  const totalLength = lengths.reduce((sum, length) => sum + length, 0);
+  const longestSegment = Math.max(...lengths);
   const safeMargin = clamp(Number(singularityMargin) || 0, 0, 0.1);
   const maxReach = Math.max(epsilon, totalLength * (1 - safeMargin));
   const minReach = Math.min(
     maxReach,
-    Math.max(epsilon, Math.abs(lengths[0] - lengths[1]) + totalLength * safeMargin),
+    Math.max(epsilon, Math.max(0, longestSegment - (totalLength - longestSegment)) + totalLength * safeMargin),
   );
   const requestedOffset = target.slice(0, 3).map((value, axis) => value - origin[axis]);
   const requestedDistance = vectorLength(requestedOffset);

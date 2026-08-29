@@ -12,6 +12,8 @@
     "test:ui": "node scripts/smoke-test.mjs",
     "test:rig-editor": "node scripts/smoke-test-rig-editor.mjs",
     "test:single-image-3d": "node scripts/smoke-test-single-image-3d.mjs",
+    "test:multi-view-gray": "node scripts/smoke-test-multi-view-gray.mjs",
+    "test:universal-rig": "node scripts/smoke-test-single-image-3d.mjs --universal-rig",
     "test:camera-editor": "node scripts/smoke-test-camera-editor.mjs",
     "test:cp02": "node scripts/smoke-test-cp02.mjs",
     "test:simulation-replay": "node scripts/smoke-test-delivery-replay.mjs --package artifacts/interaction-simulation/interaction-simulation-30fps.simulation-package --screenshot artifacts/interaction-simulation/replay-smoke.png --seek 6",

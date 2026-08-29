@@ -32,6 +32,19 @@ describe("character IK runtime policy", () => {
     expect(result.effectiveDistance).toBeCloseTo(result.minReach);
   });
 
+  it("supports bounded multi-segment creature chains", () => {
+    const result = constrainLimbTarget({
+      origin: [0, 0, 0],
+      target: [0, 0, 5],
+      currentEffector: [0, 0, 2.4],
+      segmentLengths: [0.8, 0.7, 0.6, 0.5],
+      singularityMargin: 0,
+    });
+
+    expect(result).toMatchObject({ valid: true, clamped: true, maxReach: 2.6 });
+    expect(result.effectiveTarget[2]).toBeCloseTo(2.6);
+  });
+
   it("rejects zero-length chains and non-finite targets", () => {
     expect(constrainLimbTarget({
       origin: [0, 0, 0],

@@ -1,4 +1,11 @@
 import * as THREE from "three";
+import {
+  createRigDraft,
+  normalizeRigDraft,
+  rigProfileFromDraft,
+  updateRigJoint,
+  validateRigDraft,
+} from "./universal-rig-runtime.js";
 
 export const SINGLE_IMAGE_DEPTH_MODEL = "onnx-community/depth-anything-v2-small";
 export const SINGLE_IMAGE_3D_CONTRACT = "single-image-relative-relief-v1";
@@ -461,58 +468,12 @@ export function serializeReliefObj(mesh, { name = "single-image-relief" } = {}) 
   return `${lines.join("\n")}\n`;
 }
 
-const HUMANOID_JOINT_PRESET = Object.freeze([
-  { slot: "root", name: "Root", parent: null, u: 0.5, v: 0.66 },
-  { slot: "hips", name: "Hips", parent: "root", u: 0.5, v: 0.58 },
-  { slot: "spine", name: "Spine", parent: "hips", u: 0.5, v: 0.49 },
-  { slot: "chest", name: "Chest", parent: "spine", u: 0.5, v: 0.38 },
-  { slot: "neck", name: "Neck", parent: "chest", u: 0.5, v: 0.27 },
-  { slot: "head", name: "Head", parent: "neck", u: 0.5, v: 0.16 },
-  { slot: "leftShoulder", name: "LeftShoulder", parent: "chest", u: 0.59, v: 0.31 },
-  { slot: "leftUpperArm", name: "LeftUpperArm", parent: "leftShoulder", u: 0.68, v: 0.37 },
-  { slot: "leftLowerArm", name: "LeftLowerArm", parent: "leftUpperArm", u: 0.76, v: 0.49 },
-  { slot: "leftHand", name: "LeftHand", parent: "leftLowerArm", u: 0.81, v: 0.61 },
-  { slot: "rightShoulder", name: "RightShoulder", parent: "chest", u: 0.41, v: 0.31 },
-  { slot: "rightUpperArm", name: "RightUpperArm", parent: "rightShoulder", u: 0.32, v: 0.37 },
-  { slot: "rightLowerArm", name: "RightLowerArm", parent: "rightUpperArm", u: 0.24, v: 0.49 },
-  { slot: "rightHand", name: "RightHand", parent: "rightLowerArm", u: 0.19, v: 0.61 },
-  { slot: "leftUpperLeg", name: "LeftUpperLeg", parent: "hips", u: 0.56, v: 0.61 },
-  { slot: "leftLowerLeg", name: "LeftLowerLeg", parent: "leftUpperLeg", u: 0.57, v: 0.78 },
-  { slot: "leftFoot", name: "LeftFoot", parent: "leftLowerLeg", u: 0.58, v: 0.93 },
-  { slot: "leftToe", name: "LeftToe", parent: "leftFoot", u: 0.64, v: 0.96 },
-  { slot: "rightUpperLeg", name: "RightUpperLeg", parent: "hips", u: 0.44, v: 0.61 },
-  { slot: "rightLowerLeg", name: "RightLowerLeg", parent: "rightUpperLeg", u: 0.43, v: 0.78 },
-  { slot: "rightFoot", name: "RightFoot", parent: "rightLowerLeg", u: 0.42, v: 0.93 },
-  { slot: "rightToe", name: "RightToe", parent: "rightFoot", u: 0.36, v: 0.96 },
-]);
-
 export function createHumanoidRigDraft(overrides = {}) {
-  const bySlot = new Map((Array.isArray(overrides.joints) ? overrides.joints : []).map((joint) => [joint.slot, joint]));
-  return {
-    schemaVersion: 1,
-    kind: "blockout-studio-rig-draft",
-    preset: "front-humanoid-22",
-    coordinateSpace: "image-normalized-top-left",
-    contract: SINGLE_IMAGE_3D_CONTRACT,
-    joints: HUMANOID_JOINT_PRESET.map((preset) => {
-      const saved = bySlot.get(preset.slot);
-      return {
-        ...preset,
-        u: clamp(finite(saved?.u, preset.u), 0, 1),
-        v: clamp(finite(saved?.v, preset.v), 0, 1),
-      };
-    }),
-  };
+  return createRigDraft(overrides?.preset ?? "front-humanoid-22", overrides);
 }
 
 export function moveRigDraftJoint(draft, slot, u, v) {
-  if (!draft?.joints?.some((joint) => joint.slot === slot)) return draft;
-  return {
-    ...draft,
-    joints: draft.joints.map((joint) => joint.slot === slot
-      ? { ...joint, u: clamp(finite(u, joint.u), 0, 1), v: clamp(finite(v, joint.v), 0, 1) }
-      : { ...joint }),
-  };
+  return updateRigJoint(draft, slot, { u, v });
 }
 
 export function sampleReliefPosition(mesh, u, v) {
@@ -564,8 +525,15 @@ const buildSkinAttributes = (mesh, joints, jointPositions) => {
 
 export function buildRiggedReliefScene(mesh, rigDraft = createHumanoidRigDraft()) {
   if (!mesh?.positions || !mesh?.indices) throw new Error("请先生成单图 OBJ 网格。");
-  const draft = createHumanoidRigDraft(rigDraft);
-  const jointPositions = draft.joints.map((joint) => sampleReliefPosition(mesh, joint.u, joint.v));
+  const draft = normalizeRigDraft(rigDraft);
+  const validation = validateRigDraft(draft);
+  if (!validation.valid) throw new Error(`骨架拓扑无效：${validation.errors.join("；")}`);
+  const depthScale = Math.min(mesh.planeSize[0], mesh.planeSize[1]) * 0.25;
+  const jointPositions = draft.joints.map((joint) => {
+    const position = sampleReliefPosition(mesh, joint.u, joint.v);
+    position[2] += joint.depthOffset * depthScale;
+    return position;
+  });
   const { skinIndices, skinWeights } = buildSkinAttributes(mesh, draft.joints, jointPositions);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(mesh.positions.slice(), 3));
@@ -622,6 +590,7 @@ export function buildRiggedReliefScene(mesh, rigDraft = createHumanoidRigDraft()
     metricScale: false,
     hiddenSurfacesRecovered: false,
     rigPreset: draft.preset,
+    rigProfile: rigProfileFromDraft(draft),
   };
   scene.add(skinnedMesh);
   return {
@@ -634,6 +603,8 @@ export function buildRiggedReliefScene(mesh, rigDraft = createHumanoidRigDraft()
       boneNames: bones.map((bone) => bone.name),
       skinVertexCount: mesh.vertexCount,
       mapping: Object.fromEntries(draft.joints.map((joint) => [joint.slot, joint.name])),
+      rigProfile: rigProfileFromDraft(draft),
+      validation,
     },
   };
 }
@@ -664,7 +635,7 @@ export async function exportRiggedReliefGlb(mesh, rigDraft, { exporterFactory } 
 }
 
 export function serializeRigDraft(rigDraft, mesh, metadata = {}) {
-  const draft = createHumanoidRigDraft(rigDraft);
+  const draft = normalizeRigDraft(rigDraft);
   return `${JSON.stringify({
     ...draft,
     source: {

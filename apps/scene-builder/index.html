@@ -660,6 +660,7 @@
                   <small id="asset-session-detail">OBJ 用于静态网格；GLB 可携带骨架、动作与表情 Morph。</small>
                 </div>
                 <div class="asset-import-actions">
+                  <button id="open-multi-view-gray" class="text-button multi-view-gray-trigger" type="button">多视角 → 可旋转灰模</button>
                   <button id="open-single-image-3d" class="text-button single-image-3d-trigger" type="button">单图 → OBJ / 骨架</button>
                   <button id="choose-asset-file" class="text-button is-primary" type="button">OBJ / GLB</button>
                   <button id="choose-animation-file" class="text-button" type="button" hidden>动作 GLB</button>
@@ -861,13 +862,131 @@
         </div>
       </div>
     </dialog>
+    <dialog id="multi-view-gray-dialog" class="single-image-3d-dialog multi-view-gray-dialog" aria-labelledby="multi-view-gray-title" tabindex="-1">
+      <div class="single-image-3d-shell">
+        <header class="single-image-3d-header multi-view-gray-header">
+          <div>
+            <span class="eyebrow">LOCAL MULTI-VIEW BLOCKOUT</span>
+            <h2 id="multi-view-gray-title">多视角照片生成可旋转灰模</h2>
+            <p>把同一静止物体按规范视角拍摄；浏览器在本地以轮廓确定外壳，并可用逐视角相对深度保守收紧可见表面。</p>
+            <span class="multi-view-local-badge" title="照片和深度推理数据不会上传；联网仅用于首次下载模型权重。">LOCAL-FIRST · 照片不上传</span>
+          </div>
+          <button id="close-multi-view-gray" class="icon-button" type="button" aria-label="关闭多视角灰模工作台" title="关闭">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
+        </header>
+
+        <div class="multi-view-gray-workspace">
+          <section class="multi-view-input-pane" aria-label="规范视角照片与轮廓">
+            <div class="multi-view-pane-heading">
+              <div><span class="step-number">01</span><div><strong>放入同一物体的规范视角</strong><span>保持物体直立、居中、相机高度一致；正面 + 任一侧面是最低输入</span></div></div>
+              <span id="multi-view-count">0 / 6</span>
+            </div>
+
+            <div class="multi-view-card-grid">
+              <article class="multi-view-card is-required" data-multi-view-card="front">
+                <header><strong>正面</strong><span>必需</span></header>
+                <div class="multi-view-stage"><canvas data-multi-view-canvas="front" aria-label="正面照片与轮廓预览" hidden></canvas><div data-multi-view-empty="front"><b>FRONT</b><span>镜头朝向物体正面</span></div></div>
+                <footer><button class="text-button is-primary" type="button" data-multi-view-choose="front">选择</button><button class="text-button is-danger" type="button" data-multi-view-clear="front" hidden>移除</button></footer>
+                <small data-multi-view-meta="front">未导入</small>
+              </article>
+              <article class="multi-view-card is-recommended" data-multi-view-card="right">
+                <header><strong>右侧</strong><span>侧面二选一</span></header>
+                <div class="multi-view-stage"><canvas data-multi-view-canvas="right" aria-label="右侧照片与轮廓预览" hidden></canvas><div data-multi-view-empty="right"><b>RIGHT</b><span>从物体右侧拍摄</span></div></div>
+                <footer><button class="text-button is-primary" type="button" data-multi-view-choose="right">选择</button><button class="text-button is-danger" type="button" data-multi-view-clear="right" hidden>移除</button></footer>
+                <small data-multi-view-meta="right">未导入</small>
+              </article>
+              <article class="multi-view-card is-recommended" data-multi-view-card="left">
+                <header><strong>左侧</strong><span>侧面二选一</span></header>
+                <div class="multi-view-stage"><canvas data-multi-view-canvas="left" aria-label="左侧照片与轮廓预览" hidden></canvas><div data-multi-view-empty="left"><b>LEFT</b><span>从物体左侧拍摄</span></div></div>
+                <footer><button class="text-button is-primary" type="button" data-multi-view-choose="left">选择</button><button class="text-button is-danger" type="button" data-multi-view-clear="left" hidden>移除</button></footer>
+                <small data-multi-view-meta="left">未导入</small>
+              </article>
+              <article class="multi-view-card" data-multi-view-card="back">
+                <header><strong>背面</strong><span>可选 · 收紧体积</span></header>
+                <div class="multi-view-stage"><canvas data-multi-view-canvas="back" aria-label="背面照片与轮廓预览" hidden></canvas><div data-multi-view-empty="back"><b>BACK</b><span>从物体背面拍摄</span></div></div>
+                <footer><button class="text-button" type="button" data-multi-view-choose="back">选择</button><button class="text-button is-danger" type="button" data-multi-view-clear="back" hidden>移除</button></footer>
+                <small data-multi-view-meta="back">未导入</small>
+              </article>
+              <article class="multi-view-card" data-multi-view-card="top">
+                <header><strong>顶部</strong><span>可选 · 收紧体积</span></header>
+                <div class="multi-view-stage"><canvas data-multi-view-canvas="top" aria-label="顶部照片与轮廓预览" hidden></canvas><div data-multi-view-empty="top"><b>TOP</b><span>从物体正上方拍摄</span></div></div>
+                <footer><button class="text-button" type="button" data-multi-view-choose="top">选择</button><button class="text-button is-danger" type="button" data-multi-view-clear="top" hidden>移除</button></footer>
+                <small data-multi-view-meta="top">未导入</small>
+              </article>
+              <article class="multi-view-card" data-multi-view-card="bottom">
+                <header><strong>底部</strong><span>可选 · 收紧体积</span></header>
+                <div class="multi-view-stage"><canvas data-multi-view-canvas="bottom" aria-label="底部照片与轮廓预览" hidden></canvas><div data-multi-view-empty="bottom"><b>BOTTOM</b><span>从物体正下方拍摄</span></div></div>
+                <footer><button class="text-button" type="button" data-multi-view-choose="bottom">选择</button><button class="text-button is-danger" type="button" data-multi-view-clear="bottom" hidden>移除</button></footer>
+                <small data-multi-view-meta="bottom">未导入</small>
+              </article>
+            </div>
+          </section>
+
+          <section class="multi-view-control-pane" aria-label="轮廓与灰模设置">
+            <div class="single-image-step-card">
+              <div class="single-image-step-heading"><span>2</span><div><strong>逐视角检查轮廓与相对深度</strong><small>先确认粉色轮廓，再按需用本地深度估计补充可见表面</small></div></div>
+              <label class="multi-view-select" for="multi-view-active-view"><span>正在调整</span><select id="multi-view-active-view" disabled><option value="">尚未导入视角</option></select></label>
+              <label class="multi-view-select" for="multi-view-preview-mode"><span>卡片预览</span><select id="multi-view-preview-mode"><option value="mask">轮廓</option><option value="depth">相对深度</option></select></label>
+              <label class="single-image-range" for="multi-view-threshold"><span>背景差异阈值 <output id="multi-view-threshold-output">48</output></span><input id="multi-view-threshold" type="range" min="4" max="180" step="2" value="48" disabled aria-label="当前视角背景差异阈值" /></label>
+              <label class="single-image-switch" for="multi-view-invert"><span><strong>反相轮廓</strong><small>仅在物体与背景识别颠倒时启用</small></span><input id="multi-view-invert" type="checkbox" disabled /></label>
+              <p id="multi-view-mask-status" class="multi-view-status" role="status">选择图片后，本地轮廓会显示在每张卡片上。</p>
+              <div class="single-image-button-row multi-view-depth-actions">
+                <button id="estimate-current-multi-view-depth" class="text-button is-primary" type="button" disabled>估算当前视角</button>
+                <button id="estimate-all-multi-view-depth" class="text-button" type="button" disabled>估算全部</button>
+              </div>
+              <label class="single-image-switch" for="multi-view-use-depth"><span><strong>使用当前视角深度</strong><small>可随时关闭，轮廓外壳仍是硬边界</small></span><input id="multi-view-use-depth" type="checkbox" checked disabled /></label>
+              <label class="single-image-switch" for="multi-view-depth-invert"><span><strong>反转近／远</strong><small>预览应为白色近、黑色远；只改变解释，不改写原始深度</small></span><input id="multi-view-depth-invert" type="checkbox" disabled /></label>
+              <p id="multi-view-depth-model-status" class="multi-view-status" role="status">首次运行会下载并缓存约 20–30 MB 模型权重；照片不上传。</p>
+              <p class="multi-view-shortcuts">快捷键：D 启用／停用当前深度 · I 反转近／远</p>
+            </div>
+
+            <div class="single-image-step-card">
+              <div class="single-image-step-heading"><span>3</span><div><strong>轮廓外壳 + 深度辅助约束</strong><small>轮廓决定最大体积；相对深度只沿各自视角收紧可见表面</small></div></div>
+              <label class="single-image-range" for="multi-view-depth-influence" title="0 是纯轮廓；数值越高，深度沿各视角射线削减得越多。"><span>深度影响 <output id="multi-view-depth-influence-output">0.30</output></span><input id="multi-view-depth-influence" type="range" min="0" max="1" step="0.05" value="0.30" aria-label="相对深度对多视角灰模的影响" /></label>
+              <details class="multi-view-advanced-settings">
+                <summary>高级重建参数</summary>
+                <div>
+                  <label class="single-image-range" for="multi-view-resolution" title="提高体素精度会增加表面细节与计算量，但不会增加证据。"><span>体素精度 <output id="multi-view-resolution-output">40</output></span><input id="multi-view-resolution" type="range" min="16" max="64" step="4" value="40" aria-label="多视角体素精度" /></label>
+                  <label class="single-image-range" for="multi-view-padding" title="在轮廓边界外保留少量空间，用于吸收分割误差。"><span>轮廓留量 <output id="multi-view-padding-output">0%</output></span><input id="multi-view-padding" type="range" min="0" max="0.1" step="0.01" value="0" aria-label="多视角轮廓留量" /></label>
+                  <label class="single-image-range" for="multi-view-depth-tolerance" title="允许深度表面后的少量体素保留；增大可减少噪声导致的过度削减。"><span>深度容差 <output id="multi-view-depth-tolerance-output">0.08</output></span><input id="multi-view-depth-tolerance" type="range" min="0" max="0.25" step="0.01" value="0.08" aria-label="相对深度噪声容差" /></label>
+                </div>
+              </details>
+              <div class="multi-view-build-actions">
+                <button id="build-multi-view-gray" class="text-button is-primary" type="button" disabled>生成深度辅助灰模</button>
+                <button id="build-multi-view-baseline" class="text-button" type="button" disabled>生成纯轮廓基线</button>
+              </div>
+              <progress id="multi-view-progress" max="100" value="0" hidden></progress>
+              <p id="multi-view-progress-text" class="multi-view-status" role="status" aria-live="polite">等待正面与侧面。</p>
+              <div id="multi-view-evidence-summary" class="multi-view-evidence-summary" aria-live="polite">
+                <header><strong>深度作用证据</strong><span>仅报告体素计数，不代表置信度</span></header>
+                <ul id="multi-view-evidence-list"><li>完成一次构建后，将显示每个视角拒绝的纯轮廓体素。</li></ul>
+              </div>
+            </div>
+
+            <div class="single-image-step-card">
+              <div class="single-image-step-heading"><span>4</span><div><strong>保存可复现工件</strong><small>OBJ 用于旋转参考；JSON 在本地记录视角、参数与不含图像内容的操作序列</small></div></div>
+              <div class="single-image-button-row">
+                <button id="download-multi-view-obj" class="text-button" type="button" disabled>下载 OBJ</button>
+                <button id="download-multi-view-recipe" class="text-button" type="button" disabled>下载配方</button>
+              </div>
+            </div>
+
+            <aside class="single-image-boundary multi-view-boundary">
+              <strong>这是灰模，不是摄影测量</strong>
+              <p>不生成纹理，不恢复真实尺度、相机标定、被遮挡表面或隐藏凹陷，也不保证可用于生产的拓扑。单目深度只在每张图内部归一化，不能当作跨视角对齐的米制深度；它的用途是让绘画者比较、旋转和修正一个有证据边界的空间假设。</p>
+            </aside>
+          </section>
+        </div>
+      </div>
+    </dialog>
     <dialog id="single-image-3d-dialog" class="single-image-3d-dialog" aria-labelledby="single-image-3d-title">
       <div class="single-image-3d-shell">
         <header class="single-image-3d-header">
           <div>
             <span class="eyebrow">LOCAL SINGLE-IMAGE 3D</span>
-            <h2 id="single-image-3d-title">单图深度建模与骨架</h2>
-            <p>图片在浏览器内处理；首次运行会下载并缓存 Depth Anything V2。OBJ 保存静态彩色浮雕，GLB 才能保存骨架与蒙皮。</p>
+            <h2 id="single-image-3d-title">单图深度建模与通用骨架</h2>
+            <p>图片在浏览器内处理；首次运行会下载并缓存 Depth Anything V2。人形、四足、鸟类、蛇形与自定义拓扑都可导出为带蒙皮 GLB。</p>
           </div>
           <button id="close-single-image-3d" class="icon-button" type="button" aria-label="关闭单图建模工作台" title="关闭">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
@@ -877,14 +996,14 @@
         <div class="single-image-3d-workspace">
           <section class="single-image-3d-preview" aria-label="单图与深度预览">
             <div class="single-image-preview-heading">
-              <div><span class="step-number">01</span><div><strong>单图与骨架定位</strong><span>拖动青色关节点，让预设对齐正面人物</span></div></div>
+              <div><span class="step-number">01</span><div><strong>单图与骨架定位</strong><span>选择物种预设，再拖动青色关节点对齐角色轮廓</span></div></div>
               <span id="single-image-size">尚未导入</span>
             </div>
             <div class="single-image-canvas-stage">
               <canvas id="single-image-source-canvas" aria-label="源图与可编辑骨架预览" hidden></canvas>
               <div id="single-image-source-empty" class="single-image-preview-empty">
                 <strong>选择一张单图</strong>
-                <span>角色建议使用正面、完整身体、透明或干净背景的 PNG。</span>
+                <span>建议使用完整身体、透明或干净背景，并选择匹配视角的骨架预设。</span>
               </div>
             </div>
             <div class="single-image-depth-stage">
@@ -926,7 +1045,48 @@
             </div>
 
             <div class="single-image-step-card is-rig">
-              <div class="single-image-step-heading"><span>4</span><div><strong>添加骨架与蒙皮</strong><small>22 骨正面人形预设；生成后可继续使用骨架映射、IK 与动作重定向</small></div></div>
+              <div class="single-image-step-heading"><span>4</span><div><strong>编辑通用骨架与蒙皮</strong><small>可切换物种、增删与重连骨骼、设置关节限制和 IK 末端</small></div></div>
+              <label class="single-image-rig-field is-wide" for="single-image-rig-preset">
+                <span>骨架预设</span>
+                <select id="single-image-rig-preset">
+                  <option value="front-humanoid-22">人形 · 22 骨</option>
+                  <option value="side-quadruped-22">四足 · 22 骨</option>
+                  <option value="front-bird-20">鸟类 · 20 骨</option>
+                  <option value="side-serpentine-13">蛇形 · 13 骨</option>
+                </select>
+              </label>
+              <p id="single-image-rig-summary" class="single-image-rig-summary">人形 · 正面全身</p>
+              <div class="single-image-rig-topology">
+                <label class="single-image-rig-field is-wide" for="single-image-rig-joint">
+                  <span>当前骨骼</span>
+                  <select id="single-image-rig-joint"></select>
+                </label>
+                <div class="single-image-rig-tools">
+                  <button id="single-image-add-joint" class="text-button" type="button">添加子骨</button>
+                  <button id="single-image-mirror-joint" class="text-button" type="button">镜像骨骼</button>
+                  <button id="single-image-delete-joint" class="text-button is-danger" type="button">删除</button>
+                </div>
+                <div class="single-image-rig-grid">
+                  <label class="single-image-rig-field" for="single-image-joint-name"><span>名称</span><input id="single-image-joint-name" type="text" maxlength="96" /></label>
+                  <label class="single-image-rig-field" for="single-image-joint-parent"><span>父骨骼</span><select id="single-image-joint-parent"></select></label>
+                  <label class="single-image-rig-field" for="single-image-joint-role"><span>语义角色</span><input id="single-image-joint-role" type="text" list="single-image-rig-role-options" maxlength="64" /></label>
+                  <label class="single-image-rig-field" for="single-image-joint-chain"><span>运动链</span><input id="single-image-joint-chain" type="text" maxlength="64" /></label>
+                  <label class="single-image-rig-field" for="single-image-joint-side"><span>身体侧</span><select id="single-image-joint-side"><option value="center">中轴</option><option value="left">左</option><option value="right">右</option><option value="near">近侧</option><option value="far">远侧</option><option value="none">不指定</option></select></label>
+                  <label class="single-image-rig-field" for="single-image-joint-axis"><span>关节类型</span><select id="single-image-joint-axis"><option value="free">自由</option><option value="ball">球形</option><option value="hinge">铰链</option><option value="twist">扭转</option></select></label>
+                  <label class="single-image-rig-field is-effector" for="single-image-joint-effector"><span>IK 末端</span><input id="single-image-joint-effector" type="checkbox" /></label>
+                  <label class="single-image-rig-field" for="single-image-joint-min"><span>最小角度</span><input id="single-image-joint-min" type="number" min="-180" max="180" step="1" /></label>
+                  <label class="single-image-rig-field" for="single-image-joint-max"><span>最大角度</span><input id="single-image-joint-max" type="number" min="-180" max="180" step="1" /></label>
+                  <label class="single-image-rig-field" for="single-image-joint-depth"><span>前后偏移</span><input id="single-image-joint-depth" type="number" min="-1" max="1" step="0.05" /></label>
+                </div>
+                <datalist id="single-image-rig-role-options">
+                  <option value="root"></option><option value="spine"></option><option value="head"></option><option value="jaw"></option>
+                  <option value="upperLeg"></option><option value="lowerLeg"></option><option value="paw"></option><option value="foot"></option>
+                  <option value="wingRoot"></option><option value="wing"></option><option value="wingTip"></option><option value="tail"></option>
+                  <option value="tentacleTip"></option><option value="gripper"></option>
+                </datalist>
+              </div>
+              <div id="single-image-rig-capabilities" class="single-image-rig-capabilities" aria-label="骨架能力"></div>
+              <p id="single-image-rig-validation" class="single-image-rig-validation" role="status"></p>
               <div class="single-image-button-row">
                 <button id="build-single-image-glb" class="text-button is-primary" type="button" disabled>生成并载入骨架 GLB</button>
                 <button id="download-single-image-glb" class="text-button" type="button" disabled>下载 GLB</button>
@@ -935,7 +1095,7 @@
 
             <aside class="single-image-boundary">
               <strong>能力边界</strong>
-              <p>单图只能生成可见表面的相对 2.5D 浮雕，不能恢复背面、真实体积或米制尺度。自动骨架是可编辑起点，不等同于人体姿态识别；复杂角色仍建议换用专业建模后的带蒙皮 GLB。</p>
+              <p>单图只能生成可见表面的相对 2.5D 浮雕，不能恢复背面、真实体积或米制尺度。预设骨架是可编辑起点，不等同于自动姿态识别；复杂生产角色仍建议换用专业建模后的带蒙皮 GLB。</p>
             </aside>
           </section>
         </div>
@@ -989,6 +1149,7 @@
       </form>
     </dialog>
     <input id="reference-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden />
+    <input id="multi-view-file" type="file" accept="image/png,image/jpeg,image/webp" hidden />
     <input id="single-image-file" type="file" accept="image/png,image/jpeg,image/webp" hidden />
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script type="module" src="/src/main.js"></script>

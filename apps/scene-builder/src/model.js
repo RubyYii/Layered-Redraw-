@@ -173,8 +173,74 @@ const normalizeNullableStringMap = (value, limit = 32) => {
     .filter(([key, entry]) => key && (entry === null || entry)));
 };
 
-const PORTABLE_ASSET_ROLES = new Set(["model", "animation", "bridge", "rgb", "depth", "rig"]);
-const PORTABLE_ASSET_KINDS = new Set(["model", "spatial-bridge", "single-image-model"]);
+const normalizeRigProfile = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const mapping = normalizeStringMap(value.mapping, 128);
+  const roots = (Array.isArray(value.roots) ? value.roots : [])
+    .slice(0, 16)
+    .map((entry) => cleanText(entry, 64))
+    .filter(Boolean);
+  const capabilities = [...new Set((Array.isArray(value.capabilities) ? value.capabilities : [])
+    .slice(0, 48)
+    .map((entry) => cleanText(entry, 48))
+    .filter(Boolean))].sort();
+  const chains = (Array.isArray(value.chains) ? value.chains : [])
+    .slice(0, 64)
+    .map((chain) => {
+      if (!chain || typeof chain !== "object" || Array.isArray(chain)) return null;
+      const id = cleanText(chain.id, 64);
+      if (!id) return null;
+      return {
+        id,
+        side: ["left", "right", "center", "near", "far", "none"].includes(chain.side) ? chain.side : "center",
+        roles: [...new Set((Array.isArray(chain.roles) ? chain.roles : []).slice(0, 24).map((entry) => cleanText(entry, 48)).filter(Boolean))],
+        joints: (Array.isArray(chain.joints) ? chain.joints : []).slice(0, 64).map((entry) => cleanText(entry, 64)).filter(Boolean),
+        effector: chain.effector == null ? null : cleanText(chain.effector, 64) || null,
+      };
+    })
+    .filter(Boolean);
+  const jointLimits = Object.fromEntries(Object.entries(value.jointLimits ?? {})
+    .slice(0, 128)
+    .map(([slot, limits]) => {
+      const key = cleanText(slot, 64);
+      if (!key || !limits || typeof limits !== "object" || Array.isArray(limits)) return null;
+      const minimum = clamp(finite(limits.minDegrees, -180), -180, 180);
+      const maximum = clamp(finite(limits.maxDegrees, 180), -180, 180);
+      return [key, {
+        axis: ["free", "ball", "hinge", "twist"].includes(limits.axis) ? limits.axis : "free",
+        minDegrees: Math.min(minimum, maximum),
+        maxDegrees: Math.max(minimum, maximum),
+      }];
+    })
+    .filter(Boolean));
+  return {
+    schemaVersion: 1,
+    contract: cleanText(value.contract, 96),
+    preset: cleanText(value.preset, 64),
+    family: cleanText(value.family, 48),
+    jointCount: Math.max(0, Math.min(128, Math.round(finite(value.jointCount, Object.keys(mapping).length)))),
+    roots,
+    chains,
+    capabilities,
+    mapping,
+    jointLimits,
+  };
+};
+
+const MULTI_VIEW_ASSET_ROLES = ["view-front", "view-back", "view-left", "view-right", "view-top", "view-bottom"];
+const MULTI_VIEW_DEPTH_ROLES = ["depth-front", "depth-back", "depth-left", "depth-right", "depth-top", "depth-bottom"];
+const PORTABLE_ASSET_ROLES = new Set([
+  "model",
+  "animation",
+  "bridge",
+  "rgb",
+  "depth",
+  "rig",
+  "recipe",
+  ...MULTI_VIEW_ASSET_ROLES,
+  ...MULTI_VIEW_DEPTH_ROLES,
+]);
+const PORTABLE_ASSET_KINDS = new Set(["model", "spatial-bridge", "single-image-model", "multi-view-gray-model"]);
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 
 const normalizePortableAsset = (value) => {
@@ -183,7 +249,7 @@ const normalizePortableAsset = (value) => {
   if (!kind) return null;
   const seenRoles = new Set();
   const entries = (Array.isArray(value.entries) ? value.entries : [])
-    .slice(0, 5)
+    .slice(0, 14)
     .map((entry) => {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
       const role = PORTABLE_ASSET_ROLES.has(entry.role) ? entry.role : null;
@@ -203,10 +269,21 @@ const normalizePortableAsset = (value) => {
     ? ["model"]
     : kind === "single-image-model"
       ? ["depth", "model", "rgb", "rig"]
-      : ["bridge", "depth", "rgb"];
+      : kind === "multi-view-gray-model"
+        ? ["model", "recipe", "view-front"]
+        : ["bridge", "depth", "rgb"];
   if (requiredRoles.some((role) => !seenRoles.has(role))) return null;
   if (kind === "model" && entries.some((entry) => !["model", "animation"].includes(entry.role))) return null;
   if (kind === "single-image-model" && entries.length !== requiredRoles.length) return null;
+  if (
+    kind === "multi-view-gray-model"
+    && (
+      entries.length < 4
+      || entries.some((entry) => !["model", "recipe", ...MULTI_VIEW_ASSET_ROLES, ...MULTI_VIEW_DEPTH_ROLES].includes(entry.role))
+      || (!seenRoles.has("view-left") && !seenRoles.has("view-right"))
+      || MULTI_VIEW_DEPTH_ROLES.some((role) => seenRoles.has(role) && !seenRoles.has(role.replace("depth-", "view-")))
+    )
+  ) return null;
   if (kind === "spatial-bridge" && entries.length !== requiredRoles.length) return null;
   return { schemaVersion: 1, kind, entries };
 };
@@ -216,14 +293,16 @@ const normalizeAsset = (value) => {
   const rawUrl = cleanText(value.url, 512).replaceAll("\\", "/");
   const url = rawUrl && !/^(?:data|javascript):/i.test(rawUrl) ? rawUrl : null;
   const portable = normalizePortableAsset(value.portable);
+  const rigProfile = normalizeRigProfile(value.rigProfile);
   return {
     url,
     scale: clamp(finite(value.scale, 1), 0.001, 1_000),
     forwardAxis: ["-Z", "+Z", "-X", "+X"].includes(value.forwardAxis) ? value.forwardAxis : "-Z",
     nodes: normalizeStringMap(value.nodes),
     animations: normalizeStringMap(value.animations),
-    bones: normalizeNullableStringMap(value.bones),
+    bones: normalizeNullableStringMap(value.bones, 128),
     expressions: normalizeStringMap(value.expressions),
+    ...(rigProfile ? { rigProfile } : {}),
     ...(portable ? { portable } : {}),
   };
 };

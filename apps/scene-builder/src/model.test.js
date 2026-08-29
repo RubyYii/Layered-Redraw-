@@ -203,6 +203,17 @@ describe("scene schema", () => {
         animations: { interact: "Use" },
         bones: { head: "HeadBone", rightHand: "RightHandBone" },
         expressions: { smile: "Smile", mouthOpen: "JawOpen" },
+        rigProfile: {
+          contract: "blockout-studio-universal-rig-v2",
+          preset: "side-quadruped-22",
+          family: "quadruped",
+          jointCount: 22,
+          roots: ["root"],
+          capabilities: ["walk", "bite", "walk"],
+          chains: [{ id: "frontLeg.near", side: "near", roles: ["upperLeg", "paw"], joints: ["frontUpper", "frontPaw"], effector: "frontPaw" }],
+          mapping: { root: "Root", frontPaw: "FrontPaw" },
+          jointLimits: { frontPaw: { axis: "hinge", minDegrees: -35, maxDegrees: 55 } },
+        },
       },
       motion: { kind: "hover", hoverAmplitude: 0.04, bankDegrees: 8 },
       interactionSpec: {
@@ -233,6 +244,12 @@ describe("scene schema", () => {
       animations: { interact: "Use" },
       bones: { head: "HeadBone", rightHand: "RightHandBone" },
       expressions: { smile: "Smile", mouthOpen: "JawOpen" },
+      rigProfile: {
+        preset: "side-quadruped-22",
+        family: "quadruped",
+        capabilities: ["bite", "walk"],
+        mapping: { root: "Root", frontPaw: "FrontPaw" },
+      },
     });
     expect(object.asset).not.toHaveProperty("portable");
     expect(object.motion).toMatchObject({ kind: "hover", hoverAmplitude: 0.04, bankDegrees: 8 });
@@ -249,6 +266,44 @@ describe("scene schema", () => {
       margin: 0.06,
       support: false,
     });
+  });
+
+  it("preserves only complete canonical multi-view gray-model bindings", () => {
+    const entry = (role, character) => ({
+      role,
+      sha256: character.repeat(64),
+      filename: `${role}.bin`,
+      bytes: 12,
+      mimeType: "application/octet-stream",
+    });
+    const complete = createSceneObject("box", {
+      asset: {
+        portable: {
+          schemaVersion: 1,
+          kind: "multi-view-gray-model",
+          entries: [
+            entry("model", "a"),
+            entry("recipe", "b"),
+            entry("view-front", "c"),
+            entry("view-right", "d"),
+            entry("depth-front", "e"),
+          ],
+        },
+      },
+    });
+    const incomplete = createSceneObject("box", {
+      asset: {
+        portable: {
+          schemaVersion: 1,
+          kind: "multi-view-gray-model",
+          entries: [entry("model", "a"), entry("recipe", "b"), entry("view-front", "c")],
+        },
+      },
+    });
+
+    expect(complete.asset.portable.kind).toBe("multi-view-gray-model");
+    expect(complete.asset.portable.entries.map((item) => item.role)).toEqual(["depth-front", "model", "recipe", "view-front", "view-right"]);
+    expect(incomplete.asset).not.toHaveProperty("portable");
   });
 
   it("persists explicit unmapped rig slots and controlled behavior clips", () => {

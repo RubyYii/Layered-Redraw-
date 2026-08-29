@@ -6,6 +6,19 @@ const MAX_PACKAGE_BYTES = 360_000_000;
 const MAX_PROJECT_BYTES = 96_000_000;
 const MAX_ASSET_BYTES = 160_000_000;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const MULTI_VIEW_ASSET_ROLES = ["view-front", "view-back", "view-left", "view-right", "view-top", "view-bottom"];
+const MULTI_VIEW_DEPTH_ROLES = ["depth-front", "depth-back", "depth-left", "depth-right", "depth-top", "depth-bottom"];
+const PORTABLE_FILE_ROLES = new Set([
+  "model",
+  "animation",
+  "bridge",
+  "rgb",
+  "depth",
+  "rig",
+  "recipe",
+  ...MULTI_VIEW_ASSET_ROLES,
+  ...MULTI_VIEW_DEPTH_ROLES,
+]);
 
 const asUint8Array = (input) => input instanceof Uint8Array
   ? input
@@ -92,15 +105,35 @@ const validateBindingEntry = (entry) => {
 
 export async function persistPortableFiles(persistence, kind, descriptors) {
   if (!persistence?.available) throw new Error("当前浏览器无法持久化二进制资产。");
-  const expectedRoles = kind === "model"
+  const descriptorList = descriptors ?? [];
+  const suppliedRoles = descriptorList.map((descriptor) => String(descriptor?.role ?? ""));
+  if (new Set(suppliedRoles).size !== suppliedRoles.length) throw new Error("可移植资产角色不能重复。");
+  let expectedRoles = kind === "model"
     ? ["model"]
     : kind === "spatial-bridge"
       ? ["bridge", "depth", "rgb"]
       : kind === "single-image-model"
         ? ["model", "rgb", "depth", "rig"]
         : null;
+  if (kind === "multi-view-gray-model") {
+    const supplied = new Set(suppliedRoles);
+    const allowed = new Set(["model", "recipe", ...MULTI_VIEW_ASSET_ROLES, ...MULTI_VIEW_DEPTH_ROLES]);
+    if (
+      suppliedRoles.length < 4
+      || suppliedRoles.length > 14
+      || suppliedRoles.some((role) => !allowed.has(role))
+      || !supplied.has("model")
+      || !supplied.has("recipe")
+      || !supplied.has("view-front")
+      || (!supplied.has("view-left") && !supplied.has("view-right"))
+      || MULTI_VIEW_DEPTH_ROLES.some((role) => supplied.has(role) && !supplied.has(role.replace("depth-", "view-")))
+    ) {
+      throw new Error("多视角灰模需要模型、配方、正面和至少一个侧面文件。");
+    }
+    expectedRoles = [...supplied].sort();
+  }
   if (!expectedRoles) throw new Error("未知的可移植资产类型。");
-  const byRole = new Map((descriptors ?? []).map((descriptor) => [descriptor.role, descriptor.file]));
+  const byRole = new Map(descriptorList.map((descriptor) => [descriptor.role, descriptor.file]));
   if (byRole.size !== expectedRoles.length || expectedRoles.some((role) => !byRole.get(role))) {
     throw new Error("可移植资产文件集合不完整。");
   }
@@ -115,7 +148,7 @@ export async function persistPortableFiles(persistence, kind, descriptors) {
 
 export async function persistPortableFile(persistence, role, file) {
   if (!persistence?.available) throw new Error("当前浏览器无法持久化二进制资产。");
-  if (!["model", "animation", "bridge", "rgb", "depth", "rig"].includes(role)) throw new Error("未知的可移植资产角色。");
+  if (!PORTABLE_FILE_ROLES.has(role)) throw new Error("未知的可移植资产角色。");
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (!bytes.byteLength || bytes.byteLength > MAX_ASSET_BYTES) throw new Error("资产文件大小超出限制。");
   const record = {

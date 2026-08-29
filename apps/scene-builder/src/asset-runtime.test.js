@@ -434,6 +434,70 @@ describe("replaceable OBJ/GLB asset bindings", () => {
     controller.dispose();
   });
 
+  it("exposes non-human rig topology and semantic capabilities without claiming humanoid full-body IK", () => {
+    const rig = createFullBodyRig();
+    const controller = createAssetController({ scene: rig.scene, animations: [] }, {}, "creature.glb");
+    const rigProfile = {
+      contract: "blockout-studio-universal-rig-v2",
+      preset: "side-quadruped-22",
+      family: "quadruped",
+      capabilities: ["bite", "look", "run", "walk"],
+      mapping: {
+        frontUpper: "LeftUpperArm",
+        frontLower: "LeftForeArm",
+        frontPaw: "LeftHand",
+        hindUpper: "LeftUpLeg",
+        hindLower: "LeftLeg",
+        hindPaw: "LeftFoot",
+      },
+      chains: [
+        { id: "frontLeg.near", joints: ["frontUpper", "frontLower", "frontPaw"], effector: "frontPaw" },
+        { id: "hindLeg.near", joints: ["hindUpper", "hindLower", "hindPaw"], effector: "hindPaw" },
+      ],
+      jointLimits: { frontLower: { axis: "hinge", minDegrees: -10, maxDegrees: 150 } },
+    };
+
+    const diagnostics = controller.setRigBindings(controller.report.bones, rigProfile);
+
+    expect(diagnostics.applied).toBe(true);
+    expect(controller.report.rigProfile).toMatchObject({ family: "quadruped", preset: "side-quadruped-22" });
+    expect(controller.report.capabilities).toMatchObject({
+      universalRig: true,
+      nonHumanoidRig: true,
+      handIk: false,
+      footIk: false,
+      fullBodyIk: false,
+      genericIkChains: 2,
+      semanticActions: ["bite", "look", "run", "walk"],
+    });
+    rig.scene.updateMatrixWorld(true);
+    const target = rig.leftHand.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(-0.05, 0.08, 0.04));
+    expect(controller.setChainIk("frontLeg.near", target, { iterations: 4 })).toBe(true);
+    expect(controller.getState().ikTargets).toContain("chain:frontLeg.near");
+    expect(controller.clearChainIk("frontLeg.near")).toBe(true);
+    controller.dispose();
+  });
+
+  it("fails safely when a caller supplies a malformed universal rig profile", () => {
+    const rig = createFullBodyRig();
+    const controller = createAssetController({ scene: rig.scene, animations: [] }, {}, "malformed-rig.glb");
+    expect(() => controller.setRigBindings(controller.report.bones, {
+      family: "quadruped",
+      chains: { invalid: true },
+      capabilities: { invalid: true },
+      mapping: null,
+    })).not.toThrow();
+    expect(controller.report.capabilities).toMatchObject({
+      universalRig: true,
+      nonHumanoidRig: true,
+      genericIkChains: 0,
+      semanticActions: [],
+      fullBodyIk: false,
+    });
+    expect(controller.setChainIk("missing", [0, 0, 0])).toBe(false);
+    controller.dispose();
+  });
+
   it("rejects duplicate runtime bone mappings without mutating the active rig", () => {
     const rig = createFullBodyRig();
     const controller = createAssetController({ scene: rig.scene, animations: [] }, {}, "duplicate.glb");

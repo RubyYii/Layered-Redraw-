@@ -57,7 +57,6 @@ import {
 import {
   browserDepthEstimator,
   buildReliefMeshData,
-  createHumanoidRigDraft,
   depthRasterToRgba,
   exportRiggedReliefGlb,
   moveRigDraftJoint,
@@ -65,6 +64,28 @@ import {
   serializeReliefObj,
   serializeRigDraft,
 } from "./single-image-3d-runtime.js";
+import {
+  CANONICAL_VIEW_DEFINITIONS,
+  buildVisualHullMeshData,
+  deriveSilhouetteMask,
+  parseMultiViewRecipe,
+  serializeMultiViewRecipe,
+  serializeVisualHullObj,
+  silhouetteMaskToRgba,
+  validateCanonicalViews,
+} from "./multi-view-gray-runtime.js";
+import {
+  RIG_PRESET_OPTIONS,
+  addRigJoint,
+  createRigDraft,
+  mirrorRigJoint,
+  normalizeRigDraft,
+  removeRigJoint,
+  reparentRigJoint,
+  rigProfileFromDraft,
+  updateRigJoint,
+  validateRigDraft,
+} from "./universal-rig-runtime.js";
 import {
   applyGuardedInteractionPlan,
   compileGuardedInteractionPlan,
@@ -295,6 +316,7 @@ const elements = {
   entityFriction: $("#entity-friction"),
   entityRestitution: $("#entity-restitution"),
   physicsRuntimeStatus: $("#physics-runtime-status"),
+  openMultiViewGray: $("#open-multi-view-gray"),
   openSingleImage3d: $("#open-single-image-3d"),
   chooseAssetFile: $("#choose-asset-file"),
   chooseAnimationFile: $("#choose-animation-file"),
@@ -421,6 +443,37 @@ const elements = {
   resetRigMapping: $("#reset-rig-mapping"),
   autoMapRig: $("#auto-map-rig"),
   saveRigMapping: $("#save-rig-mapping"),
+  multiViewDialog: $("#multi-view-gray-dialog"),
+  closeMultiViewGray: $("#close-multi-view-gray"),
+  multiViewFile: $("#multi-view-file"),
+  multiViewCount: $("#multi-view-count"),
+  multiViewActiveView: $("#multi-view-active-view"),
+  multiViewPreviewMode: $("#multi-view-preview-mode"),
+  multiViewThreshold: $("#multi-view-threshold"),
+  multiViewThresholdOutput: $("#multi-view-threshold-output"),
+  multiViewInvert: $("#multi-view-invert"),
+  multiViewMaskStatus: $("#multi-view-mask-status"),
+  estimateCurrentMultiViewDepth: $("#estimate-current-multi-view-depth"),
+  estimateAllMultiViewDepth: $("#estimate-all-multi-view-depth"),
+  multiViewUseDepth: $("#multi-view-use-depth"),
+  multiViewDepthInvert: $("#multi-view-depth-invert"),
+  multiViewDepthModelStatus: $("#multi-view-depth-model-status"),
+  multiViewResolution: $("#multi-view-resolution"),
+  multiViewResolutionOutput: $("#multi-view-resolution-output"),
+  multiViewPadding: $("#multi-view-padding"),
+  multiViewPaddingOutput: $("#multi-view-padding-output"),
+  multiViewDepthInfluence: $("#multi-view-depth-influence"),
+  multiViewDepthInfluenceOutput: $("#multi-view-depth-influence-output"),
+  multiViewDepthTolerance: $("#multi-view-depth-tolerance"),
+  multiViewDepthToleranceOutput: $("#multi-view-depth-tolerance-output"),
+  buildMultiViewGray: $("#build-multi-view-gray"),
+  buildMultiViewBaseline: $("#build-multi-view-baseline"),
+  multiViewProgress: $("#multi-view-progress"),
+  multiViewProgressText: $("#multi-view-progress-text"),
+  multiViewEvidenceSummary: $("#multi-view-evidence-summary"),
+  multiViewEvidenceList: $("#multi-view-evidence-list"),
+  downloadMultiViewObj: $("#download-multi-view-obj"),
+  downloadMultiViewRecipe: $("#download-multi-view-recipe"),
   singleImageDialog: $("#single-image-3d-dialog"),
   closeSingleImage3d: $("#close-single-image-3d"),
   chooseSingleImage: $("#choose-single-image"),
@@ -445,6 +498,24 @@ const elements = {
   downloadSingleImageObj: $("#download-single-image-obj"),
   buildSingleImageGlb: $("#build-single-image-glb"),
   downloadSingleImageGlb: $("#download-single-image-glb"),
+  singleImageRigPreset: $("#single-image-rig-preset"),
+  singleImageRigSummary: $("#single-image-rig-summary"),
+  singleImageRigJoint: $("#single-image-rig-joint"),
+  singleImageAddJoint: $("#single-image-add-joint"),
+  singleImageMirrorJoint: $("#single-image-mirror-joint"),
+  singleImageDeleteJoint: $("#single-image-delete-joint"),
+  singleImageJointName: $("#single-image-joint-name"),
+  singleImageJointParent: $("#single-image-joint-parent"),
+  singleImageJointRole: $("#single-image-joint-role"),
+  singleImageJointChain: $("#single-image-joint-chain"),
+  singleImageJointSide: $("#single-image-joint-side"),
+  singleImageJointAxis: $("#single-image-joint-axis"),
+  singleImageJointEffector: $("#single-image-joint-effector"),
+  singleImageJointMin: $("#single-image-joint-min"),
+  singleImageJointMax: $("#single-image-joint-max"),
+  singleImageJointDepth: $("#single-image-joint-depth"),
+  singleImageRigCapabilities: $("#single-image-rig-capabilities"),
+  singleImageRigValidation: $("#single-image-rig-validation"),
   toast: $("#toast"),
 };
 
@@ -482,13 +553,29 @@ const singleImage3dSession = {
   image: null,
   depth: null,
   mesh: null,
-  rig: createHumanoidRigDraft(),
+  rig: createRigDraft(),
   objFile: null,
   glbFile: null,
   busy: false,
   dragSlot: null,
+  selectedSlot: "root",
   progress: 0,
   progressText: "选择图片后开始。",
+};
+const multiViewGraySession = {
+  objectId: null,
+  views: {},
+  activeViewId: null,
+  previewMode: "mask",
+  pendingViewId: null,
+  mesh: null,
+  objFile: null,
+  recipeFile: null,
+  busy: false,
+  progress: 0,
+  progressText: "等待正面与侧面。",
+  traceStartedAt: performance.now(),
+  trace: [],
 };
 
 const cp02Evidence = {
@@ -1259,6 +1346,103 @@ const drawSingleImageRig = (context, rig, width, height, activeSlot = null) => {
   context.restore();
 };
 
+const replaceSelectOptions = (select, options, value) => {
+  select.replaceChildren(...options.map((option) => {
+    const node = document.createElement("option");
+    node.value = option.value;
+    node.textContent = option.label;
+    return node;
+  }));
+  if (options.some((option) => option.value === value)) select.value = value;
+};
+
+const selectedSingleImageJoint = () => {
+  const session = singleImage3dSession;
+  const selected = session.rig.joints.find((joint) => joint.slot === session.selectedSlot);
+  if (selected) return selected;
+  session.selectedSlot = session.rig.joints[0]?.slot ?? null;
+  return session.rig.joints[0] ?? null;
+};
+
+const isSingleImageRigDescendant = (candidateSlot, ancestorSlot) => {
+  const bySlot = new Map(singleImage3dSession.rig.joints.map((joint) => [joint.slot, joint]));
+  const visited = new Set();
+  let cursor = bySlot.get(candidateSlot);
+  while (cursor?.parent && !visited.has(cursor.slot)) {
+    if (cursor.parent === ancestorSlot) return true;
+    visited.add(cursor.slot);
+    cursor = bySlot.get(cursor.parent);
+  }
+  return false;
+};
+
+const renderSingleImageRigControls = () => {
+  const session = singleImage3dSession;
+  const profile = rigProfileFromDraft(session.rig);
+  const validation = validateRigDraft(session.rig);
+  const preset = RIG_PRESET_OPTIONS.find((entry) => entry.id === session.rig.preset);
+  const selected = selectedSingleImageJoint();
+  elements.singleImageRigPreset.value = session.rig.preset;
+  elements.singleImageRigSummary.textContent = [
+    preset?.description ?? session.rig.family,
+    `${profile.jointCount} 骨 · ${profile.chains.length} 条运动链`,
+    preset?.recommendedView ? `建议图像：${preset.recommendedView}` : null,
+    session.rig.topologyCustomized ? "已自定义拓扑" : "预设拓扑",
+  ].filter(Boolean).join(" · ");
+  replaceSelectOptions(
+    elements.singleImageRigJoint,
+    session.rig.joints.map((joint) => ({ value: joint.slot, label: `${joint.name} · ${joint.role}` })),
+    selected?.slot,
+  );
+  replaceSelectOptions(
+    elements.singleImageJointParent,
+    [
+      { value: "", label: "— 根骨骼 —" },
+      ...session.rig.joints
+        .filter((joint) => joint.slot !== selected?.slot && !isSingleImageRigDescendant(joint.slot, selected?.slot))
+        .map((joint) => ({ value: joint.slot, label: joint.name })),
+    ],
+    selected?.parent ?? "",
+  );
+  elements.singleImageJointName.value = selected?.name ?? "";
+  elements.singleImageJointRole.value = selected?.role ?? "";
+  elements.singleImageJointChain.value = selected?.chain ?? "";
+  elements.singleImageJointSide.value = selected?.side ?? "none";
+  elements.singleImageJointAxis.value = selected?.limits?.axis ?? "free";
+  elements.singleImageJointEffector.checked = selected?.effector === true;
+  elements.singleImageJointMin.value = String(selected?.limits?.minDegrees ?? -180);
+  elements.singleImageJointMax.value = String(selected?.limits?.maxDegrees ?? 180);
+  elements.singleImageJointDepth.value = String(selected?.depthOffset ?? 0);
+  elements.singleImageRigCapabilities.replaceChildren(...profile.capabilities.map((capability) => {
+    const chip = document.createElement("span");
+    chip.textContent = capability;
+    return chip;
+  }));
+  elements.singleImageRigValidation.dataset.state = validation.valid ? "valid" : "error";
+  elements.singleImageRigValidation.textContent = validation.valid
+    ? `拓扑有效 · ${validation.rootSlots.length} 根 · ${validation.effectorCount} 个 IK 末端${validation.warnings.length ? ` · ${validation.warnings.join("；")}` : ""}`
+    : `无法导出：${validation.errors.join("；")}`;
+  for (const control of [
+    elements.singleImageRigPreset,
+    elements.singleImageRigJoint,
+    elements.singleImageAddJoint,
+    elements.singleImageMirrorJoint,
+    elements.singleImageDeleteJoint,
+    elements.singleImageJointName,
+    elements.singleImageJointParent,
+    elements.singleImageJointRole,
+    elements.singleImageJointChain,
+    elements.singleImageJointSide,
+    elements.singleImageJointAxis,
+    elements.singleImageJointEffector,
+    elements.singleImageJointMin,
+    elements.singleImageJointMax,
+    elements.singleImageJointDepth,
+  ]) control.disabled = session.busy || !selected;
+  elements.singleImageDeleteJoint.disabled = session.busy || session.rig.joints.length <= 1 || !selected;
+  elements.buildSingleImageGlb.disabled = session.busy || !session.mesh || !validation.valid;
+};
+
 const invalidateSingleImageMesh = () => {
   singleImage3dSession.mesh = null;
   singleImage3dSession.objFile = null;
@@ -1275,7 +1459,7 @@ const renderSingleImage3d = () => {
     : "尚未导入";
   if (image) {
     const context = drawPixelBuffer(elements.singleImageSourceCanvas, image.pixels, image.width, image.height);
-    drawSingleImageRig(context, session.rig, image.width, image.height, session.dragSlot);
+    drawSingleImageRig(context, session.rig, image.width, image.height, session.dragSlot ?? session.selectedSlot);
   }
 
   elements.singleImageDepthCanvas.hidden = !session.depth;
@@ -1309,13 +1493,13 @@ const renderSingleImage3d = () => {
   elements.singleImageDepthInvert.disabled = session.busy || !image;
   elements.buildSingleImageObj.disabled = session.busy || !session.depth;
   elements.downloadSingleImageObj.disabled = session.busy || !session.objFile;
-  elements.buildSingleImageGlb.disabled = session.busy || !session.mesh;
   elements.downloadSingleImageGlb.disabled = session.busy || !session.glbFile;
   for (const control of [
     elements.singleImageResolution,
     elements.singleImageDepthStrength,
     elements.singleImageEdgeThreshold,
   ]) control.disabled = session.busy || !session.depth;
+  renderSingleImageRigControls();
 };
 
 const depthPngFileForSession = async () => {
@@ -1372,7 +1556,8 @@ const restoreSingleImageRecipe = async (object) => {
     modelId: String(rigDocument?.source?.depthModel ?? "restored/relative-depth"),
     dtype: "uint8-preview",
   };
-  singleImage3dSession.rig = createHumanoidRigDraft(rigDocument);
+  singleImage3dSession.rig = normalizeRigDraft(rigDocument);
+  singleImage3dSession.selectedSlot = singleImage3dSession.rig.joints[0]?.slot ?? null;
   const settings = rigDocument?.mesh?.settings ?? {};
   elements.singleImageResolution.value = String(settings.resolution ?? 96);
   elements.singleImageDepthStrength.value = String(settings.depthStrength ?? 0.35);
@@ -1422,7 +1607,8 @@ const persistSingleImageModel = async (object, modelFile, { appliedRig = false }
   const latest = store.getState().project.objects.find((candidate) => candidate.id === object.id);
   if (!latest) throw new Error("生成模型后目标物体已被移除。");
   const mapping = Object.fromEntries(session.rig.joints.map((joint) => [joint.slot, joint.name]));
-  if (appliedRig) editor.setAssetRigBindings(object.id, mapping);
+  const rigProfile = rigProfileFromDraft(session.rig);
+  if (appliedRig) editor.setAssetRigBindings(object.id, mapping, rigProfile);
   store.updateObject(object.id, {
     asset: {
       scale: latest.asset?.scale ?? 1,
@@ -1430,6 +1616,405 @@ const persistSingleImageModel = async (object, modelFile, { appliedRig = false }
       nodes: {},
       animations: {},
       bones: appliedRig ? mapping : {},
+      expressions: {},
+      rigProfile,
+      portable,
+    },
+  });
+  return portable;
+};
+
+const multiViewRuntimeViews = () => CANONICAL_VIEW_DEFINITIONS
+  .map(({ id }) => multiViewGraySession.views[id])
+  .filter(Boolean)
+  .map((entry) => ({
+    id: entry.id,
+    sourceName: entry.image.sourceName,
+    originalSize: entry.image.originalSize,
+    depth: entry.depth ?? null,
+    depthEnabled: entry.depthEnabled !== false,
+    ...entry.silhouette,
+  }));
+
+const resetMultiViewGraySession = (objectId = null) => {
+  multiViewGraySession.objectId = objectId;
+  multiViewGraySession.views = {};
+  multiViewGraySession.activeViewId = null;
+  multiViewGraySession.previewMode = "mask";
+  multiViewGraySession.pendingViewId = null;
+  multiViewGraySession.mesh = null;
+  multiViewGraySession.objFile = null;
+  multiViewGraySession.recipeFile = null;
+  multiViewGraySession.busy = false;
+  multiViewGraySession.progress = 0;
+  multiViewGraySession.progressText = "等待正面与侧面。";
+  multiViewGraySession.traceStartedAt = performance.now();
+  multiViewGraySession.trace = [];
+};
+
+const traceMultiViewAction = (action, details = {}) => {
+  const entry = {
+    sequence: multiViewGraySession.trace.length + 1,
+    elapsedMs: Math.max(0, Math.round(performance.now() - multiViewGraySession.traceStartedAt)),
+    action,
+    ...details,
+  };
+  multiViewGraySession.trace.push(entry);
+  if (multiViewGraySession.trace.length > 2_000) multiViewGraySession.trace.shift();
+  return entry;
+};
+
+const invalidateMultiViewGrayModel = (message = "轮廓或网格设置已改变；场景中仍保留上次生成结果。") => {
+  multiViewGraySession.mesh = null;
+  multiViewGraySession.objFile = null;
+  multiViewGraySession.recipeFile = null;
+  multiViewGraySession.progress = 0;
+  multiViewGraySession.progressText = message;
+};
+
+const updateMultiViewSilhouette = (viewId, settings = {}) => {
+  const entry = multiViewGraySession.views[viewId];
+  if (!entry) return null;
+  const silhouette = deriveSilhouetteMask({
+    pixels: entry.image.pixels,
+    width: entry.image.width,
+    height: entry.image.height,
+    mode: settings.mode ?? entry.silhouette?.mode ?? "auto",
+    threshold: settings.threshold ?? entry.silhouette?.threshold ?? 48,
+    alphaCutoff: settings.alphaCutoff ?? entry.silhouette?.alphaCutoff ?? 24,
+    invert: settings.invert ?? entry.silhouette?.invert ?? false,
+  });
+  entry.silhouette = silhouette;
+  return silhouette;
+};
+
+const multiViewGuidedPairReady = () => {
+  try {
+    validateCanonicalViews(multiViewRuntimeViews(), { requireGuidedPair: true });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const multiViewDepthPreviewRgba = (entry) => {
+  const pixels = depthRasterToRgba(entry.depth);
+  if (entry.depth.inverted) {
+    for (let offset = 0; offset < pixels.length; offset += 4) {
+      const value = 255 - pixels[offset];
+      pixels[offset] = value;
+      pixels[offset + 1] = value;
+      pixels[offset + 2] = value;
+    }
+  }
+  return silhouetteMaskToRgba({ pixels, silhouette: entry.silhouette });
+};
+
+const multiViewDepthRasterFromPreparedImage = (depthImage, metadata = {}) => {
+  const values = new Float32Array(depthImage.width * depthImage.height);
+  let mean = 0;
+  for (let index = 0; index < values.length; index += 1) {
+    const offset = index * 4;
+    const value = (
+      depthImage.pixels[offset] * 0.2126
+      + depthImage.pixels[offset + 1] * 0.7152
+      + depthImage.pixels[offset + 2] * 0.0722
+    ) / 255;
+    values[index] = value;
+    mean += value;
+  }
+  return {
+    width: depthImage.width,
+    height: depthImage.height,
+    depth: values,
+    mean: mean / Math.max(1, values.length),
+    range: [0, 1],
+    inverted: Boolean(metadata.inverted),
+    backend: String(metadata.backend ?? "restored-package"),
+    modelId: String(metadata.modelId ?? "restored/relative-depth"),
+    dtype: String(metadata.dtype ?? "uint8-preview"),
+  };
+};
+
+const multiViewDepthPngFile = async (entry) => {
+  if (!entry?.depth || !entry?.image) throw new Error("该视角没有可保存的相对深度。");
+  const canvas = document.createElement("canvas");
+  drawPixelBuffer(canvas, depthRasterToRgba(entry.depth), entry.depth.width, entry.depth.height);
+  const blob = await new Promise((resolve, reject) => canvas.toBlob(
+    (result) => result ? resolve(result) : reject(new Error("多视角深度 PNG 编码失败。")),
+    "image/png",
+  ));
+  return fileFromBlob(
+    blob,
+    generatedFilename(entry.image.sourceName, `-${entry.id}-depth.png`),
+    "image/png",
+  );
+};
+
+const renderMultiViewGray = () => {
+  const session = multiViewGraySession;
+  const loaded = CANONICAL_VIEW_DEFINITIONS.filter(({ id }) => session.views[id]);
+  const depthLoaded = loaded.filter(({ id }) => session.views[id].depth);
+  if (!session.views[session.activeViewId]) session.activeViewId = loaded[0]?.id ?? null;
+  elements.multiViewCount.textContent = `${loaded.length} / ${CANONICAL_VIEW_DEFINITIONS.length}`;
+  elements.multiViewPreviewMode.value = session.previewMode;
+
+  elements.multiViewActiveView.replaceChildren();
+  if (!loaded.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "尚未导入视角";
+    elements.multiViewActiveView.append(option);
+  } else {
+    for (const definition of loaded) {
+      const option = document.createElement("option");
+      option.value = definition.id;
+      option.textContent = `${definition.label} · ${session.views[definition.id].image.sourceName}`;
+      elements.multiViewActiveView.append(option);
+    }
+    elements.multiViewActiveView.value = session.activeViewId;
+  }
+
+  for (const definition of CANONICAL_VIEW_DEFINITIONS) {
+    const entry = session.views[definition.id];
+    const card = document.querySelector(`[data-multi-view-card="${definition.id}"]`);
+    const canvas = document.querySelector(`[data-multi-view-canvas="${definition.id}"]`);
+    const empty = document.querySelector(`[data-multi-view-empty="${definition.id}"]`);
+    const choose = document.querySelector(`[data-multi-view-choose="${definition.id}"]`);
+    const clear = document.querySelector(`[data-multi-view-clear="${definition.id}"]`);
+    const meta = document.querySelector(`[data-multi-view-meta="${definition.id}"]`);
+    card.dataset.ready = String(Boolean(entry));
+    card.dataset.active = String(session.activeViewId === definition.id);
+    card.dataset.depth = String(Boolean(entry?.depth));
+    canvas.hidden = !entry;
+    empty.hidden = Boolean(entry);
+    choose.disabled = session.busy;
+    choose.textContent = entry ? "替换" : "选择";
+    clear.hidden = !entry;
+    clear.disabled = session.busy;
+    if (!entry) {
+      meta.textContent = "未导入";
+      card.removeAttribute("title");
+      continue;
+    }
+    const previewPixels = session.previewMode === "depth" && entry.depth
+      ? multiViewDepthPreviewRgba(entry)
+      : silhouetteMaskToRgba({ pixels: entry.image.pixels, silhouette: entry.silhouette });
+    drawPixelBuffer(canvas, previewPixels, entry.image.width, entry.image.height);
+    const coverage = Math.round(entry.silhouette.coverage * 100);
+    const depthLabel = entry.depth
+      ? ` · 深度${entry.depthEnabled === false ? "停用" : " ✓"}`
+      : "";
+    const rejectedVoxels = session.mesh?.depthRejectedVoxelCounts?.[definition.id];
+    const rejectionLabel = Number.isFinite(rejectedVoxels)
+      ? ` · 拒绝 ${rejectedVoxels.toLocaleString("zh-CN")}`
+      : "";
+    meta.textContent = `${entry.image.sourceName} · 轮廓 ${coverage}%${depthLabel}${rejectionLabel}`;
+    card.title = [
+      ...entry.silhouette.warnings,
+      ...(entry.depthEnabled === false ? ["这一视角的深度约束已停用。"] : []),
+    ].join(" ");
+  }
+
+  const active = session.views[session.activeViewId] ?? null;
+  elements.multiViewActiveView.disabled = session.busy || !active;
+  elements.multiViewPreviewMode.disabled = session.busy || !loaded.length;
+  elements.multiViewThreshold.disabled = session.busy || !active || active.silhouette.mode === "alpha";
+  elements.multiViewInvert.disabled = session.busy || !active;
+  elements.estimateCurrentMultiViewDepth.disabled = session.busy || !active;
+  elements.estimateAllMultiViewDepth.disabled = session.busy || !loaded.length;
+  elements.multiViewUseDepth.disabled = session.busy || !active?.depth;
+  elements.multiViewDepthInvert.disabled = session.busy || !active?.depth;
+  elements.multiViewUseDepth.checked = Boolean(active?.depth && active.depthEnabled !== false);
+  elements.multiViewDepthInvert.checked = Boolean(active?.depth?.inverted);
+  if (active) {
+    elements.multiViewThreshold.value = String(active.silhouette.threshold);
+    elements.multiViewInvert.checked = active.silhouette.invert;
+    const warnings = active.silhouette.warnings;
+    elements.multiViewMaskStatus.textContent = warnings.length
+      ? `${CANONICAL_VIEW_DEFINITIONS.find((view) => view.id === active.id)?.label}：${warnings.join(" ")}`
+      : active.silhouette.mode === "alpha"
+        ? `${CANONICAL_VIEW_DEFINITIONS.find((view) => view.id === active.id)?.label}使用透明通道；背景差异阈值不参与这一视角。`
+        : `${CANONICAL_VIEW_DEFINITIONS.find((view) => view.id === active.id)?.label}轮廓已提取；粉色边界应贴合物体。`;
+    elements.multiViewMaskStatus.dataset.state = warnings.length ? "warning" : "ready";
+  } else {
+    elements.multiViewThreshold.value = "48";
+    elements.multiViewInvert.checked = false;
+    elements.multiViewMaskStatus.textContent = "选择图片后，本地轮廓会显示在每张卡片上。";
+    elements.multiViewMaskStatus.dataset.state = "";
+  }
+  const depthRuntime = browserDepthEstimator.status();
+  if (active?.depth) {
+    elements.multiViewDepthModelStatus.textContent = `${active.depth.backend.toUpperCase()} · ${active.depth.modelId.split("/").at(-1)} · ${depthLoaded.length}/${loaded.length} 视角已有深度`;
+    elements.multiViewDepthModelStatus.dataset.state = active.depthEnabled === false ? "warning" : "ready";
+  } else if (depthRuntime.state === "ready") {
+    elements.multiViewDepthModelStatus.textContent = `${depthRuntime.backend.toUpperCase()} · 模型已缓存；当前视角尚未估算`;
+    elements.multiViewDepthModelStatus.dataset.state = "";
+  } else if (depthRuntime.state === "loading") {
+    elements.multiViewDepthModelStatus.textContent = "正在载入 Depth Anything V2；照片仍在本机处理。";
+    elements.multiViewDepthModelStatus.dataset.state = "";
+  } else {
+    elements.multiViewDepthModelStatus.textContent = "首次运行会下载并缓存约 20–30 MB 模型权重；照片不上传。";
+    elements.multiViewDepthModelStatus.dataset.state = "";
+  }
+  elements.multiViewThresholdOutput.textContent = elements.multiViewThreshold.value;
+  elements.multiViewResolutionOutput.textContent = elements.multiViewResolution.value;
+  elements.multiViewPaddingOutput.textContent = `${Math.round(Number(elements.multiViewPadding.value) * 100)}%`;
+  elements.multiViewDepthInfluenceOutput.textContent = Number(elements.multiViewDepthInfluence.value).toFixed(2);
+  elements.multiViewDepthToleranceOutput.textContent = Number(elements.multiViewDepthTolerance.value).toFixed(2);
+  const canBuild = multiViewGuidedPairReady();
+  const enabledDepthCount = loaded.filter(({ id }) => (
+    session.views[id].depth && session.views[id].depthEnabled !== false
+  )).length;
+  const depthAssisted = enabledDepthCount > 0 && Number(elements.multiViewDepthInfluence.value) > 0;
+  elements.buildMultiViewGray.disabled = session.busy || !canBuild || !depthAssisted;
+  elements.buildMultiViewBaseline.disabled = session.busy || !canBuild;
+  elements.buildMultiViewGray.textContent = depthAssisted
+    ? `生成深度辅助灰模（${enabledDepthCount} 视角）`
+    : "先估算或启用深度";
+  elements.multiViewResolution.disabled = session.busy;
+  elements.multiViewPadding.disabled = session.busy;
+  elements.multiViewDepthInfluence.disabled = session.busy;
+  elements.multiViewDepthTolerance.disabled = session.busy;
+  elements.downloadMultiViewObj.disabled = session.busy || !session.objFile;
+  elements.downloadMultiViewRecipe.disabled = session.busy || !session.recipeFile;
+  elements.multiViewProgress.hidden = !session.busy;
+  elements.multiViewProgress.value = clampUi(Number(session.progress) || 0, 0, 100);
+  elements.multiViewProgressText.textContent = session.progressText;
+  elements.multiViewProgressText.dataset.state = session.objFile ? "ready" : canBuild ? "" : "warning";
+  elements.multiViewEvidenceList.replaceChildren();
+  const appendEvidence = (label, value) => {
+    const item = document.createElement("li");
+    const labelNode = document.createElement("span");
+    const valueNode = document.createElement("b");
+    labelNode.textContent = label;
+    valueNode.textContent = value;
+    item.append(labelNode, valueNode);
+    elements.multiViewEvidenceList.append(item);
+  };
+  if (!session.mesh) {
+    appendEvidence("尚未生成", "构建后显示精确计数");
+    elements.multiViewEvidenceSummary.dataset.state = "";
+  } else if (!session.mesh.depthViewIds.length) {
+    appendEvidence("当前条件", "纯轮廓基线");
+    appendEvidence("保留体素", session.mesh.voxelCount.toLocaleString("zh-CN"));
+    elements.multiViewEvidenceSummary.dataset.state = "";
+  } else {
+    appendEvidence("纯轮廓体素", session.mesh.visualHullVoxelCount.toLocaleString("zh-CN"));
+    appendEvidence("最终保留体素", session.mesh.voxelCount.toLocaleString("zh-CN"));
+    appendEvidence("深度总削减", session.mesh.depthCarvedVoxelCount.toLocaleString("zh-CN"));
+    for (const viewId of session.mesh.depthViewIds) {
+      const definition = CANONICAL_VIEW_DEFINITIONS.find((view) => view.id === viewId);
+      appendEvidence(
+        `${definition?.label ?? viewId}拒绝`,
+        `${(session.mesh.depthRejectedVoxelCounts[viewId] ?? 0).toLocaleString("zh-CN")} 体素`,
+      );
+    }
+    if (session.mesh.depthConflictVoxelCount > 0) {
+      appendEvidence("多视角同时拒绝", `${session.mesh.depthConflictVoxelCount.toLocaleString("zh-CN")} 体素`);
+    }
+    elements.multiViewEvidenceSummary.dataset.state = session.mesh.depthWarnings.length ? "warning" : "ready";
+  }
+};
+
+const restoreMultiViewGrayRecipe = async (object) => {
+  const binding = object?.asset?.portable;
+  if (binding?.kind !== "multi-view-gray-model") return false;
+  const descriptors = await filesForPortableBinding(projectPersistence, binding);
+  const modelFile = descriptors.find((entry) => entry.role === "model")?.file;
+  const recipeFile = descriptors.find((entry) => entry.role === "recipe")?.file;
+  if (!modelFile || !recipeFile) throw new Error("多视角灰模缺少模型或配方工件。");
+  const recipe = parseMultiViewRecipe(await recipeFile.text());
+  const restoredViews = {};
+  for (const recipeView of recipe.views) {
+    const sourceFile = descriptors.find((entry) => entry.role === recipeView.role)?.file;
+    if (!sourceFile) throw new Error(`多视角灰模缺少 ${recipeView.role} 源图。`);
+    const image = await prepareSingleImageFile(sourceFile, { maxEdge: 2_048 });
+    image.sourceName = recipeView.sourceName;
+    const silhouette = deriveSilhouetteMask({
+      pixels: image.pixels,
+      width: image.width,
+      height: image.height,
+      mode: recipeView.mode,
+      threshold: recipeView.threshold,
+      alphaCutoff: recipeView.alphaCutoff,
+      invert: recipeView.invert,
+    });
+    let depth = null;
+    if (recipeView.depth) {
+      const depthFile = descriptors.find((entry) => entry.role === recipeView.depth.role)?.file;
+      if (!depthFile) throw new Error(`多视角灰模缺少 ${recipeView.depth.role} 深度工件。`);
+      const depthImage = await prepareSingleImageFile(depthFile, { maxEdge: 2_048 });
+      if (depthImage.width !== image.width || depthImage.height !== image.height) {
+        throw new Error(`${recipeView.id} 的照片与深度 PNG 尺寸不一致。`);
+      }
+      depth = multiViewDepthRasterFromPreparedImage(depthImage, recipeView.depth);
+    }
+    restoredViews[recipeView.id] = {
+      id: recipeView.id,
+      image,
+      silhouette,
+      depth,
+      depthEnabled: recipeView.depth?.enabled !== false,
+    };
+  }
+  multiViewGraySession.views = restoredViews;
+  multiViewGraySession.activeViewId = recipe.views[0]?.id ?? null;
+  multiViewGraySession.previewMode = recipe.views.some((view) => view.depth) ? "depth" : "mask";
+  elements.multiViewResolution.value = String(recipe.settings.resolution);
+  elements.multiViewPadding.value = String(recipe.settings.padding);
+  elements.multiViewDepthInfluence.value = String(recipe.settings.depthInfluence);
+  elements.multiViewDepthTolerance.value = String(recipe.settings.depthTolerance);
+  multiViewGraySession.mesh = buildVisualHullMeshData({
+    views: multiViewRuntimeViews(),
+    resolution: recipe.settings.resolution,
+    padding: recipe.settings.padding,
+    depthInfluence: recipe.settings.depthInfluence,
+    depthTolerance: recipe.settings.depthTolerance,
+  });
+  multiViewGraySession.objFile = modelFile;
+  multiViewGraySession.recipeFile = recipeFile;
+  multiViewGraySession.traceStartedAt = performance.now();
+  multiViewGraySession.trace = recipe.interactionTrace;
+  multiViewGraySession.progress = 100;
+  multiViewGraySession.progressText = `已恢复 ${recipe.views.length} 个规范视角、${multiViewGraySession.mesh.depthViewIds.length} 张有效相对深度与可复现配方。`;
+  return true;
+};
+
+const persistMultiViewGrayModel = async (object, modelFile, recipeFile) => {
+  const viewDescriptors = [];
+  for (const view of multiViewRuntimeViews()) {
+    const entry = multiViewGraySession.views[view.id];
+    viewDescriptors.push({
+      role: `view-${view.id}`,
+      file: fileFromBlob(
+        entry.image.blob,
+        generatedFilename(entry.image.sourceName, `-${view.id}.png`),
+        "image/png",
+      ),
+    });
+    if (entry.depth) {
+      viewDescriptors.push({
+        role: `depth-${view.id}`,
+        file: await multiViewDepthPngFile(entry),
+      });
+    }
+  }
+  const descriptors = [
+    { role: "model", file: modelFile },
+    { role: "recipe", file: recipeFile },
+    ...viewDescriptors,
+  ];
+  const portable = await persistPortableFiles(projectPersistence, "multi-view-gray-model", descriptors);
+  const latest = store.getState().project.objects.find((candidate) => candidate.id === object.id);
+  if (!latest) throw new Error("生成灰模后目标物体已被移除。");
+  store.updateObject(object.id, {
+    asset: {
+      scale: latest.asset?.scale ?? 1,
+      forwardAxis: latest.asset?.forwardAxis ?? "-Z",
+      nodes: {},
+      animations: {},
+      bones: {},
       expressions: {},
       portable,
     },
@@ -1644,6 +2229,7 @@ const renderInspector = (state) => {
   elements.physicsRuntimeStatus.textContent = physicsCopy;
   const assetReport = editor.assetReport(object.id);
   const spatialReport = assetReport?.spatialBridge ?? null;
+  elements.openMultiViewGray.disabled = directorMode === "preview";
   elements.openSingleImage3d.disabled = directorMode === "preview";
   elements.chooseAssetFile.disabled = directorMode === "preview";
   elements.chooseAnimationFile.disabled = directorMode === "preview";
@@ -1656,7 +2242,7 @@ const renderInspector = (state) => {
   elements.assetSessionDetail.textContent = assetReport
     ? spatialReport
       ? `RGB-D · ${spatialReport.imageSize.join("×")} px · ${spatialReport.meshSize.join("×")} 顶点 · RGB／深度哈希已验证 · 相对 2.5D`
-      : `${assetReport.format} · ${assetReport.meshCount} 网格 · ${assetReport.skinnedMeshCount} 蒙皮 · ${assetReport.boneCount} 骨骼 · ${assetReport.clipNames.length} 动作 · ${assetReport.morphTargetNames.length} Morph`
+      : `${assetReport.format} · ${assetReport.meshCount} 网格 · ${assetReport.skinnedMeshCount} 蒙皮 · ${assetReport.boneCount} 骨骼 · ${assetReport.clipNames.length} 动作 · ${assetReport.morphTargetNames.length} Morph${assetReport.rigProfile ? ` · ${assetReport.rigProfile.family} / ${assetReport.rigProfile.chains.length} 链` : ""}`
     : "选择 OBJ／GLB 模型，或导入含 spatial-bridge.json 的 RGB-D 工程。";
   elements.assetRuntimeControls.hidden = !assetReport || Boolean(spatialReport);
   elements.chooseAnimationFile.hidden = !assetReport?.capabilities.animationRetargeting || Boolean(spatialReport);
@@ -1668,7 +2254,9 @@ const renderInspector = (state) => {
       ? `全身 IK · 双手 · 脚锁`
       : assetReport.capabilities.handIk || assetReport.capabilities.footIk
         ? `部分 IK · ${assetReport.ikChains.length} 条链`
-        : "IK 未就绪";
+        : assetReport.capabilities.genericIkChains
+          ? `通用 IK 描述 · ${assetReport.capabilities.genericIkChains} 个末端链`
+          : "IK 未就绪";
     const assetKey = `${object.id}:${assetReport.sourceName}`;
     const mappedActions = Object.entries(assetReport.animations).filter(([, name]) => name);
     const mappedActionNames = new Set(mappedActions.map(([, name]) => name));
@@ -1713,11 +2301,14 @@ const renderInspector = (state) => {
     const boneBindings = Object.entries(assetReport.bones).filter(([, name]) => name)
       .map(([slot, name]) => `${slot}→${name}`).join("、") || "无";
     const expressionBindings = mappedExpressions.map(([slot, name]) => `${slot}→${name}`).join("、") || "无";
+    const universalRigSummary = assetReport.rigProfile
+      ? `通用骨架：${assetReport.rigProfile.family} · ${assetReport.rigProfile.jointCount} 骨 · ${assetReport.rigProfile.chains.length} 链。受控动作能力：${assetReport.rigProfile.capabilities.join(" / ") || "move"}。关节限制和非人类 IK 末端随骨架配方保存；现有人形全身 IK 只在标准人形映射完整时启用。`
+      : null;
     const rigSummary = spatialReport
       ? `已校验 RGB 与深度预览 2 个工件；合同指纹 ${spatialReport.contractSha256.slice(0, 12)}…。近白值沿表面法线向前，但仍是相对深度，不是米制重建。载体负责位置、旋转和尺寸；表面不会自动变成碰撞体。`
       : assetReport.format === "OBJ"
         ? "静态 OBJ：没有骨骼、蒙皮权重、动画或 Morph；如需角色控制请导出为 GLB。"
-        : `骨架映射：${boneBindings}。表情映射：${expressionBindings}。运行时接口：setBehaviorState、setRigBindings、setBonePose、setLimbIk、setFootLock、setLookTarget、retargetAnimationsFrom；角色表演状态机负责接触阶段、对称双手握点、脚底锁定、头颈注视与受控表情/口型。`;
+        : universalRigSummary ?? `骨架映射：${boneBindings}。表情映射：${expressionBindings}。运行时接口：setBehaviorState、setRigBindings、setBonePose、setLimbIk、setFootLock、setLookTarget、retargetAnimationsFrom；角色表演状态机负责接触阶段、对称双手握点、脚底锁定、头颈注视与受控表情/口型。`;
     elements.assetRigDetail.textContent = `${rigSummary}${assetReport.warnings.length ? ` 提示：${assetReport.warnings.join("；")}` : ""}`;
   }
   elements.interactionTrigger.value = object.entity.interaction.trigger;
@@ -2893,6 +3484,360 @@ elements.removeReferenceImage.addEventListener("click", () => {
   if (store.removeReference()) showToast("参考图已移除，可使用撤销恢复");
 });
 
+elements.openMultiViewGray.addEventListener("click", async () => {
+  const object = selectedObject();
+  if (!object) {
+    showToast("请先选择一个承载生成灰模的场景物体");
+    return;
+  }
+  const changedObject = multiViewGraySession.objectId !== object.id;
+  if (changedObject) resetMultiViewGraySession(object.id);
+  if (elements.singleImageDialog.open) elements.singleImageDialog.close();
+  if (!elements.multiViewDialog.open) elements.multiViewDialog.showModal();
+  if (
+    object.asset?.portable?.kind === "multi-view-gray-model"
+    && (changedObject || !Object.keys(multiViewGraySession.views).length)
+  ) {
+    multiViewGraySession.busy = true;
+    multiViewGraySession.progress = 12;
+    multiViewGraySession.progressText = "正在从内容库恢复规范视角与重建配方…";
+    renderMultiViewGray();
+    try {
+      await restoreMultiViewGrayRecipe(object);
+    } catch (error) {
+      multiViewGraySession.progressText = error.message;
+      showToast(error.message);
+    } finally {
+      multiViewGraySession.busy = false;
+    }
+  }
+  renderMultiViewGray();
+});
+
+elements.closeMultiViewGray.addEventListener("click", () => elements.multiViewDialog.close());
+elements.multiViewDialog.addEventListener("cancel", () => elements.multiViewDialog.close());
+
+document.querySelectorAll("[data-multi-view-choose]").forEach((button) => {
+  button.addEventListener("click", () => {
+    multiViewGraySession.pendingViewId = button.dataset.multiViewChoose;
+    elements.multiViewFile.click();
+  });
+});
+
+elements.multiViewFile.addEventListener("change", async () => {
+  const file = elements.multiViewFile.files?.[0];
+  const viewId = multiViewGraySession.pendingViewId;
+  if (!file || !CANONICAL_VIEW_DEFINITIONS.some((view) => view.id === viewId)) return;
+  multiViewGraySession.busy = true;
+  multiViewGraySession.progress = 8;
+  multiViewGraySession.progressText = `正在本地处理${CANONICAL_VIEW_DEFINITIONS.find((view) => view.id === viewId)?.label}照片…`;
+  renderMultiViewGray();
+  try {
+    const image = await prepareSingleImageFile(file, { maxEdge: 768 });
+    const silhouette = deriveSilhouetteMask({
+      pixels: image.pixels,
+      width: image.width,
+      height: image.height,
+      threshold: 48,
+    });
+    multiViewGraySession.views[viewId] = {
+      id: viewId,
+      image,
+      silhouette,
+      depth: null,
+      depthEnabled: true,
+    };
+    multiViewGraySession.activeViewId = viewId;
+    traceMultiViewAction("view-added", { viewId });
+    invalidateMultiViewGrayModel(`已加入${CANONICAL_VIEW_DEFINITIONS.find((view) => view.id === viewId)?.label}；请检查粉色轮廓。`);
+    showToast(`已载入${CANONICAL_VIEW_DEFINITIONS.find((view) => view.id === viewId)?.label}“${image.sourceName}”`);
+  } catch (error) {
+    multiViewGraySession.progressText = error.message;
+    showToast(error.message);
+  } finally {
+    multiViewGraySession.busy = false;
+    multiViewGraySession.pendingViewId = null;
+    elements.multiViewFile.value = "";
+    renderMultiViewGray();
+  }
+});
+
+document.querySelectorAll("[data-multi-view-clear]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const viewId = button.dataset.multiViewClear;
+    delete multiViewGraySession.views[viewId];
+    traceMultiViewAction("view-removed", { viewId });
+    if (multiViewGraySession.activeViewId === viewId) {
+      multiViewGraySession.activeViewId = CANONICAL_VIEW_DEFINITIONS.find(({ id }) => multiViewGraySession.views[id])?.id ?? null;
+    }
+    invalidateMultiViewGrayModel("视角已移除；请重新生成灰模。");
+    renderMultiViewGray();
+  });
+});
+
+elements.multiViewActiveView.addEventListener("change", () => {
+  multiViewGraySession.activeViewId = elements.multiViewActiveView.value || null;
+  if (multiViewGraySession.activeViewId) traceMultiViewAction("view-selected", { viewId: multiViewGraySession.activeViewId });
+  renderMultiViewGray();
+});
+
+elements.multiViewPreviewMode.addEventListener("change", () => {
+  multiViewGraySession.previewMode = elements.multiViewPreviewMode.value === "depth" ? "depth" : "mask";
+  traceMultiViewAction("preview-mode-changed", { value: multiViewGraySession.previewMode === "depth" ? 1 : 0 });
+  renderMultiViewGray();
+});
+
+const estimateMultiViewDepthForView = async (viewId, { progressBase = 0, progressSpan = 100 } = {}) => {
+  const entry = multiViewGraySession.views[viewId];
+  if (!entry) throw new Error("待估算的规范视角不存在。");
+  const label = CANONICAL_VIEW_DEFINITIONS.find((view) => view.id === viewId)?.label ?? viewId;
+  const url = URL.createObjectURL(entry.image.blob);
+  try {
+    const depth = await browserDepthEstimator.estimate(url, {
+      invert: false,
+      onProgress: (event) => {
+        const reported = Number(event.event?.progress);
+        const withinView = Number.isFinite(reported)
+          ? Math.max(0.03, Math.min(0.9, reported / 100 * 0.9))
+          : event.phase === "estimating" ? 0.94 : 0.04;
+        multiViewGraySession.progress = progressBase + withinView * progressSpan;
+        multiViewGraySession.progressText = `${label} · ${event.message}`;
+        elements.multiViewProgress.hidden = false;
+        elements.multiViewProgress.value = multiViewGraySession.progress;
+        elements.multiViewProgressText.textContent = multiViewGraySession.progressText;
+        elements.multiViewDepthModelStatus.textContent = event.backend
+          ? `${String(event.backend).toUpperCase()} · ${event.phase === "ready" ? "模型已就绪" : "正在本机运行"}`
+          : "正在载入 Depth Anything V2";
+      },
+    });
+    if (depth.width !== entry.image.width || depth.height !== entry.image.height) {
+      throw new Error(`${label}深度输出 ${depth.width}×${depth.height} 与处理后照片 ${entry.image.width}×${entry.image.height} 不一致。`);
+    }
+    entry.depth = { ...depth, inverted: false };
+    entry.depthEnabled = true;
+    traceMultiViewAction("depth-estimated", { viewId });
+    return depth;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+};
+
+const runMultiViewDepthEstimation = async (viewIds) => {
+  const session = multiViewGraySession;
+  const targets = viewIds.filter((viewId) => session.views[viewId]);
+  if (!targets.length || session.busy) return;
+  invalidateMultiViewGrayModel("深度正在更新；场景中仍保留上次生成结果。");
+  session.busy = true;
+  session.progress = 2;
+  session.progressText = "准备本地深度模型…";
+  renderMultiViewGray();
+  try {
+    for (let index = 0; index < targets.length; index += 1) {
+      await estimateMultiViewDepthForView(targets[index], {
+        progressBase: index / targets.length * 96,
+        progressSpan: 96 / targets.length,
+      });
+    }
+    session.previewMode = "depth";
+    session.progress = 100;
+    session.progressText = `相对深度估算完成 · ${targets.length} 个视角 · 白色为近处；请逐张检查方向。`;
+    showToast(`已在本机生成 ${targets.length} 张相对深度图`);
+  } catch (error) {
+    session.progressText = error.message;
+    showToast(error.message);
+  } finally {
+    session.busy = false;
+    renderMultiViewGray();
+  }
+};
+
+elements.estimateCurrentMultiViewDepth.addEventListener("click", () => {
+  const viewId = multiViewGraySession.activeViewId;
+  if (viewId) void runMultiViewDepthEstimation([viewId]);
+});
+
+elements.estimateAllMultiViewDepth.addEventListener("click", () => {
+  const viewIds = CANONICAL_VIEW_DEFINITIONS
+    .map(({ id }) => id)
+    .filter((id) => multiViewGraySession.views[id]);
+  void runMultiViewDepthEstimation(viewIds);
+});
+
+elements.multiViewThreshold.addEventListener("input", () => {
+  const viewId = multiViewGraySession.activeViewId;
+  if (!viewId) return;
+  try {
+    updateMultiViewSilhouette(viewId, { threshold: Number(elements.multiViewThreshold.value) });
+    traceMultiViewAction("threshold-changed", { viewId, value: Number(elements.multiViewThreshold.value) });
+    invalidateMultiViewGrayModel("轮廓阈值已改变；请确认粉色边界后重新生成灰模。");
+  } catch (error) {
+    multiViewGraySession.progressText = error.message;
+    showToast(error.message);
+  }
+  renderMultiViewGray();
+});
+
+elements.multiViewInvert.addEventListener("change", () => {
+  const viewId = multiViewGraySession.activeViewId;
+  if (!viewId) return;
+  try {
+    updateMultiViewSilhouette(viewId, { invert: elements.multiViewInvert.checked });
+    traceMultiViewAction("invert-changed", { viewId, value: elements.multiViewInvert.checked ? 1 : 0 });
+    invalidateMultiViewGrayModel("轮廓反相设置已改变；请重新生成灰模。");
+  } catch (error) {
+    elements.multiViewInvert.checked = !elements.multiViewInvert.checked;
+    multiViewGraySession.progressText = error.message;
+    showToast(error.message);
+  }
+  renderMultiViewGray();
+});
+
+elements.multiViewUseDepth.addEventListener("change", () => {
+  const viewId = multiViewGraySession.activeViewId;
+  const entry = multiViewGraySession.views[viewId];
+  if (!entry?.depth) return;
+  entry.depthEnabled = elements.multiViewUseDepth.checked;
+  traceMultiViewAction("depth-enabled-changed", { viewId, value: entry.depthEnabled ? 1 : 0 });
+  invalidateMultiViewGrayModel(entry.depthEnabled
+    ? "当前视角深度约束已启用；请重新生成灰模。"
+    : "当前视角深度约束已停用；请重新生成灰模以比较纯轮廓基线。");
+  renderMultiViewGray();
+});
+
+elements.multiViewDepthInvert.addEventListener("change", () => {
+  const viewId = multiViewGraySession.activeViewId;
+  const entry = multiViewGraySession.views[viewId];
+  if (!entry?.depth) return;
+  entry.depth.inverted = elements.multiViewDepthInvert.checked;
+  traceMultiViewAction("depth-invert-changed", { viewId, value: entry.depth.inverted ? 1 : 0 });
+  invalidateMultiViewGrayModel(entry.depth.inverted
+    ? "已反转当前视角的近／远解释；请检查深度预览并重新生成。"
+    : "已恢复当前视角默认近／远解释；请重新生成灰模。");
+  renderMultiViewGray();
+});
+
+for (const [control, action, message] of [
+  [elements.multiViewResolution, "resolution-changed", "体素精度已改变；请重新生成灰模。"],
+  [elements.multiViewPadding, "padding-changed", "轮廓留量已改变；请重新生成灰模。"],
+  [elements.multiViewDepthInfluence, "depth-influence-changed", "深度影响已改变；请重新生成并与纯轮廓基线比较。"],
+  [elements.multiViewDepthTolerance, "depth-tolerance-changed", "深度容差已改变；请重新生成灰模。"],
+]) {
+  control.addEventListener("input", () => {
+    traceMultiViewAction(action, { value: Number(control.value) });
+    invalidateMultiViewGrayModel(message);
+    renderMultiViewGray();
+  });
+}
+
+const buildMultiViewGrayAsset = async ({ baseline = false } = {}) => {
+  const session = multiViewGraySession;
+  const object = currentState.project.objects.find((candidate) => candidate.id === session.objectId);
+  if (!object || session.busy) return;
+  const modeLabel = baseline ? "纯轮廓基线" : "深度辅助灰模";
+  const requestedDepthInfluence = baseline ? 0 : Number(elements.multiViewDepthInfluence.value);
+  session.busy = true;
+  session.progress = 10;
+  session.progressText = baseline
+    ? "正在验证规范视角并生成纯轮廓实验基线…"
+    : "正在验证规范视角、轮廓与相对深度合同…";
+  traceMultiViewAction(baseline ? "baseline-build-started" : "depth-build-started", {
+    value: Number(elements.multiViewResolution.value),
+  });
+  renderMultiViewGray();
+  await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  try {
+    const views = validateCanonicalViews(multiViewRuntimeViews(), { requireGuidedPair: true });
+    if (!baseline && !views.some((view) => view.depth && view.depthEnabled !== false) ) {
+      throw new Error("深度辅助条件至少需要一张已启用的相对深度；也可以先生成纯轮廓基线。");
+    }
+    session.progress = 28;
+    session.progressText = baseline
+      ? "正在求交轮廓并提取不含深度约束的基线表面…"
+      : "正在求交轮廓，并按启用的相对深度收紧可见表面…";
+    renderMultiViewGray();
+    session.mesh = buildVisualHullMeshData({
+      views,
+      resolution: Number(elements.multiViewResolution.value),
+      padding: Number(elements.multiViewPadding.value),
+      depthInfluence: requestedDepthInfluence,
+      depthTolerance: Number(elements.multiViewDepthTolerance.value),
+    });
+    const baseName = session.views.front?.image.sourceName ?? object.name;
+    const artifactSuffix = baseline ? "-silhouette-baseline" : "-depth-assisted-hull";
+    session.objFile = new File(
+      [serializeVisualHullObj(session.mesh, { name: baseName })],
+      generatedFilename(baseName, `${artifactSuffix}.obj`),
+      { type: "model/obj" },
+    );
+    traceMultiViewAction(baseline ? "baseline-build-completed" : "depth-build-completed", {
+      value: session.mesh.voxelCount,
+    });
+    session.recipeFile = new File(
+      [serializeMultiViewRecipe({ views, mesh: session.mesh, name: baseName, interactionTrace: session.trace })],
+      generatedFilename(baseName, `${artifactSuffix}-recipe.json`),
+      { type: "application/json" },
+    );
+    session.progress = 74;
+    session.progressText = "正在载入中性灰 OBJ 并保存来源绑定…";
+    renderMultiViewGray();
+    const report = await editor.loadAssetFile(object.id, session.objFile);
+    await persistMultiViewGrayModel(object, session.objFile, session.recipeFile);
+    session.progress = 100;
+    const depthSummary = session.mesh.depthViewIds.length
+      ? ` · ${session.mesh.depthViewIds.length} 张深度削减 ${session.mesh.depthCarvedVoxelCount} 体素`
+      : " · 纯轮廓基线";
+    const warningSummary = session.mesh.depthWarnings.length
+      ? ` · ${session.mesh.depthWarnings.join(" ")}`
+      : "";
+    session.progressText = `${modeLabel}已载入 · ${session.mesh.voxelCount} 体素 · ${session.mesh.faceCount} 三角面 · ${views.length} 个轮廓视角${depthSummary}${warningSummary}`;
+    renderInspector(currentState);
+    showToast(`${modeLabel}已生成：${report.meshCount} 网格 · ${session.mesh.faceCount} 三角面`);
+  } catch (error) {
+    traceMultiViewAction(baseline ? "baseline-build-failed" : "depth-build-failed");
+    session.mesh = null;
+    session.objFile = null;
+    session.recipeFile = null;
+    session.progressText = error.message;
+    showToast(error.message);
+  } finally {
+    session.busy = false;
+    renderMultiViewGray();
+  }
+};
+
+elements.buildMultiViewGray.addEventListener("click", () => {
+  void buildMultiViewGrayAsset({ baseline: false });
+});
+
+elements.buildMultiViewBaseline.addEventListener("click", () => {
+  void buildMultiViewGrayAsset({ baseline: true });
+});
+
+elements.downloadMultiViewObj.addEventListener("click", () => {
+  if (multiViewGraySession.objFile) downloadBrowserFile(multiViewGraySession.objFile);
+});
+
+elements.downloadMultiViewRecipe.addEventListener("click", () => {
+  if (multiViewGraySession.recipeFile) downloadBrowserFile(multiViewGraySession.recipeFile);
+});
+
+elements.multiViewDialog.addEventListener("keydown", (event) => {
+  if (["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(event.target?.tagName)) return;
+  const shortcut = event.key.toLowerCase();
+  const active = multiViewGraySession.views[multiViewGraySession.activeViewId];
+  if ((shortcut === "d" || shortcut === "i") && active?.depth && !multiViewGraySession.busy) {
+    event.preventDefault();
+    if (shortcut === "d") elements.multiViewUseDepth.click();
+    else elements.multiViewDepthInvert.click();
+    return;
+  }
+  const viewId = { "1": "front", "2": "back", "3": "right", "4": "left", "7": "top", "9": "bottom" }[event.key];
+  if (!viewId || !multiViewGraySession.views[viewId]) return;
+  event.preventDefault();
+  multiViewGraySession.activeViewId = viewId;
+  renderMultiViewGray();
+});
+
 elements.openSingleImage3d.addEventListener("click", async () => {
   const object = selectedObject();
   if (!object) {
@@ -2901,6 +3846,7 @@ elements.openSingleImage3d.addEventListener("click", async () => {
   }
   const previousObjectId = singleImage3dSession.objectId;
   singleImage3dSession.objectId = object.id;
+  if (elements.multiViewDialog.open) elements.multiViewDialog.close();
   if (!elements.singleImageDialog.open) elements.singleImageDialog.showModal();
   if (
     object.asset?.portable?.kind === "single-image-model"
@@ -2935,8 +3881,9 @@ elements.singleImageFile.addEventListener("change", async () => {
   try {
     singleImage3dSession.image = await prepareSingleImageFile(file);
     singleImage3dSession.depth = null;
-    singleImage3dSession.rig = createHumanoidRigDraft();
+    singleImage3dSession.rig = createRigDraft(elements.singleImageRigPreset.value);
     singleImage3dSession.dragSlot = null;
+    singleImage3dSession.selectedSlot = singleImage3dSession.rig.joints[0]?.slot ?? null;
     elements.singleImageDepthInvert.checked = false;
     invalidateSingleImageMesh();
     singleImage3dSession.progressText = "单图已就绪；下一步估算相对深度。";
@@ -3019,6 +3966,117 @@ for (const control of [
   });
 }
 
+const mutateSingleImageRig = (mutator, message) => {
+  try {
+    singleImage3dSession.rig = mutator(singleImage3dSession.rig);
+    if (!singleImage3dSession.rig.joints.some((joint) => joint.slot === singleImage3dSession.selectedSlot)) {
+      singleImage3dSession.selectedSlot = singleImage3dSession.rig.joints[0]?.slot ?? null;
+    }
+    singleImage3dSession.glbFile = null;
+    if (message) singleImage3dSession.progressText = message;
+  } catch (error) {
+    showToast(error.message);
+    singleImage3dSession.progressText = error.message;
+  }
+  renderSingleImage3d();
+};
+
+elements.singleImageRigPreset.addEventListener("change", () => {
+  const preset = RIG_PRESET_OPTIONS.find((entry) => entry.id === elements.singleImageRigPreset.value);
+  singleImage3dSession.rig = createRigDraft(elements.singleImageRigPreset.value);
+  singleImage3dSession.selectedSlot = singleImage3dSession.rig.joints[0]?.slot ?? null;
+  singleImage3dSession.dragSlot = null;
+  singleImage3dSession.glbFile = null;
+  singleImage3dSession.progressText = `${preset?.label ?? "骨架"}已载入；拖动关节或编辑拓扑后重新生成 GLB。`;
+  renderSingleImage3d();
+});
+
+elements.singleImageRigJoint.addEventListener("change", () => {
+  singleImage3dSession.selectedSlot = elements.singleImageRigJoint.value;
+  renderSingleImage3d();
+});
+
+elements.singleImageAddJoint.addEventListener("click", () => {
+  const parent = selectedSingleImageJoint();
+  const ordinal = singleImage3dSession.rig.joints.length + 1;
+  mutateSingleImageRig((rig) => {
+    const next = addRigJoint(rig, {
+      slot: `customBone${ordinal}`,
+      name: `CustomBone${ordinal}`,
+      parent: parent?.slot,
+      chain: parent?.chain ?? "custom",
+    });
+    singleImage3dSession.selectedSlot = next.joints.at(-1)?.slot ?? parent?.slot;
+    return next;
+  }, "已添加自定义子骨；可拖动定位并设置语义角色。");
+});
+
+elements.singleImageDeleteJoint.addEventListener("click", () => {
+  const slot = singleImage3dSession.selectedSlot;
+  if (!slot) return;
+  mutateSingleImageRig((rig) => {
+    const target = rig.joints.find((joint) => joint.slot === slot);
+    const next = removeRigJoint(rig, slot);
+    singleImage3dSession.selectedSlot = target?.parent ?? next.joints[0]?.slot ?? null;
+    return next;
+  }, "骨骼已删除；原子骨骼已重连到它的父节点。");
+});
+
+elements.singleImageMirrorJoint.addEventListener("click", () => {
+  const slot = singleImage3dSession.selectedSlot;
+  if (!slot) return;
+  mutateSingleImageRig((rig) => mirrorRigJoint(rig, slot), "已把当前骨骼镜像到配对侧。");
+});
+
+const updateSelectedSingleImageJoint = (patch, message = "骨骼参数已修改；请重新生成 GLB。") => {
+  const slot = singleImage3dSession.selectedSlot;
+  if (!slot) return;
+  mutateSingleImageRig((rig) => updateRigJoint(rig, slot, patch), message);
+};
+
+elements.singleImageJointName.addEventListener("change", () => updateSelectedSingleImageJoint({
+  name: elements.singleImageJointName.value,
+}));
+elements.singleImageJointParent.addEventListener("change", () => {
+  const slot = singleImage3dSession.selectedSlot;
+  if (!slot) return;
+  mutateSingleImageRig(
+    (rig) => reparentRigJoint(rig, slot, elements.singleImageJointParent.value || null),
+    "父骨骼已修改；拓扑循环检查通过。",
+  );
+});
+elements.singleImageJointRole.addEventListener("change", () => updateSelectedSingleImageJoint({
+  role: elements.singleImageJointRole.value,
+}));
+elements.singleImageJointChain.addEventListener("change", () => updateSelectedSingleImageJoint({
+  chain: elements.singleImageJointChain.value,
+}));
+elements.singleImageJointSide.addEventListener("change", () => updateSelectedSingleImageJoint({
+  side: elements.singleImageJointSide.value,
+}));
+elements.singleImageJointAxis.addEventListener("change", () => updateSelectedSingleImageJoint({
+  limits: {
+    axis: elements.singleImageJointAxis.value,
+    minDegrees: Number(elements.singleImageJointMin.value),
+    maxDegrees: Number(elements.singleImageJointMax.value),
+  },
+}));
+elements.singleImageJointEffector.addEventListener("change", () => updateSelectedSingleImageJoint({
+  effector: elements.singleImageJointEffector.checked,
+}));
+for (const control of [elements.singleImageJointMin, elements.singleImageJointMax]) {
+  control.addEventListener("change", () => updateSelectedSingleImageJoint({
+    limits: {
+      axis: elements.singleImageJointAxis.value,
+      minDegrees: Number(elements.singleImageJointMin.value),
+      maxDegrees: Number(elements.singleImageJointMax.value),
+    },
+  }));
+}
+elements.singleImageJointDepth.addEventListener("change", () => updateSelectedSingleImageJoint({
+  depthOffset: Number(elements.singleImageJointDepth.value),
+}));
+
 const singleImagePointerUv = (event) => {
   const rect = elements.singleImageSourceCanvas.getBoundingClientRect();
   return [
@@ -3035,6 +4093,7 @@ elements.singleImageSourceCanvas.addEventListener("pointerdown", (event) => {
     .sort((left, right) => left.distance - right.distance)[0];
   if (!nearest || nearest.distance > 0.055) return;
   singleImage3dSession.dragSlot = nearest.joint.slot;
+  singleImage3dSession.selectedSlot = nearest.joint.slot;
   elements.singleImageSourceCanvas.setPointerCapture(event.pointerId);
   renderSingleImage3d();
 });
@@ -3512,7 +4571,7 @@ const restorePortableAssets = async (project, { announce = true } = {}) => {
   for (const object of bindings) {
     try {
       const descriptors = await filesForPortableBinding(projectPersistence, object.asset.portable);
-      if (["model", "single-image-model"].includes(object.asset.portable.kind)) {
+      if (["model", "single-image-model", "multi-view-gray-model"].includes(object.asset.portable.kind)) {
         await editor.loadAssetFile(object.id, descriptors.find((entry) => entry.role === "model").file);
         const animation = object.asset.portable.kind === "model"
           ? descriptors.find((entry) => entry.role === "animation")
@@ -3764,6 +4823,110 @@ window.__BLOCKOUT_AGENT_BEHAVIOR__ = Object.freeze({
   }),
 });
 
+window.__BLOCKOUT_MULTI_VIEW_GRAY__ = Object.freeze({
+  async installSyntheticViewsForSmoke() {
+    if (!multiViewGraySession.objectId) throw new Error("请先打开多视角灰模工作台。");
+    const fixtures = [
+      { id: "front", width: 144, height: 180, horizontalRadius: 44 },
+      { id: "right", width: 112, height: 180, horizontalRadius: 31 },
+      { id: "top", width: 144, height: 112, horizontalRadius: 44 },
+    ];
+    const views = {};
+    for (const fixture of fixtures) {
+      const pixels = new Uint8ClampedArray(fixture.width * fixture.height * 4);
+      for (let y = 0; y < fixture.height; y += 1) {
+        for (let x = 0; x < fixture.width; x += 1) {
+          const offset = (y * fixture.width + x) * 4;
+          const cx = fixture.width / 2;
+          const cy = fixture.height / 2;
+          const verticalRadius = fixture.height * 0.39;
+          const ellipse = ((x - cx) / fixture.horizontalRadius) ** 2 + ((y - cy) / verticalRadius) ** 2 <= 1;
+          const notch = fixture.id !== "top" && x > cx - 9 && x < cx + 9 && y < cy - verticalRadius * 0.55;
+          const foreground = ellipse && !notch;
+          pixels[offset] = foreground ? 54 : 244;
+          pixels[offset + 1] = foreground ? 72 : 244;
+          pixels[offset + 2] = foreground ? 92 : 244;
+          pixels[offset + 3] = 255;
+        }
+      }
+      const canvas = document.createElement("canvas");
+      drawPixelBuffer(canvas, pixels, fixture.width, fixture.height);
+      const blob = await new Promise((resolve, reject) => canvas.toBlob(
+        (result) => result ? resolve(result) : reject(new Error("无法生成 smoke 视角图。")),
+        "image/png",
+      ));
+      const image = {
+        width: fixture.width,
+        height: fixture.height,
+        pixels,
+        blob,
+        sourceName: `smoke-${fixture.id}`,
+        originalSize: [fixture.width, fixture.height],
+      };
+      const depthValues = new Float32Array(fixture.width * fixture.height);
+      for (let y = 0; y < fixture.height; y += 1) {
+        for (let x = 0; x < fixture.width; x += 1) {
+          const u = fixture.width === 1 ? 0.5 : x / (fixture.width - 1);
+          const v = fixture.height === 1 ? 0.5 : y / (fixture.height - 1);
+          const radial = Math.max(0, 1 - Math.hypot((u - 0.5) * 1.45, (v - 0.5) * 1.05));
+          const directional = fixture.id === "right" ? u * 0.08 : fixture.id === "top" ? v * 0.08 : 0;
+          depthValues[y * fixture.width + x] = Math.min(1, 0.12 + radial * 0.8 + directional);
+        }
+      }
+      views[fixture.id] = {
+        id: fixture.id,
+        image,
+        silhouette: deriveSilhouetteMask({ pixels, width: fixture.width, height: fixture.height, threshold: 48 }),
+        depth: {
+          width: fixture.width,
+          height: fixture.height,
+          depth: depthValues,
+          mean: depthValues.reduce((sum, value) => sum + value, 0) / depthValues.length,
+          range: [0, 1],
+          inverted: false,
+          backend: "smoke-fixture",
+          modelId: "deterministic/multi-view-depth-smoke",
+          dtype: "float32",
+        },
+        depthEnabled: true,
+      };
+    }
+    multiViewGraySession.views = views;
+    multiViewGraySession.activeViewId = "front";
+    multiViewGraySession.previewMode = "depth";
+    elements.multiViewDepthInfluence.value = "0.35";
+    elements.multiViewDepthTolerance.value = "0.08";
+    invalidateMultiViewGrayModel("已安装离线多视角 smoke 夹具。");
+    renderMultiViewGray();
+    return { viewIds: Object.keys(views) };
+  },
+  snapshot() {
+    return {
+      objectId: multiViewGraySession.objectId,
+      viewIds: CANONICAL_VIEW_DEFINITIONS.map(({ id }) => id).filter((id) => multiViewGraySession.views[id]),
+      depthViewIds: CANONICAL_VIEW_DEFINITIONS.map(({ id }) => id).filter((id) => multiViewGraySession.views[id]?.depth),
+      previewMode: multiViewGraySession.previewMode,
+      guidedPairReady: multiViewGuidedPairReady(),
+      mesh: multiViewGraySession.mesh ? {
+        dimensions: multiViewGraySession.mesh.dimensions,
+        voxelCount: multiViewGraySession.mesh.voxelCount,
+        visualHullVoxelCount: multiViewGraySession.mesh.visualHullVoxelCount,
+        depthCarvedVoxelCount: multiViewGraySession.mesh.depthCarvedVoxelCount,
+        depthCarvedFraction: multiViewGraySession.mesh.depthCarvedFraction,
+        depthRejectedVoxelCounts: multiViewGraySession.mesh.depthRejectedVoxelCounts,
+        depthConflictVoxelCount: multiViewGraySession.mesh.depthConflictVoxelCount,
+        depthInfluence: multiViewGraySession.mesh.depthInfluence,
+        depthViewIds: multiViewGraySession.mesh.depthViewIds,
+        vertexCount: multiViewGraySession.mesh.vertexCount,
+        faceCount: multiViewGraySession.mesh.faceCount,
+      } : null,
+      objReady: Boolean(multiViewGraySession.objFile),
+      recipeReady: Boolean(multiViewGraySession.recipeFile),
+      traceLength: multiViewGraySession.trace.length,
+    };
+  },
+});
+
 window.__BLOCKOUT_SINGLE_IMAGE_3D__ = Object.freeze({
   installSyntheticDepthForSmoke() {
     const image = singleImage3dSession.image;
@@ -3806,6 +4969,11 @@ window.__BLOCKOUT_SINGLE_IMAGE_3D__ = Object.freeze({
         faceCount: singleImage3dSession.mesh.faceCount,
       } : null,
       rigJointCount: singleImage3dSession.rig.joints.length,
+      rigPreset: singleImage3dSession.rig.preset,
+      rigFamily: singleImage3dSession.rig.family,
+      selectedJoint: singleImage3dSession.selectedSlot,
+      rigValidation: validateRigDraft(singleImage3dSession.rig),
+      rigCapabilities: rigProfileFromDraft(singleImage3dSession.rig).capabilities,
       objReady: Boolean(singleImage3dSession.objFile),
       glbReady: Boolean(singleImage3dSession.glbFile),
     };

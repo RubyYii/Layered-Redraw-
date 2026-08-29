@@ -1009,8 +1009,16 @@ export class ThreeSceneAdapter {
     return this.assetControllers.get(id)?.clearHandIk(handName) ?? false;
   }
 
-  setAssetRigBindings(id, bones) {
-    return this.assetControllers.get(id)?.setRigBindings(bones) ?? null;
+  setAssetRigBindings(id, bones, rigProfile) {
+    return this.assetControllers.get(id)?.setRigBindings(bones, rigProfile) ?? null;
+  }
+
+  setAssetChainIk(id, chainId, targetWorld, options = {}) {
+    return this.assetControllers.get(id)?.setChainIk(chainId, targetWorld, options) ?? false;
+  }
+
+  clearAssetChainIk(id, chainId) {
+    return this.assetControllers.get(id)?.clearChainIk(chainId) ?? false;
   }
 
   previewAssetRig(id, mode = "pose") {
