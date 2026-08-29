@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "kfc-study-b-power-input/0.1",
+  "inputStatus": "TEMPLATE_NOT_PILOT_ESTIMATE",
+  "pilotSummarySha256": "TO_BE_COMPLETED_AFTER_PILOT",
+  "frozenBy": "TO_BE_COMPLETED_BY_RESEARCHER",
+  "frozenAt": null,
+  "seed": 20260828,
+  "simulations": 1000,
+  "alpha": 0.05,
+  "requiredPower": 0.8,
+  "expectedParticipantExclusionRate": 0.1,
+  "candidateAnalyzableN": [
+    96,
+    112,
+    128,
+    144,
+    160,
+    176,
+    192
+  ],
+  "pilotNuisanceParameters": {
+    "closedMean": 2.0,
+    "dispersionAlpha": 0.5,
+    "participantLogSd": 0.25,
+    "artefactLogSd": 0.25,
+    "artefactsPerBriefWorkflowCell": 6,
+    "sourceWorkflowRateRatio": 1.0,
+    "briefRateRatios": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "orderRateRatios": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "smallestEffectScenarios": [
+    {
+      "name": "substantively_minimum_average_effect",
+      "averageProtocolRateRatio": 1.25,
+      "protocolWorkflowInteractionRateRatio": 1.0,
+      "rationale": "TO_BE_COMPLETED_ON_SUBSTANTIVE_GROUNDS_NOT_FROM_THE_PILOT_EFFECT"
+    }
+  ]
+}

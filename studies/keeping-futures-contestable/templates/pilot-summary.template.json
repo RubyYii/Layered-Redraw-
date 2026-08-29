@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "kfc-pilot-summary/0.1",
+  "generatedAt": null,
+  "makerSessions": 0,
+  "audienceSessions": 0,
+  "expertSessions": 0,
+  "mainDatasetExcluded": true,
+  "allReturnsStoredOutsideMainCorpus": false,
+  "makerInteractionFailuresResolved": false,
+  "layerCueingRiskReviewed": false,
+  "flatTargetFidelityReviewed": false,
+  "audienceComprehensionThresholdReviewed": false,
+  "protocolTimingAndLengthReviewed": false,
+  "expertBlindLeakCheckPassed": false,
+  "openOnlyLengthFailureRuledOut": false,
+  "unresolvedPrimaryBlockers": [
+    "TO_BE_COMPLETED_AFTER_COGNITIVE_PILOT"
+  ],
+  "decision": "NOT_READY",
+  "signedOffBy": "TO_BE_COMPLETED_BY_RESEARCHER",
+  "signedOffAt": null,
+  "note": "PROCEED is a documented researcher decision after reviewing pilot evidence; this template cannot make that decision automatically."
+}
+

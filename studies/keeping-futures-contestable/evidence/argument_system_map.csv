@@ -1,0 +1,11 @@
+node_id,parent_node_id,node_type,node_label,linked_gap_id,linked_contribution_id,linked_claim_id,linked_evidence_ids,section_id,status,risk_level,notes
+"NODE-INT-01","","intent","Contestability across making and evaluation","","","CLM-01","SRC-01;SRC-02;SRC-03","paper","approved","high","One paper spine."
+"NODE-GAP-01","NODE-INT-01","gap","Cross-stage contestability gap","GAP-01","","","SRC-01;SRC-02","introduction","scoped","high","Novelty remains pending comparison review."
+"NODE-CON-01","NODE-GAP-01","contribution","Sequential empirical account","GAP-01","CON-01","CLM-03","DAT-01;DAT-02;RES-01;RES-02","results","planned","critical","Primary contribution; no human data yet."
+"NODE-GAP-02","NODE-INT-01","gap","Evaluation construct gap","GAP-02","","","SRC-02;EVD-02","related-work","scoped","high","CAC is motivation only."
+"NODE-CON-02","NODE-GAP-02","contribution","Closed versus open protocol comparison","GAP-02","CON-02","CLM-04","DAT-02;RES-02","results-study-b","planned","critical","Requires powered audience study."
+"NODE-GAP-03","NODE-INT-01","gap","Controlled apparatus gap","GAP-03","","","EVD-01","methods","scoped","medium","Provider randomness is intentionally removed."
+"NODE-CON-03","NODE-GAP-03","contribution","Local-first study apparatus","GAP-03","CON-03","CLM-02","ART-01;ANL-01","methods","verified","low","Engineering evidence only."
+"NODE-GAP-04","NODE-INT-01","gap","Warrant-collapse gap","GAP-04","","","SRC-01;EVD-02","related-work","candidate","high","Needs broader literature comparison."
+"NODE-CON-04","NODE-GAP-04","contribution","Trace-linked warrant conflict analysis","GAP-04","CON-04","CLM-05","DAT-01;DAT-02;DAT-03;RES-03","cross-stage","planned","high","No composite score."
+"NODE-LIM-01","NODE-INT-01","limitation","No human findings yet","","","CLM-06","LIM-01","limitations","verified","critical","Blocks empirical claims."

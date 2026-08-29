@@ -1,0 +1,10 @@
+{
+  "synthetic": true,
+  "generatedAt": "2026-08-27T12:00:00.000Z",
+  "generator": "scripts/generate-demo-data.mjs",
+  "studyAReturns": 12,
+  "studyBReturns": 12,
+  "expertReturns": 3,
+  "artefacts": 24,
+  "warning": "Pipeline verification only. Not human evidence and not a paper result."
+}

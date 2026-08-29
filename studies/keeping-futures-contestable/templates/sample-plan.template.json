@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "kfc-sample-plan/0.1",
+  "frozenAt": null,
+  "claimMode": "TO_BE_COMPLETED_AFTER_PILOT",
+  "studyA": {
+    "analysableTarget": 18,
+    "maximum": 24,
+    "blockSize": 6,
+    "replacementPolicy": "at_most_one_complete_block"
+  },
+  "studyB": {
+    "analysableTarget": null,
+    "recruitMaximum": null,
+    "blockSize": 4,
+    "populationEffectClaimAllowed": null,
+    "simulationInputs": "data/frozen/study-b-power-input.json",
+    "simulationInputSha256": "TO_BE_COMPLETED_AFTER_PILOT",
+    "simulationReportSha256": "TO_BE_COMPLETED_AFTER_PILOT",
+    "simulationScriptSha256": "TO_BE_COMPLETED_AFTER_PILOT",
+    "modelConfig": "data/frozen/study-b-model-config.json",
+    "modelConfigSha256": "TO_BE_COMPLETED_AFTER_PILOT"
+  },
+  "expert": {
+    "plannedAnalysable": 6,
+    "reserve": 1,
+    "expansionRule": "at_least_largest_eligible_cell_or_narrow_before_collection"
+  },
+  "pilotExcluded": true,
+  "frozenBeforeConfirmatoryOutcomeInspection": false,
+  "signedOffBy": "TO_BE_COMPLETED_BY_RESEARCHER"
+}

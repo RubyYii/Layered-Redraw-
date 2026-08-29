@@ -1,0 +1,11 @@
+# Human research data and coordinator-only allocation material must never be committed.
+data/raw/
+data/coding/
+data/analysis/
+data/frozen/
+data/pilot/
+data/coordinator/
+
+# Local exports and temporary handoff material.
+data/exports/
+*.download.json

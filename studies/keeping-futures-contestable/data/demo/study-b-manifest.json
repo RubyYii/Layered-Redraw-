@@ -1,0 +1,1475 @@
+{
+  "schemaVersion": "kfc-study-b-manifest/0.1",
+  "manifestId": "MANIFEST-20260827120000",
+  "packageVersion": "kfc-0.2.0",
+  "generatedAt": "2026-08-27T12:00:00.000Z",
+  "synthetic": true,
+  "sourceReturnCount": 12,
+  "sourceTrialCount": 24,
+  "selectionPolicy": "all complete Study A trials; no outcome-based selection",
+  "presentationEligibilityPolicy": "Study B samples only technical PASS artefacts; every brief-by-workflow cell must remain populated",
+  "artefacts": [
+    {
+      "artefactId": "ART-A8890156BC6DE5E6",
+      "briefId": "cooling-credit-2035",
+      "sourceParticipantId": "DEMO-A01",
+      "sourceWorkflow": "flat",
+      "sourceTaskIndex": 0,
+      "sourceSessionSha256": "fa98b024ab6de34d5a39c13e5e717588d27a281269b223d9d669bd30318f51a1",
+      "state": {
+        "briefId": "cooling-credit-2035",
+        "values": {
+          "access": "仅限绑定智能手机账户的常住居民",
+          "allocation": "居民、社区工作者与健康数据共同形成可解释的优先顺序",
+          "appeal": "结果每晚自动更新，不提供个人复核"
+        },
+        "visual": {
+          "code": "HEAT / 07",
+          "eyebrow": "Public Cooling Credit",
+          "headline": "Today’s cooling access",
+          "metric": "82",
+          "metricLabel": "priority index",
+          "accent": "amber",
+          "layout": "panel"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "allocation"
+        ],
+        "visual": [
+          "accent"
+        ]
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:01:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:04:00.000Z",
+          "payload": {
+            "targetIds": [
+              "allocation"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:04:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:09:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-B11A659F389CE6F3",
+      "briefId": "carelink-home-2032",
+      "sourceParticipantId": "DEMO-A01",
+      "sourceWorkflow": "layered",
+      "sourceTaskIndex": 1,
+      "sourceSessionSha256": "fa98b024ab6de34d5a39c13e5e717588d27a281269b223d9d669bd30318f51a1",
+      "state": {
+        "briefId": "carelink-home-2032",
+        "values": {
+          "consent": "首次安装即默认长期同意全部监测",
+          "visibility": "所有家庭成员持续查看完整作息与异常记录",
+          "escalation": "只有持续变化且本人请求协助时才通知照护网络"
+        },
+        "visual": {
+          "code": "HOME / 12",
+          "eyebrow": "CareLink Home",
+          "headline": "A quieter kind of watch",
+          "metric": "3",
+          "metricLabel": "pattern changes",
+          "accent": "coral",
+          "layout": "soft"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "escalation"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:11:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:14:00.000Z",
+          "payload": {
+            "targetIds": [
+              "escalation"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:14:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:19:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-5DB74BFDE09F537E",
+      "briefId": "cooling-credit-2035",
+      "sourceParticipantId": "DEMO-A02",
+      "sourceWorkflow": "layered",
+      "sourceTaskIndex": 0,
+      "sourceSessionSha256": "4328fcd07d4cb60dd1363cfb77a06f1310644b5628730096b2f2d44a7cb7e82d",
+      "state": {
+        "briefId": "cooling-credit-2035",
+        "values": {
+          "access": "仅限绑定智能手机账户的常住居民",
+          "allocation": "系统按照预测的“规则遵从概率”排列家庭",
+          "appeal": "居民可要求人工复核，并看到影响决定的主要依据"
+        },
+        "visual": {
+          "code": "HEAT / 07",
+          "eyebrow": "Public Cooling Credit",
+          "headline": "Today’s cooling access",
+          "metric": "82",
+          "metricLabel": "priority index",
+          "accent": "cyan",
+          "layout": "panel"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "appeal"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:02:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:05:00.000Z",
+          "payload": {
+            "targetIds": [
+              "appeal"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:05:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:10:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-535E016F02AFF08D",
+      "briefId": "carelink-home-2032",
+      "sourceParticipantId": "DEMO-A02",
+      "sourceWorkflow": "flat",
+      "sourceTaskIndex": 1,
+      "sourceSessionSha256": "4328fcd07d4cb60dd1363cfb77a06f1310644b5628730096b2f2d44a7cb7e82d",
+      "state": {
+        "briefId": "carelink-home-2032",
+        "values": {
+          "consent": "紧急与日常数据采用不同同意规则，紧急访问会留下回执",
+          "visibility": "所有家庭成员持续查看完整作息与异常记录",
+          "escalation": "系统把任何偏离常规的行为自动标为风险"
+        },
+        "visual": {
+          "code": "HOME / 12",
+          "eyebrow": "CareLink Home",
+          "headline": "A quieter kind of watch",
+          "metric": "3",
+          "metricLabel": "pattern changes",
+          "accent": "coral",
+          "layout": "split"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "consent"
+        ],
+        "visual": [
+          "layout"
+        ]
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:12:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:15:00.000Z",
+          "payload": {
+            "targetIds": [
+              "consent"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:15:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:20:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-E096CBCCC199870F",
+      "briefId": "carelink-home-2032",
+      "sourceParticipantId": "DEMO-A03",
+      "sourceWorkflow": "flat",
+      "sourceTaskIndex": 0,
+      "sourceSessionSha256": "9ad4232b5917c8279479b59f47c2b7fa135187bce4fb90fca4e9d629eb51d35a",
+      "state": {
+        "briefId": "carelink-home-2032",
+        "values": {
+          "consent": "紧急与日常数据采用不同同意规则，紧急访问会留下回执",
+          "visibility": "所有家庭成员持续查看完整作息与异常记录",
+          "escalation": "系统把任何偏离常规的行为自动标为风险"
+        },
+        "visual": {
+          "code": "HOME / 12",
+          "eyebrow": "CareLink Home",
+          "headline": "A quieter kind of watch",
+          "metric": "3",
+          "metricLabel": "pattern changes",
+          "accent": "coral",
+          "layout": "split"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "consent"
+        ],
+        "visual": [
+          "layout"
+        ]
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:03:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:06:00.000Z",
+          "payload": {
+            "targetIds": [
+              "consent"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:06:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:11:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-BCCA9FFD77B09B58",
+      "briefId": "common-ground-2040",
+      "sourceParticipantId": "DEMO-A03",
+      "sourceWorkflow": "layered",
+      "sourceTaskIndex": 1,
+      "sourceSessionSha256": "9ad4232b5917c8279479b59f47c2b7fa135187bce4fb90fca4e9d629eb51d35a",
+      "state": {
+        "briefId": "common-ground-2040",
+        "values": {
+          "representation": "只有登记产权人拥有正式投票权",
+          "evidence": "资产、健康、照护中断与被迫迁移风险并列记录",
+          "distribution": "优先保护总资产价值最高的街区"
+        },
+        "visual": {
+          "code": "TIDE / 04",
+          "eyebrow": "Common Ground 2040",
+          "headline": "What the water reaches first",
+          "metric": "61%",
+          "metricLabel": "capital protected",
+          "accent": "indigo",
+          "layout": "notice"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "evidence"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:13:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:16:00.000Z",
+          "payload": {
+            "targetIds": [
+              "evidence"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:16:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:21:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-CF8EF10674E314F8",
+      "briefId": "carelink-home-2032",
+      "sourceParticipantId": "DEMO-A04",
+      "sourceWorkflow": "layered",
+      "sourceTaskIndex": 0,
+      "sourceSessionSha256": "fca36378e188cb36b9a6113373fcd1fa968a89ce61019835f47103238e62557f",
+      "state": {
+        "briefId": "carelink-home-2032",
+        "values": {
+          "consent": "首次安装即默认长期同意全部监测",
+          "visibility": "被照护者选择每位家属可见的摘要级别",
+          "escalation": "系统把任何偏离常规的行为自动标为风险"
+        },
+        "visual": {
+          "code": "HOME / 12",
+          "eyebrow": "CareLink Home",
+          "headline": "A quieter kind of watch",
+          "metric": "3",
+          "metricLabel": "pattern changes",
+          "accent": "coral",
+          "layout": "soft"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "visibility"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:04:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:07:00.000Z",
+          "payload": {
+            "targetIds": [
+              "visibility"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:07:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:12:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-BEB19727C42A40E4",
+      "briefId": "common-ground-2040",
+      "sourceParticipantId": "DEMO-A04",
+      "sourceWorkflow": "flat",
+      "sourceTaskIndex": 1,
+      "sourceSessionSha256": "fca36378e188cb36b9a6113373fcd1fa968a89ce61019835f47103238e62557f",
+      "state": {
+        "briefId": "common-ground-2040",
+        "values": {
+          "representation": "只有登记产权人拥有正式投票权",
+          "evidence": "资产估值是唯一正式损失指标",
+          "distribution": "每个方案同时公布受益者、承担风险者与未解决后果"
+        },
+        "visual": {
+          "code": "TIDE / 04",
+          "eyebrow": "Common Ground 2040",
+          "headline": "What the water reaches first",
+          "metric": "61%",
+          "metricLabel": "capital protected",
+          "accent": "indigo",
+          "layout": "split"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "distribution"
+        ],
+        "visual": [
+          "layout"
+        ]
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:14:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:17:00.000Z",
+          "payload": {
+            "targetIds": [
+              "distribution"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:17:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:22:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-1C3E6E8966ABF048",
+      "briefId": "common-ground-2040",
+      "sourceParticipantId": "DEMO-A05",
+      "sourceWorkflow": "flat",
+      "sourceTaskIndex": 0,
+      "sourceSessionSha256": "a678351827747b5236a883c6a12041b00a37ddb059b3d481221a77ff893de714",
+      "state": {
+        "briefId": "common-ground-2040",
+        "values": {
+          "representation": "只有登记产权人拥有正式投票权",
+          "evidence": "资产估值是唯一正式损失指标",
+          "distribution": "先保障无法自行迁移的居民，再比较基础设施与资产损失"
+        },
+        "visual": {
+          "code": "TIDE / 04",
+          "eyebrow": "Common Ground 2040",
+          "headline": "What the water reaches first",
+          "metric": "61%",
+          "metricLabel": "capital protected",
+          "accent": "amber",
+          "layout": "notice"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "distribution"
+        ],
+        "visual": [
+          "accent"
+        ]
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:05:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:08:00.000Z",
+          "payload": {
+            "targetIds": [
+              "distribution"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:08:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:13:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-04E7AAAB3A08D7E0",
+      "briefId": "cooling-credit-2035",
+      "sourceParticipantId": "DEMO-A05",
+      "sourceWorkflow": "layered",
+      "sourceTaskIndex": 1,
+      "sourceSessionSha256": "a678351827747b5236a883c6a12041b00a37ddb059b3d481221a77ff893de714",
+      "state": {
+        "briefId": "cooling-credit-2035",
+        "values": {
+          "access": "数字额度与可转让纸质凭证并行，由社区站点发放",
+          "allocation": "系统按照预测的“规则遵从概率”排列家庭",
+          "appeal": "结果每晚自动更新，不提供个人复核"
+        },
+        "visual": {
+          "code": "HEAT / 07",
+          "eyebrow": "Public Cooling Credit",
+          "headline": "Today’s cooling access",
+          "metric": "82",
+          "metricLabel": "priority index",
+          "accent": "cyan",
+          "layout": "panel"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "access"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:15:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:18:00.000Z",
+          "payload": {
+            "targetIds": [
+              "access"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:18:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:23:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-4EFC88CDD761F812",
+      "briefId": "common-ground-2040",
+      "sourceParticipantId": "DEMO-A06",
+      "sourceWorkflow": "layered",
+      "sourceTaskIndex": 0,
+      "sourceSessionSha256": "b059c5942f3ce4421a4f1ea1d366c2ebc4a30785133a288bec8470f93fcd16c3",
+      "state": {
+        "briefId": "common-ground-2040",
+        "values": {
+          "representation": "每个受影响住址拥有一票，另为高搬迁风险居民设置否决审查",
+          "evidence": "资产估值是唯一正式损失指标",
+          "distribution": "优先保护总资产价值最高的街区"
+        },
+        "visual": {
+          "code": "TIDE / 04",
+          "eyebrow": "Common Ground 2040",
+          "headline": "What the water reaches first",
+          "metric": "61%",
+          "metricLabel": "capital protected",
+          "accent": "indigo",
+          "layout": "notice"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "representation"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:06:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:09:00.000Z",
+          "payload": {
+            "targetIds": [
+              "representation"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:09:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:14:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-97D61DE94F922202",
+      "briefId": "cooling-credit-2035",
+      "sourceParticipantId": "DEMO-A06",
+      "sourceWorkflow": "flat",
+      "sourceTaskIndex": 1,
+      "sourceSessionSha256": "b059c5942f3ce4421a4f1ea1d366c2ebc4a30785133a288bec8470f93fcd16c3",
+      "state": {
+        "briefId": "cooling-credit-2035",
+        "values": {
+          "access": "仅限绑定智能手机账户的常住居民",
+          "allocation": "居民、社区工作者与健康数据共同形成可解释的优先顺序",
+          "appeal": "结果每晚自动更新，不提供个人复核"
+        },
+        "visual": {
+          "code": "HEAT / 07",
+          "eyebrow": "Public Cooling Credit",
+          "headline": "Today’s cooling access",
+          "metric": "82",
+          "metricLabel": "priority index",
+          "accent": "amber",
+          "layout": "panel"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "allocation"
+        ],
+        "visual": [
+          "accent"
+        ]
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:16:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:19:00.000Z",
+          "payload": {
+            "targetIds": [
+              "allocation"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:19:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:24:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-CBA56B51140FCBAA",
+      "briefId": "cooling-credit-2035",
+      "sourceParticipantId": "DEMO-A07",
+      "sourceWorkflow": "flat",
+      "sourceTaskIndex": 0,
+      "sourceSessionSha256": "ac636e33ee18f6311de69d7b38530b26c614d96e2386f97c5a77efd795aa2dc6",
+      "state": {
+        "briefId": "cooling-credit-2035",
+        "values": {
+          "access": "高温红色预警期间，降温中心取消账户核验",
+          "allocation": "先按暴露风险划定资源池，再由社区公开讨论边缘个案",
+          "appeal": "结果每晚自动更新，不提供个人复核"
+        },
+        "visual": {
+          "code": "HEAT / 07",
+          "eyebrow": "Public Cooling Credit",
+          "headline": "Today’s cooling access",
+          "metric": "82",
+          "metricLabel": "priority index",
+          "accent": "cyan",
+          "layout": "panel"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "access",
+          "allocation"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:07:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:10:00.000Z",
+          "payload": {
+            "targetIds": [
+              "allocation"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:10:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:15:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-9F164049797285F4",
+      "briefId": "carelink-home-2032",
+      "sourceParticipantId": "DEMO-A07",
+      "sourceWorkflow": "layered",
+      "sourceTaskIndex": 1,
+      "sourceSessionSha256": "ac636e33ee18f6311de69d7b38530b26c614d96e2386f97c5a77efd795aa2dc6",
+      "state": {
+        "briefId": "carelink-home-2032",
+        "values": {
+          "consent": "首次安装即默认长期同意全部监测",
+          "visibility": "所有家庭成员持续查看完整作息与异常记录",
+          "escalation": "风险规则由本人、照护者与专业人员定期共同复核"
+        },
+        "visual": {
+          "code": "HOME / 12",
+          "eyebrow": "CareLink Home",
+          "headline": "A quieter kind of watch",
+          "metric": "3",
+          "metricLabel": "pattern changes",
+          "accent": "coral",
+          "layout": "soft"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "escalation"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:17:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:20:00.000Z",
+          "payload": {
+            "targetIds": [
+              "escalation"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:20:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:25:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-57FBCDA038F43E5E",
+      "briefId": "cooling-credit-2035",
+      "sourceParticipantId": "DEMO-A08",
+      "sourceWorkflow": "layered",
+      "sourceTaskIndex": 0,
+      "sourceSessionSha256": "6111a0545228b2c5ee55c6bae5782b637626ebca04dc4e5ecbe62abf34acee2b",
+      "state": {
+        "briefId": "cooling-credit-2035",
+        "values": {
+          "access": "仅限绑定智能手机账户的常住居民",
+          "allocation": "系统按照预测的“规则遵从概率”排列家庭",
+          "appeal": "居民可要求人工复核，并看到影响决定的主要依据"
+        },
+        "visual": {
+          "code": "HEAT / 07",
+          "eyebrow": "Public Cooling Credit",
+          "headline": "Today’s cooling access",
+          "metric": "82",
+          "metricLabel": "priority index",
+          "accent": "cyan",
+          "layout": "panel"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "appeal"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:08:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:11:00.000Z",
+          "payload": {
+            "targetIds": [
+              "appeal"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:11:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:16:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-E8F21A66B27ADD56",
+      "briefId": "carelink-home-2032",
+      "sourceParticipantId": "DEMO-A08",
+      "sourceWorkflow": "flat",
+      "sourceTaskIndex": 1,
+      "sourceSessionSha256": "6111a0545228b2c5ee55c6bae5782b637626ebca04dc4e5ecbe62abf34acee2b",
+      "state": {
+        "briefId": "carelink-home-2032",
+        "values": {
+          "consent": "紧急与日常数据采用不同同意规则，紧急访问会留下回执",
+          "visibility": "所有家庭成员持续查看完整作息与异常记录",
+          "escalation": "系统把任何偏离常规的行为自动标为风险"
+        },
+        "visual": {
+          "code": "HOME / 12",
+          "eyebrow": "CareLink Home",
+          "headline": "A quieter kind of watch",
+          "metric": "3",
+          "metricLabel": "pattern changes",
+          "accent": "coral",
+          "layout": "split"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "consent"
+        ],
+        "visual": [
+          "layout"
+        ]
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:18:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:21:00.000Z",
+          "payload": {
+            "targetIds": [
+              "consent"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:21:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:26:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-9CDACD0F33B10CED",
+      "briefId": "carelink-home-2032",
+      "sourceParticipantId": "DEMO-A09",
+      "sourceWorkflow": "flat",
+      "sourceTaskIndex": 0,
+      "sourceSessionSha256": "304499d0da4782cdb33615c0be3307b411d053f93eead3a00310b199c8dc7358",
+      "state": {
+        "briefId": "carelink-home-2032",
+        "values": {
+          "consent": "每周以易懂摘要重新确认授权，未确认的数据不外发",
+          "visibility": "所有家庭成员持续查看完整作息与异常记录",
+          "escalation": "风险规则由本人、照护者与专业人员定期共同复核"
+        },
+        "visual": {
+          "code": "HOME / 12",
+          "eyebrow": "CareLink Home",
+          "headline": "A quieter kind of watch",
+          "metric": "3",
+          "metricLabel": "pattern changes",
+          "accent": "coral",
+          "layout": "soft"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "consent",
+          "escalation"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:09:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:12:00.000Z",
+          "payload": {
+            "targetIds": [
+              "consent"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:12:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:17:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-8FB4DB605C2FB2E3",
+      "briefId": "common-ground-2040",
+      "sourceParticipantId": "DEMO-A09",
+      "sourceWorkflow": "layered",
+      "sourceTaskIndex": 1,
+      "sourceSessionSha256": "304499d0da4782cdb33615c0be3307b411d053f93eead3a00310b199c8dc7358",
+      "state": {
+        "briefId": "common-ground-2040",
+        "values": {
+          "representation": "只有登记产权人拥有正式投票权",
+          "evidence": "公开列出不同证据如何改变资源排序，并允许质疑权重",
+          "distribution": "优先保护总资产价值最高的街区"
+        },
+        "visual": {
+          "code": "TIDE / 04",
+          "eyebrow": "Common Ground 2040",
+          "headline": "What the water reaches first",
+          "metric": "61%",
+          "metricLabel": "capital protected",
+          "accent": "indigo",
+          "layout": "notice"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "evidence"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:19:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:22:00.000Z",
+          "payload": {
+            "targetIds": [
+              "evidence"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:22:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:27:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-B1FFE31C9F89B83E",
+      "briefId": "carelink-home-2032",
+      "sourceParticipantId": "DEMO-A10",
+      "sourceWorkflow": "layered",
+      "sourceTaskIndex": 0,
+      "sourceSessionSha256": "d40c318327f8f4e25df5c272e8c8bb5b974c240c4ee303d329d0336d80cb1cda",
+      "state": {
+        "briefId": "carelink-home-2032",
+        "values": {
+          "consent": "首次安装即默认长期同意全部监测",
+          "visibility": "先向本人展示变化，由本人决定是否邀请他人查看",
+          "escalation": "系统把任何偏离常规的行为自动标为风险"
+        },
+        "visual": {
+          "code": "HOME / 12",
+          "eyebrow": "CareLink Home",
+          "headline": "A quieter kind of watch",
+          "metric": "3",
+          "metricLabel": "pattern changes",
+          "accent": "coral",
+          "layout": "soft"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "visibility"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:10:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:13:00.000Z",
+          "payload": {
+            "targetIds": [
+              "visibility"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:13:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:18:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-8CE34E56C304EAAA",
+      "briefId": "common-ground-2040",
+      "sourceParticipantId": "DEMO-A10",
+      "sourceWorkflow": "flat",
+      "sourceTaskIndex": 1,
+      "sourceSessionSha256": "d40c318327f8f4e25df5c272e8c8bb5b974c240c4ee303d329d0336d80cb1cda",
+      "state": {
+        "briefId": "common-ground-2040",
+        "values": {
+          "representation": "只有登记产权人拥有正式投票权",
+          "evidence": "资产估值是唯一正式损失指标",
+          "distribution": "先保障无法自行迁移的居民，再比较基础设施与资产损失"
+        },
+        "visual": {
+          "code": "TIDE / 04",
+          "eyebrow": "Common Ground 2040",
+          "headline": "What the water reaches first",
+          "metric": "61%",
+          "metricLabel": "capital protected",
+          "accent": "amber",
+          "layout": "notice"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "distribution"
+        ],
+        "visual": [
+          "accent"
+        ]
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:20:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:23:00.000Z",
+          "payload": {
+            "targetIds": [
+              "distribution"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:23:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:28:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-252A3F8F10A55E32",
+      "briefId": "common-ground-2040",
+      "sourceParticipantId": "DEMO-A11",
+      "sourceWorkflow": "flat",
+      "sourceTaskIndex": 0,
+      "sourceSessionSha256": "ca8a403eef3043bc18ca8ece1614d588883cc4577317ff8609dcbc10c9bd8b53",
+      "state": {
+        "briefId": "common-ground-2040",
+        "values": {
+          "representation": "只有登记产权人拥有正式投票权",
+          "evidence": "公开列出不同证据如何改变资源排序，并允许质疑权重",
+          "distribution": "部分预算用于防护，部分用于自愿搬迁和租户长期安置"
+        },
+        "visual": {
+          "code": "TIDE / 04",
+          "eyebrow": "Common Ground 2040",
+          "headline": "What the water reaches first",
+          "metric": "61%",
+          "metricLabel": "capital protected",
+          "accent": "indigo",
+          "layout": "notice"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "evidence",
+          "distribution"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:11:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:14:00.000Z",
+          "payload": {
+            "targetIds": [
+              "distribution"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:14:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:19:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-1DD16EB0F728F51C",
+      "briefId": "cooling-credit-2035",
+      "sourceParticipantId": "DEMO-A11",
+      "sourceWorkflow": "layered",
+      "sourceTaskIndex": 1,
+      "sourceSessionSha256": "ca8a403eef3043bc18ca8ece1614d588883cc4577317ff8609dcbc10c9bd8b53",
+      "state": {
+        "briefId": "cooling-credit-2035",
+        "values": {
+          "access": "可通过手机、图书馆服务台、电话或社区代理领取",
+          "allocation": "系统按照预测的“规则遵从概率”排列家庭",
+          "appeal": "结果每晚自动更新，不提供个人复核"
+        },
+        "visual": {
+          "code": "HEAT / 07",
+          "eyebrow": "Public Cooling Credit",
+          "headline": "Today’s cooling access",
+          "metric": "82",
+          "metricLabel": "priority index",
+          "accent": "cyan",
+          "layout": "panel"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "access"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:21:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:24:00.000Z",
+          "payload": {
+            "targetIds": [
+              "access"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:24:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:29:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-452C1C887AC7A42E",
+      "briefId": "common-ground-2040",
+      "sourceParticipantId": "DEMO-A12",
+      "sourceWorkflow": "layered",
+      "sourceTaskIndex": 0,
+      "sourceSessionSha256": "07e1f863ee36f92aee0b543977f0dba82fd7d4367722df3209cdffa4087f2630",
+      "state": {
+        "briefId": "common-ground-2040",
+        "values": {
+          "representation": "随机抽取居民议会，并保证租户和临时居住者最低席位",
+          "evidence": "资产估值是唯一正式损失指标",
+          "distribution": "优先保护总资产价值最高的街区"
+        },
+        "visual": {
+          "code": "TIDE / 04",
+          "eyebrow": "Common Ground 2040",
+          "headline": "What the water reaches first",
+          "metric": "61%",
+          "metricLabel": "capital protected",
+          "accent": "indigo",
+          "layout": "notice"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "representation"
+        ],
+        "visual": []
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:12:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:15:00.000Z",
+          "payload": {
+            "targetIds": [
+              "representation"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:15:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:20:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    },
+    {
+      "artefactId": "ART-52820DF1FAD582C3",
+      "briefId": "cooling-credit-2035",
+      "sourceParticipantId": "DEMO-A12",
+      "sourceWorkflow": "flat",
+      "sourceTaskIndex": 1,
+      "sourceSessionSha256": "07e1f863ee36f92aee0b543977f0dba82fd7d4367722df3209cdffa4087f2630",
+      "state": {
+        "briefId": "cooling-credit-2035",
+        "values": {
+          "access": "仅限绑定智能手机账户的常住居民",
+          "allocation": "居民、社区工作者与健康数据共同形成可解释的优先顺序",
+          "appeal": "结果每晚自动更新，不提供个人复核"
+        },
+        "visual": {
+          "code": "HEAT / 07",
+          "eyebrow": "Public Cooling Credit",
+          "headline": "Today’s cooling access",
+          "metric": "82",
+          "metricLabel": "priority index",
+          "accent": "amber",
+          "layout": "panel"
+        }
+      },
+      "baseDiff": {
+        "semantic": [
+          "allocation"
+        ],
+        "visual": [
+          "accent"
+        ]
+      },
+      "eventLog": [
+        {
+          "type": "trial_started",
+          "at": "2026-08-27T12:22:00.000Z",
+          "payload": {}
+        },
+        {
+          "type": "candidate_generated",
+          "at": "2026-08-27T12:25:00.000Z",
+          "payload": {
+            "targetIds": [
+              "allocation"
+            ]
+          }
+        },
+        {
+          "type": "candidate_applied",
+          "at": "2026-08-27T12:25:40.000Z",
+          "payload": {}
+        },
+        {
+          "type": "trial_completed",
+          "at": "2026-08-27T12:30:00.000Z",
+          "payload": {}
+        }
+      ],
+      "synthetic": true,
+      "technicalStatus": "PASS",
+      "technicalErrors": []
+    }
+  ],
+  "sha256": "6c51a11e7891dd29d20423867286371e7c1d937888cbaf8036d7f3f53b2b3cda"
+}

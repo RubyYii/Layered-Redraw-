@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "packageVersion": "kfc-0.2.0",
+  "nonLocalRequests": 0,
+  "consoleErrors": 0,
+  "studyATrialsCompleted": 2,
+  "studyBProtocolsExercised": [
+    "closed",
+    "open"
+  ],
+  "expertBlindLeakCheck": "PASS",
+  "coordinatorFileAccess": "BLOCKED_403",
+  "screenshots": [
+    "01-landing-desktop.png",
+    "02-study-a-care-base.png",
+    "02-study-a-flat-candidate.png",
+    "02-study-a-layered-candidate.png",
+    "03-study-b-common-probe.png",
+    "04-expert-blind-audit.png",
+    "05-landing-mobile.png"
+  ]
+}

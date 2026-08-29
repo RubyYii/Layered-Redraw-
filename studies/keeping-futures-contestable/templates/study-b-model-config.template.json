@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "kfc-study-b-model-config/0.1",
+  "status": "TO_BE_FROZEN_AFTER_PILOT_BEFORE_MAIN_COLLECTION",
+  "frozenAt": null,
+  "frozenBy": "TO_BE_COMPLETED_BY_RESEARCHER",
+  "family": "negative_binomial",
+  "dispersionAlpha": null,
+  "dispersionSource": "TO_BE_COMPLETED_FROM_PILOT_NUISANCE_ESTIMATE",
+  "orderEncoding": "categorical",
+  "primaryContrast": "average_protocol_across_equally_weighted_workflows",
+  "interactionRole": "supporting_unless_separately_powered",
+  "postTreatmentDiagnostic": [
+    "response_length_chars",
+    "common_probe_duration_seconds"
+  ],
+  "pilotSummarySha256": "TO_BE_COMPLETED_AFTER_PILOT",
+  "powerInputSha256": "TO_BE_COMPLETED_AFTER_PILOT"
+}
+

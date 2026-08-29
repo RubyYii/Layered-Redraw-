@@ -1,0 +1,5 @@
+contribution_id,current_role,core_gap_fit,target_reader_fit,narrative_emphasis,author_locked,section_ids,decision_status,notes
+"CON-01","primary","direct","high","dominant","true","abstract;introduction;results-study-a;results-study-b;discussion","approved","Author approved 1+3+4 fusion; primary is cross-stage empirical contestability, not the tool."
+"CON-02","secondary","direct","high","balanced","true","methods-study-b;results-study-b;discussion","approved","Evaluation protocol is a secondary tested contribution."
+"CON-03","enabling","partial","medium","light","true","methods;appendix;artifact","approved","Apparatus and Layered Redraw are enabling infrastructure only."
+"CON-04","boundary","partial","high","balanced","true","cross-stage;discussion;limitations","approved","Warrant-conflict analysis controls interpretation and must not become a universal framework."

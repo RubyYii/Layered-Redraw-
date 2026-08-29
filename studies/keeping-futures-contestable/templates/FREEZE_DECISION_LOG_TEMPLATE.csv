@@ -1,0 +1,2 @@
+freeze_id,frozen_at,stage,protocol_version,participant_documents_version,app_version,config_sha256,package_freeze_sha256,manifest_sha256,codebook_sha256,sample_plan_sha256,pilot_summary_sha256,decision_owner,notes
+

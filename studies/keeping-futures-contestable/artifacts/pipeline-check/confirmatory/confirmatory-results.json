@@ -1,0 +1,261 @@
+{
+  "schema_version": "kfc-confirmatory-analysis/0.1",
+  "evidence_status": "SYNTHETIC_PIPELINE_CHECK_NOT_EVIDENCE",
+  "study_a": {
+    "scope": "paired mechanism estimate; not powered as a population-level workflow-superiority test",
+    "contestatory_revision": {
+      "estimand": "mean(layered - flat)",
+      "outcome": "contestatory_revision_0_2",
+      "participants": 12,
+      "estimate": 0.16666666666666666,
+      "ci95_percentile": [
+        -0.5,
+        0.8333333333333334
+      ]
+    },
+    "locality_manipulation_check": {
+      "status": "SYSTEM_ENFORCED_MANIPULATION_CHECK_NOT_A_HUMAN_EFFECT",
+      "by_condition": [
+        {
+          "condition": "flat",
+          "count": 12,
+          "mean": 1.0,
+          "min": 1,
+          "max": 1
+        },
+        {
+          "condition": "layered",
+          "count": 12,
+          "mean": 0.0,
+          "min": 0,
+          "max": 0
+        }
+      ],
+      "interpretation": "Use only to verify local preservation versus whole-output collateral change; do not test it as participant behaviour."
+    }
+  },
+  "study_b": {
+    "grounded_breadth": {
+      "estimand": "participant mean(open - closed)",
+      "outcome": "grounded_interpretation_count",
+      "participants_positive": 6,
+      "participants_negative": 6,
+      "estimate": 0.8888888888888891,
+      "ci95_percentile": [
+        0.5,
+        1.3333333333333328
+      ]
+    },
+    "comprehension_by_protocol": [
+      {
+        "protocol": "closed",
+        "count": 18,
+        "mean": 1.0
+      },
+      {
+        "protocol": "open",
+        "count": 18,
+        "mean": 1.0
+      }
+    ],
+    "model_config": {
+      "schemaVersion": "kfc-study-b-model-config/0.1",
+      "status": "SYNTHETIC_PIPELINE_DEFAULT_NOT_FROZEN",
+      "family": "negative_binomial",
+      "dispersionAlpha": 1.0,
+      "orderEncoding": "categorical",
+      "primaryContrast": "average_protocol_across_equally_weighted_workflows"
+    },
+    "model_config_sha256": null,
+    "primary_model": {
+      "model": "Negative-binomial GLM with participant × artefact two-way clustered covariance",
+      "formula": "grounded_interpretation_count ~ protocol_open * source_layered + C(brief_id) + C(presentation_order)",
+      "dispersion_alpha_frozen": 1.0,
+      "primary_average_protocol_contrast": {
+        "estimand": "average log protocol rate ratio across flat and layered source workflows with equal 0.5 weights",
+        "log_rate_ratio": 0.5264039301623801,
+        "rate_ratio": 1.692833801288515,
+        "two_way_cluster_se": 0.14862376805137825,
+        "ci95_rate_ratio": [
+          1.2650369671319122,
+          2.2652984483781515
+        ],
+        "z": 3.541855633618478,
+        "p": 0.0003973228639891447
+      },
+      "coefficients": [
+        {
+          "term": "Intercept",
+          "log_rate": 0.2153799301657206,
+          "rate_ratio": 1.2403330473985104,
+          "two_way_cluster_se": 0.45239814001709,
+          "z": 0.4760849152863102,
+          "p": 0.634013883275267
+        },
+        {
+          "term": "C(brief_id)[T.common-ground-2040]",
+          "log_rate": -0.2351530777463821,
+          "rate_ratio": 0.7904498400868892,
+          "two_way_cluster_se": 0.453755038840642,
+          "z": -0.5182379425409918,
+          "p": 0.6042922649410798
+        },
+        {
+          "term": "C(brief_id)[T.cooling-credit-2035]",
+          "log_rate": -0.4244040268104759,
+          "rate_ratio": 0.6541595305212716,
+          "two_way_cluster_se": 0.3927336728920065,
+          "z": -1.080640790704947,
+          "p": 0.2798569303277437
+        },
+        {
+          "term": "C(presentation_order)[T.2]",
+          "log_rate": 0.19131083666508547,
+          "rate_ratio": 1.2108357657436177,
+          "two_way_cluster_se": 0.25654186101688337,
+          "z": 0.7457295113817508,
+          "p": 0.4558308281703567
+        },
+        {
+          "term": "C(presentation_order)[T.3]",
+          "log_rate": 0.019010682918630006,
+          "rate_ratio": 1.0191925365101866,
+          "two_way_cluster_se": 0.3783336564514544,
+          "z": 0.05024845819147826,
+          "p": 0.9599243962465105
+        },
+        {
+          "term": "protocol_open",
+          "log_rate": 0.8091795318295633,
+          "rate_ratio": 2.2460644061263335,
+          "two_way_cluster_se": 0.4687928822563593,
+          "z": 1.7260917613229965,
+          "p": 0.08433090577614978
+        },
+        {
+          "term": "source_layered",
+          "log_rate": 0.3809984855339986,
+          "rate_ratio": 1.4637453886154241,
+          "two_way_cluster_se": 0.6587967392034206,
+          "z": 0.5783247895165362,
+          "p": 0.5630448610177454
+        },
+        {
+          "term": "protocol_open:source_layered",
+          "log_rate": -0.5655512033343664,
+          "rate_ratio": 0.5680469510747088,
+          "two_way_cluster_se": 0.6281522860778216,
+          "z": -0.9003409139297479,
+          "p": 0.3679388541903418
+        }
+      ],
+      "role": "primary protocol-effect model",
+      "warning": "The average protocol contrast is primary; component coefficients and interaction remain supporting unless separately powered."
+    },
+    "post_treatment_diagnostic_model": {
+      "model": "Negative-binomial GLM with participant × artefact two-way clustered covariance",
+      "formula": "grounded_interpretation_count ~ protocol_open * source_layered + C(brief_id) + C(presentation_order) + response_length_chars + common_probe_duration_seconds",
+      "dispersion_alpha_frozen": 1.0,
+      "primary_average_protocol_contrast": {
+        "estimand": "average log protocol rate ratio across flat and layered source workflows with equal 0.5 weights",
+        "log_rate_ratio": 0.5264039301623795,
+        "rate_ratio": 1.692833801288514,
+        "two_way_cluster_se": 0.1542341731107542,
+        "ci95_rate_ratio": [
+          1.2512023273047217,
+          2.290346026575926
+        ],
+        "z": 3.4130174885715725,
+        "p": 0.000642478190379078
+      },
+      "coefficients": [
+        {
+          "term": "Intercept",
+          "log_rate": 0.0014972800558692343,
+          "rate_ratio": 1.0014984015393071,
+          "two_way_cluster_se": 0.0,
+          "z": NaN,
+          "p": NaN
+        },
+        {
+          "term": "C(brief_id)[T.common-ground-2040]",
+          "log_rate": 0.015669781252168252,
+          "rate_ratio": 1.0157931960594486,
+          "two_way_cluster_se": 609360.7615851545,
+          "z": 2.571511367323e-08,
+          "p": 0.9999999794823078
+        },
+        {
+          "term": "C(brief_id)[T.cooling-credit-2035]",
+          "log_rate": -0.2989925973112004,
+          "rate_ratio": 0.7415648989888637,
+          "two_way_cluster_se": 358473.77806840517,
+          "z": -8.340710411854606e-07,
+          "p": 0.9999993345075936
+        },
+        {
+          "term": "C(presentation_order)[T.2]",
+          "log_rate": 0.19131083666508125,
+          "rate_ratio": 1.2108357657436126,
+          "two_way_cluster_se": 0.26622607084322497,
+          "z": 0.7186029379434452,
+          "p": 0.47238560267194163
+        },
+        {
+          "term": "C(presentation_order)[T.3]",
+          "log_rate": 0.019010682918624303,
+          "rate_ratio": 1.0191925365101806,
+          "two_way_cluster_se": 0.3926153900403508,
+          "z": 0.04842062588700482,
+          "p": 0.9613810215024708
+        },
+        {
+          "term": "protocol_open",
+          "log_rate": 0.8091795318295636,
+          "rate_ratio": 2.246064406126334,
+          "two_way_cluster_se": 0.4864893650793606,
+          "z": 1.6633036401475352,
+          "p": 0.09625167043436673
+        },
+        {
+          "term": "source_layered",
+          "log_rate": 0.38099848553400095,
+          "rate_ratio": 1.4637453886154275,
+          "two_way_cluster_se": 0.6836656858543357,
+          "z": 0.5572877115485037,
+          "p": 0.577330870234176
+        },
+        {
+          "term": "protocol_open:source_layered",
+          "log_rate": -0.565551203334368,
+          "rate_ratio": 0.5680469510747078,
+          "two_way_cluster_se": 0.6518644339400117,
+          "z": -0.8675902133761961,
+          "p": 0.3856187059176047
+        },
+        {
+          "term": "response_length_chars",
+          "log_rate": -0.12541142949927453,
+          "rate_ratio": 0.8821338920076044,
+          "two_way_cluster_se": 348280.8243627873,
+          "z": -3.600870927325e-07,
+          "p": 0.9999997126920681
+        },
+        {
+          "term": "common_probe_duration_seconds",
+          "log_rate": 0.1347552050282326,
+          "rate_ratio": 1.1442566417916464,
+          "two_way_cluster_se": 378868.44505939516,
+          "z": 3.5567809033847365e-07,
+          "p": 0.9999997162099431
+        }
+      ],
+      "role": "post-treatment diagnostic, not a causal adjustment",
+      "warning": "Response length and common-probe time are downstream of protocol; this diagnostic cannot replace the primary model."
+    }
+  },
+  "claim_gate": {
+    "productive_ambiguity": "Do not pass if breadth increases with materially worse comprehension or if the effect is explained only by response length/dwell time.",
+    "non_substitution": "Requires repeated, interpretable technical/curatorial discordance; this model does not establish it."
+  }
+}

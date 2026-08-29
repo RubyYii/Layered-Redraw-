@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>Keeping Futures Contestable · 本地实验台</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#app">跳到主要内容</a>
+    <header class="site-header">
+      <a class="brand" href="./index.html" aria-label="返回实验入口">
+        <span class="brand-mark" aria-hidden="true">KFC</span>
+        <span>
+          <strong>Keeping Futures Contestable</strong>
+          <small>制作—评价可争议性实验台</small>
+        </span>
+      </a>
+      <div class="header-status">
+        <span id="modeBadge" class="badge">LOCAL</span>
+        <span id="ethicsBadge" class="badge badge-warn">载入中</span>
+      </div>
+    </header>
+    <main id="app" tabindex="-1" aria-live="polite">
+      <section class="loading-card">
+        <div class="spinner" aria-hidden="true"></div>
+        <p>正在载入本地实验包……</p>
+      </section>
+    </main>
+    <footer class="site-footer">
+      <span>本地保存 · 无外部模型请求</span>
+      <button id="clearLocal" class="text-button" type="button">清除本机实验进度</button>
+    </footer>
+    <noscript>此实验需要启用 JavaScript；不会连接外部服务。</noscript>
+    <script type="module" src="./app.mjs"></script>
+  </body>
+</html>

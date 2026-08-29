@@ -1,0 +1,25 @@
+{
+  "name": "keeping-futures-contestable-study",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first HCI experiment package for contestability across speculative making and evaluation.",
+  "scripts": {
+    "start": "node scripts/serve.mjs --open",
+    "serve": "node scripts/serve.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:ui": "node scripts/generate-demo-data.mjs && node scripts/smoke-test.mjs",
+    "demo:generate": "node scripts/generate-demo-data.mjs",
+    "returns:validate": "node scripts/validate-returns.mjs data/demo/returns",
+    "coding:prepare": "node scripts/prepare-coding.mjs data/demo/returns data/demo/coding-units.csv",
+    "analyze:demo": "node scripts/analyze.mjs --returns data/demo/returns --coding data/demo/coding-completed.csv --key data/demo/coding-completed.key.json --manifest data/demo/study-b-manifest.json --out data/demo/analysis",
+    "manifest:demo": "node scripts/build-study-b-manifest.mjs data/demo/returns data/demo/study-b-manifest.json",
+    "readiness:pilot": "node scripts/check-human-launch-readiness.mjs cognitive-pilot --write-record data/frozen/pilot-launch-record.json",
+    "readiness:study-a": "node scripts/check-human-launch-readiness.mjs study-a --write-record data/frozen/study-a-launch-record.json",
+    "readiness:study-b": "node scripts/check-human-launch-readiness.mjs study-b --write-record data/frozen/study-b-launch-record.json",
+    "readiness:expert": "node scripts/check-human-launch-readiness.mjs expert --write-record data/frozen/expert-launch-record.json"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

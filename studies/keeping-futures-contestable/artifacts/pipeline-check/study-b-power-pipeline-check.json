@@ -1,0 +1,128 @@
+{
+  "schemaVersion": "kfc-study-b-power-report/0.1",
+  "status": "PLANNING_PIPELINE_CHECK_NOT_SAMPLE_JUSTIFICATION",
+  "generatedAt": "2026-08-28T00:54:58.267547+00:00",
+  "inputPath": "F:\\drawforfun\\layered-redraw\\studies\\keeping-futures-contestable\\templates\\study-b-power-input.template.json",
+  "inputSha256": "3aaff138c7c367ad4666a672ff1d73c84db7daeb2f138f154fbd6e7ed99bf4f7",
+  "seed": 20260828,
+  "simulationsPerCell": 50,
+  "estimand": "average log protocol rate ratio across the two equally weighted source workflows",
+  "model": "negative-binomial GLM with protocol \u00d7 source workflow, brief, and order; participant \u00d7 artefact two-way clustered covariance",
+  "requiredPower": 0.8,
+  "candidateResults": [
+    {
+      "scenario": "substantively_minimum_average_effect",
+      "analyzableN": 96,
+      "power": 0.5,
+      "monteCarlo95": [
+        0.36644286412332855,
+        0.6335571358766714
+      ],
+      "significant": 25,
+      "validFits": 50,
+      "totalSimulations": 50,
+      "fitFailureRate": 0.0,
+      "medianEstimatedAverageLogRateRatio": 0.24696019701424657,
+      "targetAverageRateRatio": 1.25
+    },
+    {
+      "scenario": "substantively_minimum_average_effect",
+      "analyzableN": 112,
+      "power": 0.4,
+      "monteCarlo95": [
+        0.2760818978624575,
+        0.5381881089724063
+      ],
+      "significant": 20,
+      "validFits": 50,
+      "totalSimulations": 50,
+      "fitFailureRate": 0.0,
+      "medianEstimatedAverageLogRateRatio": 0.2187799489585544,
+      "targetAverageRateRatio": 1.25
+    },
+    {
+      "scenario": "substantively_minimum_average_effect",
+      "analyzableN": 128,
+      "power": 0.44,
+      "monteCarlo95": [
+        0.3116198721023535,
+        0.5769421319985648
+      ],
+      "significant": 22,
+      "validFits": 50,
+      "totalSimulations": 50,
+      "fitFailureRate": 0.0,
+      "medianEstimatedAverageLogRateRatio": 0.19287370549848298,
+      "targetAverageRateRatio": 1.25
+    },
+    {
+      "scenario": "substantively_minimum_average_effect",
+      "analyzableN": 144,
+      "power": 0.58,
+      "monteCarlo95": [
+        0.4423319668777783,
+        0.7062520276543307
+      ],
+      "significant": 29,
+      "validFits": 50,
+      "totalSimulations": 50,
+      "fitFailureRate": 0.0,
+      "medianEstimatedAverageLogRateRatio": 0.23033086077963394,
+      "targetAverageRateRatio": 1.25
+    },
+    {
+      "scenario": "substantively_minimum_average_effect",
+      "analyzableN": 160,
+      "power": 0.58,
+      "monteCarlo95": [
+        0.4423319668777783,
+        0.7062520276543307
+      ],
+      "significant": 29,
+      "validFits": 50,
+      "totalSimulations": 50,
+      "fitFailureRate": 0.0,
+      "medianEstimatedAverageLogRateRatio": 0.19858847933569698,
+      "targetAverageRateRatio": 1.25
+    },
+    {
+      "scenario": "substantively_minimum_average_effect",
+      "analyzableN": 176,
+      "power": 0.68,
+      "monteCarlo95": [
+        0.5418944286372394,
+        0.792419559060006
+      ],
+      "significant": 34,
+      "validFits": 50,
+      "totalSimulations": 50,
+      "fitFailureRate": 0.0,
+      "medianEstimatedAverageLogRateRatio": 0.2057378084078936,
+      "targetAverageRateRatio": 1.25
+    },
+    {
+      "scenario": "substantively_minimum_average_effect",
+      "analyzableN": 192,
+      "power": 0.68,
+      "monteCarlo95": [
+        0.5418944286372394,
+        0.792419559060006
+      ],
+      "significant": 34,
+      "validFits": 50,
+      "totalSimulations": 50,
+      "fitFailureRate": 0.0,
+      "medianEstimatedAverageLogRateRatio": 0.22801383017238935,
+      "targetAverageRateRatio": 1.25
+    }
+  ],
+  "recommendedAnalyzableN": null,
+  "recommendedRecruitMaximum": null,
+  "selectionRule": "smallest complete four-participant block meeting required power in every frozen smallest-effect scenario",
+  "warnings": [
+    "Power is conditional on frozen nuisance parameters and smallest effects of interest.",
+    "Pilot outcome differences must not be reused as confirmatory evidence.",
+    "A template run verifies code only and cannot justify a sample size.",
+    "If no feasible candidate meets the rule, predeclare a formative mechanism study or revise the design before outcome inspection."
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "kfc-approval-record/0.1",
+  "reviewRoute": "TO_BE_COMPLETED_BY_RESEARCHER",
+  "ethicsStatus": "TO_BE_COMPLETED_BY_RESEARCHER",
+  "approvedProtocolId": "TO_BE_COMPLETED_BY_RESEARCHER",
+  "approvalDate": "YYYY-MM-DD",
+  "protocolVersion": "TO_BE_COMPLETED_BY_RESEARCHER",
+  "participantDocumentsVersion": "TO_BE_COMPLETED_BY_RESEARCHER",
+  "institution": "TO_BE_COMPLETED_BY_RESEARCHER",
+  "responsibleInvestigator": "TO_BE_COMPLETED_BY_RESEARCHER",
+  "scopeIncludesCognitivePilot": false,
+  "scopeIncludesMainStudy": false,
+  "amendments": [],
+  "recordedBy": "TO_BE_COMPLETED_BY_RESEARCHER",
+  "recordedAt": null,
+  "note": "This local metadata record must match the authoritative institutional decision. It is not the decision itself."
+}
+
