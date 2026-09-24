@@ -57,6 +57,17 @@ $skillTarget = Join-Path $env:USERPROFILE ".codex\skills\redraw-in-layers"
 New-Item -ItemType Junction -Path $skillTarget -Target (Resolve-Path ".\skills\redraw-in-layers")
 ```
 
+macOS / Linux:
+
+```bash
+git clone https://github.com/RubyYii/Layered-Redraw-.git
+cd Layered-Redraw-
+mkdir -p ~/.codex/skills
+ln -s "$(pwd)/skills/redraw-in-layers" ~/.codex/skills/redraw-in-layers
+```
+
+`ln -s` fails without overwriting when a skill of the same name exists. Claude Code users can link the same folder to `~/.claude/skills/redraw-in-layers`.
+
 Restart Codex.
 
 ### 2. Upload a photo and invoke it
@@ -197,6 +208,23 @@ For an existing project:
 Use $redraw-in-layers to read this project and edit-request.json.
 Change only the layers targeted by the request and verify that every other top-level layer hash remains unchanged.
 ```
+
+## Diagrams and figures
+
+Beyond redrawing photographs, the same layer contract suits diagrams, paper figures and interface sketches, which often need several variants of one drawing side by side that differ in a single layer.
+
+- `new --layer-names` names layers for what they hold (for example `paper,frame,picture,heading,notes,cover`) instead of the default landscape layers.
+- `derive` applies a patch to a copy of the project and leaves the original untouched. The patch may change only the layers it declares; the copy's `derivation.json` records the base revision, the patch digest and the hash of every untouched layer, so layers two variants share can be matched byte for byte. A patch that escapes its scope leaves no output behind.
+- `export` renders a vector project to PDF, PNG or a standalone SVG for LaTeX or slides. The project is validated first, and hidden layers (`display="none"`) stay hidden. It needs one of cairosvg (Python package or command), rsvg-convert or Inkscape, and names what is missing when none is found.
+
+```bash
+python skills/redraw-in-layers/scripts/layered_redraw.py new out/page --layer-names paper,frame,picture,heading,notes,cover --width 300 --height 400
+# after drawing the layers in out/page/artwork.svg:
+python skills/redraw-in-layers/scripts/layered_redraw.py derive out/page reveal-cover.json out/page-covered
+python skills/redraw-in-layers/scripts/layered_redraw.py export out/page-covered out/page-covered.pdf
+```
+
+For publication, state how the figure was drawn in its caption, as the venue's rules on generative-AI figures require.
 
 ## Project format
 

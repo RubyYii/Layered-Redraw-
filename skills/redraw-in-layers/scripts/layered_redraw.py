@@ -935,6 +935,160 @@ def quality_report(raw_target: str | Path) -> dict[str, Any]:
     }
 
 
+
+def check_layer_names(names: list[str], layers: int) -> None:
+    """Layer names given on creation: kebab-case, unique, one per layer.
+
+    The default names describe a landscape photograph (sky, distant forms,
+    ground or water). A diagram, a figure schematic or an interface mock-up
+    needs layers named for what they hold.
+    """
+    if len(names) != layers:
+        raise LayeredRedrawError(f"Got {len(names)} layer names for {layers} layers")
+    seen: set[str] = set()
+    for name in names:
+        if not LAYER_ID_RE.fullmatch(f"layer-{name}"):
+            raise LayeredRedrawError(f"Layer name must be kebab-case (a-z, 0-9, hyphen): {name!r}")
+        if name in seen:
+            raise LayeredRedrawError(f"Duplicate layer name: {name}")
+        seen.add(name)
+
+
+def derive_variant(raw_base: str | Path, patch_path: str | Path, raw_output: str | Path) -> dict[str, Any]:
+    """Apply a scoped patch to a copy of a project and record where it came from.
+
+    apply-patch edits a project in place. A figure often needs several variants
+    of one drawing side by side -- the same page with and without a mask, one
+    icon drawn in four stroke weights -- each differing from the base in exactly
+    the layers its patch names. The copy is patched under the same scope and
+    serialization checks as apply-patch; derivation.json then lists the base
+    revision, the patch digest and the digest of every layer the patch did not
+    touch, so two variants can be shown to share those layers byte for byte.
+    Nothing is written to the output path unless the patch succeeds.
+    """
+    import shutil
+
+    base_svg, base_dir, base_config = resolve_project(raw_base)
+    output = Path(raw_output).expanduser().resolve()
+    if output.exists() and (not output.is_dir() or any(output.iterdir())):
+        raise LayeredRedrawError(f"Output directory is not empty: {output}")
+    patch_file = Path(patch_path).expanduser().resolve()
+    base_manifest = build_manifest(base_svg, base_config)
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output.name}.partial-", dir=output.parent))
+    staged = staging / "project"
+    try:
+        shutil.copytree(base_dir, staged, ignore=shutil.ignore_patterns("history", "derivation.json"))
+        applied = apply_patch(staged, patch_file)
+        svg_path, _, config = resolve_project(staged)
+        derived = build_manifest(svg_path, config)
+        base_hashes = {item["id"]: item["sha256"] for item in base_manifest["layers"]}
+        derived_hashes = {item["id"]: item["sha256"] for item in derived["layers"]}
+        changed = sorted(applied["changed_layers"])
+        untouched = {layer_id: digest for layer_id, digest in base_hashes.items() if layer_id not in changed}
+        drift = sorted(layer_id for layer_id, digest in untouched.items() if derived_hashes.get(layer_id) != digest)
+        if drift:  # pragma: no cover - apply_patch already refuses this
+            raise LayeredRedrawError("Derived variant changed undeclared layers: " + ", ".join(drift))
+        record = {
+            "schema_version": "1.0",
+            "base_project": os.path.relpath(base_dir, output.parent),
+            "base_revision": base_manifest["revision"],
+            "base_artwork_sha256": hashlib.sha256(base_svg.read_bytes()).hexdigest(),
+            "patch_file": patch_file.name,
+            "patch_sha256": hashlib.sha256(patch_file.read_bytes()).hexdigest(),
+            "changed_layers": changed,
+            "untouched_layer_sha256": untouched,
+            "derived_revision": derived["revision"],
+        }
+        write_json(staged / "derivation.json", record)
+        if output.exists():
+            output.rmdir()
+        os.replace(staged, output)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    return {"ok": True, "project": str(output), **{k: record[k] for k in ("base_revision", "changed_layers", "derived_revision")}}
+
+
+EXPORT_FORMATS = {".pdf": "pdf", ".png": "png", ".svg": "svg"}
+
+
+def find_svg_converter() -> dict[str, Any] | None:
+    """The first available SVG renderer: the cairosvg module, then the
+    cairosvg, rsvg-convert and inkscape command-line tools."""
+    import shutil
+    import subprocess
+
+    try:
+        import cairosvg  # type: ignore[import-not-found]
+    except ImportError:
+        cairosvg = None
+    if cairosvg is not None:
+        def run_module(svg: Path, out: Path, fmt: str, scale: float) -> None:
+            if fmt == "pdf":
+                cairosvg.svg2pdf(url=str(svg), write_to=str(out))
+            else:
+                cairosvg.svg2png(url=str(svg), write_to=str(out), scale=scale)
+        return {"name": "cairosvg (Python)", "run": run_module}
+
+    commands = {
+        "cairosvg": lambda svg, out, fmt, scale: ["cairosvg", str(svg), "-f", fmt, "-o", str(out)]
+        + (["-s", str(scale)] if fmt == "png" else []),
+        "rsvg-convert": lambda svg, out, fmt, scale: ["rsvg-convert", "-f", fmt, "-o", str(out)]
+        + (["-z", str(scale)] if fmt == "png" else []) + [str(svg)],
+        "inkscape": lambda svg, out, fmt, scale: ["inkscape", str(svg), f"--export-type={fmt}",
+                                                  f"--export-filename={out}"]
+        + ([f"--export-dpi={96 * scale:g}"] if fmt == "png" else []),
+    }
+    for name, build in commands.items():
+        if shutil.which(name):
+            def run_command(svg: Path, out: Path, fmt: str, scale: float, build=build, name=name) -> None:
+                done = subprocess.run(build(svg, out, fmt, scale), capture_output=True, text=True)
+                if done.returncode != 0:
+                    raise LayeredRedrawError(f"{name} failed: {done.stderr.strip() or done.stdout.strip()}")
+            return {"name": name, "run": run_command}
+    return None
+
+
+def export_artwork(raw_target: str | Path, raw_output: str | Path, *, scale: float = 1.0) -> dict[str, Any]:
+    """Write a vector project's artwork as PDF, PNG or a standalone SVG.
+
+    A document that includes the drawing -- a LaTeX figure, a slide -- needs a
+    file, not a project folder. The project is validated first, so an invalid
+    drawing is never exported, and hidden layers stay hidden because the SVG is
+    rendered as it stands.
+    """
+    import shutil
+
+    output = Path(raw_output).expanduser().resolve()
+    fmt = EXPORT_FORMATS.get(output.suffix.lower())
+    if fmt is None:
+        raise LayeredRedrawError(f"Unsupported export format {output.suffix!r}; use one of {', '.join(EXPORT_FORMATS)}")
+    if target_output_mode(raw_target) != "vector-strict":
+        raise LayeredRedrawError("export renders vector-strict projects; a raster project's artwork.png is its output")
+    report = validate_project(raw_target)
+    if not report["ok"]:
+        raise LayeredRedrawError("Project is not valid; not exporting: " + "; ".join(report["errors"]))
+    svg_path, _, _ = resolve_project(raw_target)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if fmt == "svg":
+        shutil.copyfile(svg_path, output)
+        converter = "copy"
+    else:
+        found = find_svg_converter()
+        if found is None:
+            raise LayeredRedrawError(
+                "No SVG converter found. Install one of: the cairosvg Python package "
+                "(python -m pip install cairosvg), the cairosvg or rsvg-convert command, or Inkscape."
+            )
+        found["run"](svg_path, output, fmt, scale)
+        converter = found["name"]
+    if not output.is_file() or output.stat().st_size == 0:
+        raise LayeredRedrawError(f"Converter reported success but wrote nothing: {output}")
+    return {"ok": True, "output": str(output), "format": fmt, "converter": converter,
+            "sha256": hashlib.sha256(output.read_bytes()).hexdigest()}
+
+
 def create_project(
     output: str | Path,
     *,
@@ -946,8 +1100,13 @@ def create_project(
     style: str | None = None,
     pixel_scale: int = 4,
     palette_size: int = 32,
+    layer_names: list[str] | None = None,
 ) -> dict[str, Any]:
+    if layer_names is not None:
+        check_layer_names(layer_names, layers)
     if mode == "raster-layered":
+        if layer_names is not None:
+            raise LayeredRedrawError("Custom layer names are supported for vector-strict projects only")
         return RASTER.create_project(
             output,
             title=title,
@@ -980,7 +1139,7 @@ def create_project(
     title_node.text = title
     desc = ET.SubElement(root, svg_tag("desc"))
     desc.text = "Layered Redraw project awaiting artwork."
-    names = DEFAULT_LAYER_NAMES[:layers]
+    names = list(layer_names) if layer_names is not None else DEFAULT_LAYER_NAMES[:layers]
     if layers > len(names):
         names.extend(f"additional-{index}" for index in range(len(names) + 1, layers + 1))
     for name in names:
@@ -1596,7 +1755,11 @@ def build_parser() -> argparse.ArgumentParser:
     new_parser = subparsers.add_parser("new", help="Create an empty semantic-layer project")
     new_parser.add_argument("output")
     new_parser.add_argument("--title", default="Untitled Layered Redraw")
-    new_parser.add_argument("--layers", type=int, default=10)
+    new_parser.add_argument("--layers", type=int, help="Layer count (default 10, or the number of --layer-names)")
+    new_parser.add_argument(
+        "--layer-names",
+        help="Comma-separated kebab-case layer names, bottom to top (vector-strict), e.g. paper,frame,title,caption,mask",
+    )
     new_parser.add_argument("--width", type=int)
     new_parser.add_argument("--height", type=int)
     new_parser.add_argument(
@@ -1625,6 +1788,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     compose_parser = subparsers.add_parser("compose", help="Composite a raster-layered PNG stack")
     compose_parser.add_argument("target")
+
+    derive_parser = subparsers.add_parser(
+        "derive", help="Apply a scoped patch to a copy of a project and record its provenance"
+    )
+    derive_parser.add_argument("target")
+    derive_parser.add_argument("patch")
+    derive_parser.add_argument("output")
+
+    export_parser = subparsers.add_parser("export", help="Render a vector project to PDF, PNG or standalone SVG")
+    export_parser.add_argument("target")
+    export_parser.add_argument("output", help="Output file; the suffix (.pdf, .png, .svg) chooses the format")
+    export_parser.add_argument("--scale", type=float, default=1.0, help="PNG scale factor")
 
     patch_parser = subparsers.add_parser("apply-patch", help="Apply a scoped structured patch")
     patch_parser.add_argument("target")
@@ -1838,10 +2013,13 @@ def main(argv: list[str] | None = None) -> int:
             )
             width = args.width if args.width is not None else (320 if pixel_art else 1200)
             height = args.height if args.height is not None else (240 if pixel_art else 800)
+            names = [part.strip() for part in args.layer_names.split(",")] if args.layer_names else None
+            layers = args.layers if args.layers is not None else (len(names) if names else 10)
             result = create_project(
                 args.output,
                 title=args.title,
-                layers=args.layers,
+                layers=layers,
+                layer_names=names,
                 width=width,
                 height=height,
                 mode=args.mode,
@@ -1873,6 +2051,10 @@ def main(argv: list[str] | None = None) -> int:
             result = RASTER.compose_project(args.target)
         elif args.command == "apply-patch":
             result = apply_patch(args.target, args.patch, dry_run=args.dry_run)
+        elif args.command == "derive":
+            result = derive_variant(args.target, args.patch, args.output)
+        elif args.command == "export":
+            result = export_artwork(args.target, args.output, scale=args.scale)
         elif args.command == "quality":
             result = quality_report(args.target)
         elif args.command == "styles":
