@@ -28,6 +28,7 @@ This repository is an incubation prototype. It is not a released VULCA Effect Pa
 - For mixed vector, paint, and pixel treatment, keep the registered PNG render stack canonical and attach an `editable_source` plus `layer_type` to layers that need a vector or pixel source.
 - For an existing Layered Redraw folder, read `project.json` first and preserve its output mode unless the user requests a separate style or mode variant.
 - For validation, splitting, manifest generation, or local editor launch, run `scripts/layered_redraw.py` directly.
+- For a diagram, figure schematic, or interface sketch, name layers for their content with `new --layer-names`, derive side-by-side variants with `derive` (never by editing the base in place), and hand documents a file with `export` (PDF, PNG, or standalone SVG). Keep labels and captions in the host document, not in the artwork.
 - For style-specific decisions, read `references/styles.md` only after the user chooses or requests a style.
 
 ## Build reference intelligence

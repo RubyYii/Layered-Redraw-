@@ -61,6 +61,17 @@ $skillTarget = Join-Path $env:USERPROFILE ".codex\skills\redraw-in-layers"
 New-Item -ItemType Junction -Path $skillTarget -Target (Resolve-Path ".\skills\redraw-in-layers")
 ```
 
+macOS / Linux：
+
+```bash
+git clone https://github.com/RubyYii/Layered-Redraw-.git
+cd Layered-Redraw-
+mkdir -p ~/.codex/skills
+ln -s "$(pwd)/skills/redraw-in-layers" ~/.codex/skills/redraw-in-layers
+```
+
+`ln -s` 在同名 Skill 已存在时会报错退出，不会覆盖。Claude Code 用户可把同一目录链接到 `~/.claude/skills/redraw-in-layers`。
+
 重启 Codex。
 
 ### 2. 上传照片并调用
@@ -201,6 +212,23 @@ New-Item -ItemType Junction -Path $skillTarget -Target (Resolve-Path ".\skills\r
 使用 $redraw-in-layers 读取这个工程和 edit-request.json。
 只修改请求命中的图层，验证其他顶层图层哈希保持不变。
 ```
+
+## 示意图与插图
+
+照片重绘之外，同一套图层契约也适合画示意图、论文插图和界面草图：这类图常常要同一张画的几个变体并排出现，变体之间只差一层。
+
+- `new --layer-names` 按内容给图层命名（例如 `paper,frame,picture,heading,notes,cover`），不用默认的风景分层。
+- `derive` 在工程副本上打补丁，原工程不动；补丁只能改它声明的图层，副本里的 `derivation.json` 记下底稿版本、补丁摘要和每个未改动图层的哈希，两个变体共享的图层可以逐字节对上。补丁越界时不留下任何输出。
+- `export` 把矢量工程导出为 PDF、PNG 或独立 SVG，供 LaTeX、幻灯片直接引用。导出前先校验工程；隐藏的图层（`display="none"`）保持隐藏。需要本机有 cairosvg（Python 包或命令）、rsvg-convert 或 Inkscape 之一，缺了会直接说缺哪个。
+
+```bash
+python skills/redraw-in-layers/scripts/layered_redraw.py new out/page --layer-names paper,frame,picture,heading,notes,cover --width 300 --height 400
+# 写好 out/page/artwork.svg 的图层内容后：
+python skills/redraw-in-layers/scripts/layered_redraw.py derive out/page reveal-cover.json out/page-covered
+python skills/redraw-in-layers/scripts/layered_redraw.py export out/page-covered out/page-covered.pdf
+```
+
+用于出版物时，请按刊物对生成式 AI 作图的规定在图注中说明绘制方式。
 
 ## 工程结构
 
