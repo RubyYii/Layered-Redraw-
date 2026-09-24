@@ -161,6 +161,36 @@ class DeriveTests(unittest.TestCase):
             self.assertEqual((out / "keep.txt").read_text(encoding="utf-8"), "x")
 
 
+class PatchLogTests(unittest.TestCase):
+    def test_patch_log_records_no_absolute_path(self) -> None:
+        """A project folder is shared; its patch log must not carry the author's
+        home directory. The patch is identified by a relative path and a digest."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir) / "base"
+            _schematic(base)
+            patch = _reveal(base, "cover-a")          # outside the project folder
+            TOOLS.apply_patch(base, patch)
+            logs = list((base / "patches").glob("*.json"))
+            self.assertEqual(len(logs), 1)
+            text = logs[0].read_text(encoding="utf-8")
+            self.assertNotIn(str(Path(temp_dir)), text)
+            self.assertNotIn(str(Path(temp_dir).resolve()), text)
+            log = json.loads(text)
+            self.assertEqual(log["patch_sha256"], hashlib.sha256(patch.read_bytes()).hexdigest())
+            self.assertEqual(log["patch_source"], "reveal-cover-a.json")
+
+    def test_patch_inside_the_project_is_logged_relative_to_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir) / "base"
+            _schematic(base)
+            inner = base / "requests" / "reveal.json"
+            inner.parent.mkdir()
+            inner.write_bytes(_reveal(base, "cover-b").read_bytes())
+            TOOLS.apply_patch(base, inner)
+            log = json.loads(next((base / "patches").glob("*.json")).read_text(encoding="utf-8"))
+            self.assertEqual(log["patch_source"], "requests/reveal.json")
+
+
 class ExportTests(unittest.TestCase):
     def test_export_names_the_missing_converter_instead_of_failing_silently(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

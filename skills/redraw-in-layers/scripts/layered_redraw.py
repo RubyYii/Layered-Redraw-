@@ -589,6 +589,17 @@ def parse_safe_fragment(fragment: str, target_id: str, output_mode: str) -> ET.E
     return element
 
 
+
+def patch_source_label(patch_file: Path, project_dir: Path) -> str:
+    """How a patch log names its patch: relative to the project when the patch
+    lives inside it, otherwise by file name alone. A project folder gets shared,
+    and an absolute path would carry the author's home directory with it; the
+    patch_sha256 beside this label identifies the file."""
+    try:
+        return patch_file.resolve().relative_to(project_dir.resolve()).as_posix()
+    except ValueError:
+        return patch_file.name
+
 def apply_patch(raw_target: str | Path, patch_path: str | Path, *, dry_run: bool = False) -> dict[str, Any]:
     if target_output_mode(raw_target) == "raster-layered":
         return RASTER.apply_patch(raw_target, patch_path, dry_run=dry_run)
@@ -788,7 +799,8 @@ def apply_patch(raw_target: str | Path, patch_path: str | Path, *, dry_run: bool
         "schema_version": "1.0",
         "kind": "layered-redraw-patch-log",
         "applied_at": datetime.now(timezone.utc).isoformat(),
-        "patch_source": str(patch_file),
+        "patch_source": patch_source_label(patch_file, project_dir),
+        "patch_sha256": hashlib.sha256(patch_file.read_bytes()).hexdigest(),
         "before_revision": before["revision"],
         "after_revision": final_manifest["revision"],
         "changed_layers": changed,
